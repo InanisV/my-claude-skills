@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Experiment Comparison Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0e1a;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;padding:24px;max-width:1400px;margin:0 auto}
+
+/* Header */
+h1{text-align:center;color:#00cc66;font-size:1.8em;margin-bottom:8px}
+.subtitle{text-align:center;color:#888;margin-bottom:32px;font-size:0.95em}
+
+/* Cards */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:32px}
+.card{background:#141824;border:1px solid #1e2438;border-radius:12px;padding:20px;text-align:center;transition:border-color 0.2s}
+.card:hover{border-color:#2a3050}
+.card .label{color:#888;font-size:0.8em;text-transform:uppercase;margin-bottom:6px;letter-spacing:0.5px}
+.card .value{font-size:1.8em;font-weight:bold}
+.card .sub{color:#666;font-size:0.78em;margin-top:4px}
+
+/* Sections */
+.section{background:#0f1320;border:1px solid #1a1f30;border-radius:12px;padding:24px;margin-bottom:24px}
+.section h2{color:#ccc;font-size:1.15em;margin-bottom:16px}
+
+/* Tables */
+table{width:100%;border-collapse:collapse}
+th{background:#1a1f30;color:#aaa;padding:10px 14px;text-align:left;font-weight:600;font-size:0.85em;text-transform:uppercase;letter-spacing:0.3px}
+td{padding:10px 14px;border-bottom:1px solid #1a1f30;font-size:0.9em}
+tr:hover{background:#161b2e}
+.best{color:#00cc66;font-weight:bold}
+
+/* Charts */
+.chart-container{position:relative;height:350px;margin-top:16px}
+
+/* Colors */
+.green{color:#00cc66}.red{color:#ff4444}.blue{color:#4488ff}.yellow{color:#ffaa00}
+</style>
+</head>
+<body>
+
+<!-- ═══ HEADER ═══ -->
+<h1>Experiment Comparison Dashboard</h1>
+<p class="subtitle">3 configurations · 5 metrics · Generated 2026-03-18</p>
+
+<!-- ═══ METRIC CARDS ═══ -->
+<div class="cards">
+  <div class="card">
+    <div class="label">Config A</div>
+    <div class="value green">$1,234</div>
+    <div class="sub">Best PnL · Sharpe 1.66</div>
+  </div>
+  <div class="card">
+    <div class="label">Config B</div>
+    <div class="value blue">$987</div>
+    <div class="sub">Most stable · Sharpe 2.10</div>
+  </div>
+  <div class="card">
+    <div class="label">Config C</div>
+    <div class="value yellow">$756</div>
+    <div class="sub">Highest WR · 58.2%</div>
+  </div>
+</div>
+
+<!-- ═══ COMPARISON TABLE ═══ -->
+<div class="section">
+  <h2>Full Comparison</h2>
+  <table>
+    <tr>
+      <th>Config</th>
+      <th>PnL</th>
+      <th>Sharpe</th>
+      <th>Win Rate</th>
+      <th>Max DD</th>
+      <th>Trades</th>
+    </tr>
+    <tr>
+      <td><strong>Config A</strong></td>
+      <td class="best">$1,234</td>
+      <td>1.66</td>
+      <td>57.0%</td>
+      <td>35.2%</td>
+      <td>6,011</td>
+    </tr>
+    <tr>
+      <td><strong>Config B</strong></td>
+      <td>$987</td>
+      <td class="best">2.10</td>
+      <td>55.4%</td>
+      <td class="best">28.1%</td>
+      <td>4,200</td>
+    </tr>
+    <tr>
+      <td><strong>Config C</strong></td>
+      <td>$756</td>
+      <td>1.42</td>
+      <td class="best">58.2%</td>
+      <td>40.5%</td>
+      <td class="best">8,300</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ═══ CHART: METRIC COMPARISON ═══ -->
+<div class="section">
+  <h2>PnL Comparison</h2>
+  <div class="chart-container">
+    <canvas id="barChart"></canvas>
+  </div>
+</div>
+
+<!-- ═══ CHART: TIME SERIES (if available) ═══ -->
+<div class="section">
+  <h2>Equity Curve</h2>
+  <div class="chart-container">
+    <canvas id="lineChart"></canvas>
+  </div>
+</div>
+
+<!-- ═══ DETAIL TABLES (optional) ═══ -->
+<div class="section">
+  <h2>Per-Seed Breakdown: Config A</h2>
+  <table>
+    <tr><th>Seed</th><th>PnL</th><th>Win Rate</th><th>Sharpe</th></tr>
+    <tr><td>42</td><td>$1,450</td><td>57.4%</td><td>1.72</td></tr>
+    <tr><td>123</td><td>$1,100</td><td>56.8%</td><td>1.55</td></tr>
+    <tr><td>456</td><td>$1,300</td><td>57.2%</td><td>1.68</td></tr>
+    <tr><td>789</td><td>$980</td><td>56.5%</td><td>1.48</td></tr>
+    <tr><td>2024</td><td>$1,340</td><td>57.1%</td><td>1.85</td></tr>
+  </table>
+</div>
+
+<script>
+// ═══ BAR CHART ═══
+const barCtx = document.getElementById('barChart').getContext('2d');
+new Chart(barCtx, {
+  type: 'bar',
+  data: {
+    labels: ['Config A', 'Config B', 'Config C'],
+    datasets: [{
+      label: 'Total PnL',
+      data: [1234, 987, 756],
+      backgroundColor: ['#00cc6680', '#4488ff80', '#ffaa0080'],
+      borderColor: ['#00cc66', '#4488ff', '#ffaa00'],
+      borderWidth: 1
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      y: {
+        ticks: { color: '#888', callback: v => '$' + v.toLocaleString() },
+        grid: { color: '#1a1f30' }
+      },
+      x: {
+        ticks: { color: '#888' },
+        grid: { display: false }
+      }
+    },
+    plugins: {
+      legend: { display: false }
+    }
+  }
+});
+
+// ═══ LINE CHART (equity curve example) ═══
+const lineCtx = document.getElementById('lineChart').getContext('2d');
+// Generate sample equity curves
+function generateEquity(start, trend, noise, n) {
+  const data = [start];
+  for (let i = 1; i < n; i++) {
+    data.push(data[i-1] + trend + (Math.random() - 0.4) * noise);
+  }
+  return data;
+}
+const labels = Array.from({length: 100}, (_, i) => `Day ${i+1}`);
+
+new Chart(lineCtx, {
+  type: 'line',
+  data: {
+    labels: labels,
+    datasets: [
+      {
+        label: 'Config A',
+        data: generateEquity(400, 8, 20, 100),
+        borderColor: '#00cc66',
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false
+      },
+      {
+        label: 'Config B',
+        data: generateEquity(400, 6, 12, 100),
+        borderColor: '#4488ff',
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false
+      },
+      {
+        label: 'Config C',
+        data: generateEquity(400, 5, 25, 100),
+        borderColor: '#ffaa00',
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      y: {
+        ticks: { color: '#888', callback: v => '$' + v.toLocaleString() },
+        grid: { color: '#1a1f30' }
+      },
+      x: {
+        ticks: { color: '#888', maxTicksAuto: 10 },
+        grid: { color: '#1a1f30' }
+      }
+    },
+    plugins: {
+      legend: { labels: { color: '#ccc' } }
+    }
+  }
+});
+</script>
+
+</body>
+</html>

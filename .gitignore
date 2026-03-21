@@ -1,0 +1,14 @@
+# Temp/build artifacts
+session-memory-ready/
+session-memory-eval-review.html
+*.skill
+
+# Memory data (private, not for version control)
+.memory/entries/
+.memory/archive/
+.memory/snapshots/
+.memory/.merge-lock
+
+# OS files
+.DS_Store
+Thumbs.db
