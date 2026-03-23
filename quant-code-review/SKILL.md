@@ -2,7 +2,7 @@
 name: quant-code-review
 description: |
   量化交易系统代码审计 — 在每次重大代码改动后自动执行全面审查。
-  覆盖六个维度：(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐，(2) 回测引擎真实性，(3) 实盘运维鲁棒性，(4) 状态持久化完整性，(5) 代码性能。
+  覆盖七个维度：(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐，(2) 回测引擎真实性，(3) 实盘运维鲁棒性，(4) 状态持久化完整性，(5) 代码性能，(6) AI协作代码质量。
 
   触发时机（非常重要）：
   - 完成策略逻辑修改后（参数、信号、仓位管理、PnL模型等）
@@ -35,7 +35,7 @@ description: |
 1. **定位项目关键文件**：找到回测引擎和实盘bot的主文件、配置文件
 2. **理解策略架构**：识别项目使用的策略类型（趋势跟踪、均值回归、套利、做市等）
 3. **维度零：模块清单盘点**：先用自动化方法扫出"回测有但实盘没有"的功能模块（这一步往往能发现最严重的问题）
-4. **按五个维度逐项检查**：使用下面的checklist框架，适配到具体项目
+4. **按六个维度逐项检查**：使用下面的checklist框架，适配到具体项目
 5. **输出结构化报告**
 
 ## 审计流程
@@ -456,6 +456,140 @@ description: |
 
 ---
 
+## 维度六：AI 协作代码质量
+
+使用 AI 辅助编码时，AI 会产生一些"看起来健壮实则有害"的代码模式。这些模式在量化交易系统中危害尤其大——错误被掩盖意味着策略在用错误的价格/仓位/信号做决策，而你浑然不知。
+
+### 6.1 防御性 Fallback 掩盖错误
+
+```
+反模式：
+  price = product?.price ?? 0
+  user_name = user?.name || "Unknown"
+  leverage = config.get("leverage", 1)   # 配置缺失时默默用1x
+
+为什么危险：
+- 当 price 不该为空却为空时，这段代码不会报错，而是悄悄把价格算成 0
+- 在量化场景中：entry_price 取到 0 → PnL 计算爆炸 → 止损在离谱的价位触发
+- 更隐蔽的：leverage 配置没加载成功，默默回退到 1x，你以为跑的是 3x 策略
+
+检查项：
+- grep 所有 `?? 0`、`|| 0`、`.get(key, 0)`、`or 0`、`if x is None: x = 0`
+- 对每一个 fallback 问：如果这个值真的缺失了，用默认值继续运行是对的吗？
+  还是应该立即报错让你知道？
+- 关键路径（价格、仓位、余额、杠杆）的 fallback 默认值应该用
+  raise / assert 替代，而非静默兜底
+- 配置加载失败时应 fail-fast，不应用 fallback 值继续运行
+
+正确做法：
+  # 不要兜底，让错误暴露
+  assert product.price is not None, f"price missing for {symbol}"
+  # 配置缺失时立即崩溃，而非默默用默认值
+  leverage = config["leverage"]  # KeyError 比默默用错值好
+```
+
+### 6.2 try/catch 吞掉错误
+
+```
+反模式：
+  async def execute_trade(signal):
+      try:
+          position = await check_position(symbol)
+          order = await place_order(symbol, side, size)
+          await update_state(order)
+          return order
+      except Exception as e:
+          logger.error(f"Trade failed: {e}")
+          return None  # 调用方拿到 None，不知道是哪步失败的
+
+为什么危险：
+- check_position 失败了？place_order 有 bug？update_state 写坏了？
+  全被吞进同一个 catch，调用方只看到一个 None
+- 在量化场景中：order 下单成功但 update_state 失败 → 本地状态没更新 →
+  下个周期以为没有仓位 → 重复开仓 → 双倍敞口
+- 更糟：吞掉 TypeError / AttributeError 等编程错误，本该修的 bug 变成了
+  偶尔出现的"交易失败"日志，排查难度指数级上升
+
+检查项：
+- 搜索所有 `except Exception` 和 `except:` 块
+- 对每个 catch 块问：它捕获的是"预期的运行时异常"还是"所有可能的错误"？
+- 业务逻辑层不应有宽泛的 try/catch — 让错误冒泡到最外层统一处理
+- 如果必须 catch，至少区分"可重试的 I/O 错误"和"不可重试的逻辑错误"
+
+正确做法：
+  # 只捕获你预期的、知道怎么处理的异常
+  try:
+      order = await place_order(symbol, side, size)
+  except ccxt.InsufficientFunds:
+      logger.warning(f"余额不足，跳过 {symbol}")
+      return None
+  except ccxt.NetworkError:
+      logger.error(f"网络错误，稍后重试")
+      raise  # 让上层处理重试
+  # TypeError / KeyError / AttributeError 等编程错误：不捕获，让它崩
+```
+
+### 6.3 测试质量审计
+
+AI 生成的测试代码有三种常见的"永远通过"模式，在量化系统中必须警惕：
+
+```
+反模式一：断言太弱（永远通过的测试）
+  # AI 最爱的写法
+  result = await backtest(config)
+  assert result is not None          # 只检查不是 None — 毫无意义
+  assert len(result.trades) > 0      # 有交易就行 — 不验证交易是否正确
+
+  # 正确：验证具体的业务结果
+  assert result.total_return == pytest.approx(0.15, abs=0.01)
+  assert result.max_drawdown < 0.20
+  assert all(t.pnl != 0 for t in result.trades)  # 不应有零PnL交易
+
+反模式二：硬编码拟合测试
+  # AI 不理解逻辑，直接硬编码"正确"返回值让测试通过
+  def calculate_signal(prices):
+      if prices[-1] == 100 and prices[-2] == 95:  # 恰好匹配测试用例
+          return 1.0
+      return 0.0
+
+  → 测试全绿，但逻辑根本没实现 — 只是一张针对测试数据的查找表
+  → 检查方法：用随机值和边界值运行测试，看是否仍然通过
+
+反模式三：先修 Bug 再补测试
+  → Bug 已经修了，你怎么知道补的测试真能抓住这个 bug？
+  → 正确流程（TDD）：先写测试 → 确认失败（红）→ 修复代码 → 确认通过（绿）
+  → 先红后绿 — 亲眼看到测试从红变绿，才能证明测试有效
+  → 审计时关注：是否有测试只验证了 happy path 而没有验证它能检测到错误
+
+检查项：
+- 搜索测试文件中的 assert / expect 语句，检查断言的具体性
+- 标记只检查 is not None / toBeDefined / > 0 的弱断言
+- 对关键策略逻辑的测试：是否覆盖了边界条件（空仓位、零余额、极端价格）
+- 是否有"删除被测函数核心逻辑后测试仍然通过"的风险
+```
+
+### 6.4 调试日志纪律
+
+```
+反模式：修 Bug 时顺手删掉调试日志
+  你：加调试日志 → AI 插入日志 → 运行，拿到线索
+  → AI "发现问题"，修复代码的同时顺手把调试日志也清掉了
+  → 问题没解决 → 你不得不让 AI 重新插入一遍日志 → 循环
+
+为什么在量化系统中尤其重要：
+- 实盘 bug 很难复现 — 依赖特定的市场状态 + 持仓状态 + 时间窗口
+- 调试日志是唯一的"黑匣子"，删了就没了
+- 某些 bug 只在凌晨 3 点行情剧烈波动时出现，你不可能坐在那等
+
+纪律：
+- 调试日志由人决定何时清除，AI 修复代码时不要动日志
+- 等你确认问题真正解决后，再统一清理
+- 关键路径（下单、持仓变更、状态保存）的日志永远不删，只调整级别
+- 审计时检查：最近的 commit 是否在修 bug 的同时删除了 logging 语句
+```
+
+---
+
 ## 输出格式
 
 审计完成后，输出一个结构化报告：
@@ -502,6 +636,14 @@ description: |
 | 5.3 | 内存管理 | ✅/🟡/❌ | 增长型数据结构数量 |
 | 5.4 | 并发与异步 | ✅/🟡/❌ | 阻塞点列表 |
 
+### 维度六：AI 协作代码质量
+| # | 检查项 | 状态 | 备注 |
+|---|--------|------|------|
+| 6.1 | 防御性 Fallback | ✅/🟡/❌ | 关键路径 fallback 数量 |
+| 6.2 | try/catch 范围 | ✅/🟡/❌ | 宽泛 catch 块数量 |
+| 6.3 | 测试质量 | ✅/🟡/❌ | 弱断言 / 硬编码拟合 / TDD |
+| 6.4 | 调试日志纪律 | ✅/🟡/❌ | 是否有修 bug 时误删日志 |
+
 ### 发现的问题
 [按严重程度排列：🔴 Critical / 🟡 Warning / 🟢 Info]
 
@@ -530,3 +672,7 @@ description: |
 13. **state file 版本迁移必须有默认值** — 代码新增字段后旧 state file 没有该字段是必然的。如果用 `state['new_field']` 而非 `state.get('new_field', default)` 读取，下一次重启就会崩溃。
 14. **每周期重新计算完整指标是常见的性能陷阱** — 对 5000 根 K 线做 rolling mean 每周期耗时可能超过 100ms，4 个标的就是 400ms+。改成增量更新（只算最新一根）可以降到微秒级。
 15. **串行 API 调用是延迟大户** — 4 个标的串行 fetch_ohlcv 平均耗时 2-4 秒，改成 asyncio.gather 可以压到 1 秒以内。在快速行情中，3 秒的延迟可能意味着错过最优入场点。
+16. **Fallback 默认值是定时炸弹** — `price ?? 0` 在正常时永远不会触发，你以为代码很"健壮"。但某天数据源出了问题，price 真的为空，代码不报错，默默用 0 计算 PnL，止损在离谱的价位触发。关键路径的缺失值应该 fail-fast（assert/raise），而非静默兜底。
+17. **宽泛的 try/catch 是 bug 的藏身之处** — `except Exception` 把 I/O 错误和编程错误（TypeError/KeyError）混在一起处理。实盘中下单成功但状态更新抛了 KeyError，被 catch 吞掉了，下个周期就会重复开仓。只捕获你预期的、知道怎么处理的异常。
+18. **测试要能"红"才有价值** — 如果删掉被测函数的核心逻辑后测试仍然通过，这个测试就是摆设。用 mutation testing 思维审查：故意改错一个阈值，看测试是否能发现。
+19. **调试日志删早了比没有更糟** — 实盘 bug 依赖特定的市场+持仓+时间窗口组合，极难复现。AI 修 bug 时顺手删日志是常见陋习。纪律：日志由人决定何时清理，修复期间只增不删。
