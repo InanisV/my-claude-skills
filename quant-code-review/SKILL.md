@@ -194,7 +194,7 @@ description: |
 - 是否假设了完美成交（用close price而非模拟spread/slippage）
 - 加仓/DCA是否假设了即时成交
 - 信号触发后是否假设了立即建仓（实盘可能有延迟）
-- 强平/清算逻辑是否反映了交易所的真实机制
+- 强平/清算逻辑是否反映了交易所的真实机制（详见 2.8 全仓保证金与爆仓模拟）
 - 是否假设了无限流动性（大单是否会impact market）
 - 限价单是否假设了100%成交
 ```
@@ -219,6 +219,523 @@ description: |
 - 是否有数值精度问题（浮点累积误差）
 - 最终equity和trade log的PnL之和是否一致
 - 杠杆PnL的计算方式是否与交易所一致
+```
+
+### 2.5 杠杆与保证金模型（合约策略必查，默认全仓模式）
+
+这是回测引擎中最容易出错、后果最严重的子系统。一个公式写错可以让回测收益
+从 -3% 变成 +147%（真实案例），导致你上线一个实际亏损的策略。
+回测默认使用全仓 (Cross Margin) 模式，保证金管理与爆仓模拟的完整检查见 2.8 节。
+
+```
+检查项：
+
+1. 回测默认使用全仓模式 (Cross Margin)，验证 PnL 公式匹配：
+   - 全仓 (Cross)【默认】：PnL = notional × price_change_pct = balance × pos_pct × Δp/p
+     → 杠杆设置仅影响保证金分配，不影响 PnL 大小
+     → 如果代码中出现 sqrt(leverage) 或 leverage 乘以 PnL，在全仓模式下是 BUG
+     → 所有仓位共享账户余额作为保证金池（详见 2.8 节）
+   - 逐仓 (Isolated)【需特别标注】：PnL = margin × leverage × price_change_pct
+     → 杠杆直接放大收益和亏损，保证金是独立的
+     → 如果项目使用逐仓模式，必须在配置和文档中显式声明，不可默认假设
+
+2. 仓位大小计算必须匹配保证金模式：
+   - 全仓模式按 notional 下单：notional = balance × position_pct
+     → 杠杆不应出现在仓位大小公式中
+   - 逐仓模式按 margin 下单：margin = balance × position_pct,
+     notional = margin × leverage → 杠杆参与 notional 计算
+
+3. 手续费必须基于 notional 金额计算，不受杠杆 PnL 模型影响：
+   - fee = notional × fee_rate（双边 = 开仓 + 平仓各一次）
+   - 绝不能用 fee = margin × fee_rate（会低估手续费 leverage 倍）
+   - 绝不能让 PnL 放大系数影响 fee 计算（如 fee 没乘 sqrt(lev) 但 PnL 乘了，
+     等于间接降低了有效费率）
+
+4. 验证方法 — 有效费率反推：
+   effective_fee_bps = median(|fee_per_trade|) / median(notional_per_trade) × 10000
+   如果 effective_fee_bps 显著低于交易所公告费率，说明 fee 模型有 bug
+
+5. 验证方法 — 零 alpha 压力测试：
+   - 设 commission = 交易所实际费率，关闭所有 alpha 信号（随机入场）
+   - 期望结果：total_return ≈ -(commission × trade_count × 2) / capital
+   - 如果 total_return 明显偏正 → PnL 模型虚增了收益
+   - 如果 total_return 明显偏负 → 手续费被多算了
+
+6. 清算逻辑：
+   - 全仓模式清算价取决于整个账户余额，不是单个仓位的保证金
+   - 回测中是否模拟了清算？如果没有，至少要检查是否存在 equity < 0 的 bar
+   - Wick（影线）穿透：bar 内最低价可能触发清算但 close 价没有
+     → 如果只用 close 做判断，会遗漏 wick 触发的强平
+
+典型 bug 模式（真实案例）：
+
+  # BUG: 全仓模式下用了 sqrt(leverage) 放大 PnL
+  pnl_leverage = sqrt(cfg.leverage)  # 3x → 1.73x
+  pnl_dollar = notional * price_change * pnl_leverage  # 虚增 73%
+
+  # 但手续费没有乘以 pnl_leverage
+  fee = notional * commission_rate  # 正确的 notional 基准
+
+  # 结果：PnL 被放大 1.73x，fee 没变
+  # 有效费率 = commission_rate / pnl_leverage ≈ 4bps / 1.73 ≈ 2.3bps
+  # 低于任何交易所的最低档！
+  # 这个 bug 让一个实际 PF=0.99 的策略看起来 PF=1.19, CAGR +147%
+
+诊断 checklist：
+□ grep "sqrt.*lev\|leverage.*pnl\|pnl.*leverage" — 找到杠杆参与 PnL 计算的位置
+□ 确认 PnL 公式与交易所 API 文档一致
+□ 计算有效费率并与交易所公告费率比较
+□ 跑一组 commission sweep（1bps → 5bps），观察 CAGR 变化曲线
+   → 如果 1bps 差异导致 CAGR 变化 >50%，说明策略真实 alpha ≈ 0
+□ 检查实盘 bot 是否也有同样的 PnL 公式（如果有，修回测也要同步修实盘）
+```
+
+### 2.6 手续费复利效应
+
+手续费的影响不是线性的，而是通过 equity 复利放大。每笔交易少扣 $0.69 的 fee，
+经过 5000 笔交易的复利，最终 equity 差异可达 $370K（真实案例，$10K 初始资金）。
+
+```
+检查项：
+- 是否做了 commission sensitivity analysis（不同费率下的 CAGR/PF）
+- 费率从 1bps 到 5bps 的 CAGR 变化是否平滑：
+  → 跳崖式下降（如 2bps: +50%, 3bps: -10%）说明策略 alpha 极薄，
+    完全依赖 fee 假设，实盘风险极高
+- 在交易所实际费率（通常 taker 3-5bps）下，策略是否仍然正 CAGR
+- maker vs taker 费率区分：
+  → 回测假设 100% maker（更低费率）但实盘多数成交是 taker
+  → 应按 taker 费率做主要测试，maker 费率只作为乐观边界
+
+Profit Factor (PF) 解读：
+- PF > 1.05 → 可能有 alpha（但仍需确认 fee 假设）
+- PF 1.00-1.05 → 灰色地带，alpha 可能完全来自 fee 假设的差异
+- PF < 1.00 → 策略在当前 fee 假设下亏损，必须改进信号质量
+```
+
+### 2.7 因子/信号有效性
+
+因子驱动策略（factor-driven）中，因子的设计决定了策略的命运。
+一组"看起来合理"的因子可能完全无法产生 alpha。
+
+```
+检查项：
+
+1. 因子方向性 vs 条件性：
+   - 方向性因子：预测价格上涨/下跌（如 momentum, trend quality,
+     mean-reversion bounce）
+     → 对 long-only 策略必须使用方向性因子
+   - 条件性因子：检测市场状态但不预测方向（如 volume anomaly,
+     vol compression, wick rejection）
+     → 这些因子适合做 regime filter 或 sizing 调整，但不能作为入场信号
+   - 诊断：如果所有因子组合下 CAGR 都接近 0 或为负，首先检查因子是否有方向性
+
+2. 因子正交性：
+   - 高度相关的因子（如 7d momentum 和 14d momentum）不增加信息量
+   - 理想的因子集应覆盖不同的 alpha 来源：
+     → 动量类（momentum, acceleration）
+     → 相对强度类（BTC-relative, sector-relative）
+     → 微观结构类（funding rate, volume breakout）
+     → 均值回归类（crash bounce, oversold recovery）
+
+3. Score threshold 对 trade count 和质量的影响：
+   - threshold 太低 → 大量低质量交易，被手续费吞噬 alpha
+   - threshold 太高 → 交易太少，equity curve 不平滑
+   - 必须做 threshold sweep 并画 CAGR vs threshold 曲线
+   - 典型现象：trade count 减半但 CAGR 翻数倍（甜蜜点存在）
+
+4. 因子在不同市场环境下的表现：
+   - 牛市因子（momentum）在熊市可能反转
+   - 均值回归因子在趋势市中可能持续亏损
+   - 检查 per-year 收益分布，如果某年大幅亏损，需分析该年的因子表现
+```
+
+### 2.8 全仓模式保证金与爆仓模拟（Cross Margin Liquidation）
+
+全仓模式下，所有仓位共享账户余额作为保证金池。这意味着：
+- 一个仓位的浮亏会减少其他仓位的可用保证金
+- 一个仓位的极端亏损可能连带清算所有仓位
+- 回测必须在**每根 bar** 上追踪全账户保证金状态
+
+这是回测引擎中最容易"假设掉"的子系统。实盘中交易所每秒都在做这个计算，
+如果回测跳过了它，等于在一个"永远不会爆仓"的平行宇宙中测试策略。
+
+```
+检查项：
+
+1. 核心公式验证（全仓模式）：
+
+   账户权益 (Equity):
+     equity = wallet_balance + Σ unrealized_pnl_i
+
+   其中:
+     unrealized_pnl_i = position_size_i × (mark_price_i - entry_price_i) × direction_i
+     direction: long = +1, short = -1
+
+   维持保证金 (Maintenance Margin):
+     maintenance_margin = Σ (|notional_i| × mmr_i)
+     其中 mmr_i 是交易所按档位递增的维持保证金率
+     （如 Binance USDT-M：notional < $50K 时 mmr=0.4%，
+       $50K-$250K 时 mmr=0.5%，依此递增至 50%）
+     注意：不同交易所的档位表不同，应从配置中读取而非硬编码
+
+   保证金率 (Margin Ratio):
+     margin_ratio = maintenance_margin / equity
+     当 margin_ratio >= 100%（即 equity <= maintenance_margin）时触发清算
+
+   清算价近似计算（单仓位简化）:
+     long:  liq_price ≈ entry × (1 - (equity - maint_margin) / |notional|)
+     short: liq_price ≈ entry × (1 + (equity - maint_margin) / |notional|)
+
+   多仓位场景：清算价不是固定值，而是随所有仓位的 mark price 动态变化
+
+2. 每根 bar 的保证金检查（回测引擎必须实现）：
+
+   for each bar:
+     a. 用 bar 的价格更新所有仓位的 unrealized_pnl
+     b. 计算 equity = wallet_balance + Σ unrealized_pnl
+     c. 计算 maintenance_margin = Σ (|notional| × mmr)
+     d. 检查 equity <= maintenance_margin → 触发清算
+     e. 同时用 bar 的极端价格做 wick 检查（见第 3 点）
+
+   如果回测只在"生成交易信号"时检查保证金，中间的 bar 可能
+   已经触发爆仓但被完全跳过 — 这是最常见的爆仓模拟遗漏
+
+3. 插针 / Wick 模拟（intra-bar liquidation）：
+
+   问题：一根 1h bar 的 close = $100，但 low = $80。
+   如果只用 close 做判断，$80 触发的爆仓被完全忽略。
+   加密市场的插针是常态（BTC 多次出现 5min 内跌 10%+ 后 V 型反弹），
+   不模拟 wick = 严重高估策略生存能力。
+
+   方法一【最低要求】：使用 bar 的极端价格做清算/止损判断
+     - Long 仓位：用 low 检查是否触发清算或止损
+     - Short 仓位：用 high 检查是否触发清算或止损
+     - 如果触发：在清算价（而非 low/high）成交，因为交易所清算引擎
+       会尝试在清算价附近成交，不是在最极端价格成交
+     - 实现成本：几乎为零，只需在现有判断中加入 high/low 检查
+     - 局限：无法正确处理"先触发止盈再触发止损"或反过来的顺序问题
+
+   方法二【推荐】：使用 OHLC 顺序模拟 bar 内价格路径
+     - 根据 bar 方向推断价格路径：
+       → 阳线（close > open）：open → low → high → close
+       → 阴线（close < open）：open → high → low → close
+     - 按此路径顺序检查所有触发条件（止盈、止损、清算、加仓）
+     - 第一个被触发的条件优先执行，后续条件不再检查
+     - 好处：解决了"同一根 bar 内先止盈还是先止损"的二义性
+     - 实现成本：中等，需要将价格路径分成 4 个检查点
+     - 注意：bar 内路径假设终究是猜测，极端行情下仍可能偏差
+
+   无论哪种方法，必须检查：
+   □ 清算/止损判断是否只使用了 close price → 几乎一定是 bug
+   □ 是否对 long 用 low、对 short 用 high 做了极端价格检查
+   □ 触发清算后的成交价假设是否合理（清算价 ≠ bar 最低价）
+
+4. 爆仓后的处理逻辑：
+
+   全仓模式爆仓 = 所有仓位被清算（但实际交易所有部分清算机制）
+
+   最低实现（推荐用于回测）：
+   - 触发清算时：关闭所有仓位
+   - equity 设为 0（或扣除清算手续费后的残余）
+   - 策略停止交易（回测可配置是否允许"重新注资"继续）
+   - 在回测报告中标记清算事件的时间、价格、当时的保证金率
+
+   更精确的实现（可选）：
+   - 模拟交易所的部分清算机制：先取消挂单，再逐步减仓
+   - 每次减仓后重新计算保证金率，直到恢复健康水平
+   - 部分清算对 equity 的影响更小，但实现复杂度更高
+
+   检查回测代码中 equity < 0 的情况：
+   → 如果 equity 曾出现负值且没被处理，说明缺少爆仓检查
+   → 全仓模式下 equity < 0 理论上不应该出现（交易所在接近 0 时就清算了）
+
+5. 可用余额追踪（Available Balance）：
+
+   available_balance = equity - Σ initial_margin_i
+   其中 initial_margin_i = |notional_i| / leverage_i
+
+   这个值决定了能否开新仓：
+   - 如果 available_balance < 新仓位的 initial_margin → 开仓应被拒绝
+   - 回测中如果忽略这个检查，会出现"幽灵杠杆"效果：
+     一个仓位浮亏很大但还没触发清算，回测却继续用全部 equity 开新仓
+     → 总敞口远超实际可用保证金，回测结果无法在实盘复制
+
+   检查项：
+   □ 回测是否追踪了 available_balance（或等价概念）
+   □ 开仓前是否检查 available_balance 足够覆盖 initial_margin
+   □ 多仓位同时开仓时是否有总敞口限制
+   □ 浮亏是否正确地减少了 available_balance
+
+6. Funding Rate（资金费率）模拟：
+
+   全仓模式下 funding rate 直接影响 wallet_balance：
+     每个 settlement 周期：
+       wallet_balance += position_size × funding_rate × direction
+       (正 funding rate + long = 付费；负 funding rate + long = 收费)
+
+   关键注意事项：
+
+   a. Settlement 频率因交易所和交易对而异：
+      - 大多数 Binance USDT-M 合约：每 8h（00:00/08:00/16:00 UTC）
+      - 部分 Binance 合约：每 4h
+      - dYdX：每 1h
+      - 不同交易对可能有不同频率，必须从数据中确认而非硬编码
+
+   b. 数据来源：
+      - 历史 funding rate 可通过交易所 API 获取
+        （如 ccxt 的 fetchFundingRateHistory）
+      - 不要使用固定假设值（如"假设每次 0.01%"）— 实际 funding rate
+        在极端行情中可能飙升到 0.1%+ 甚至更高
+      - 如果无法获取历史数据，至少用该交易对的历史平均值，并在报告中标注
+
+   c. 对长持仓策略（持仓 >24h）影响巨大：
+      - 以 8h 频率、每次 0.01% 计算：30 天 ≈ 0.9% of notional
+      - 极端行情期间 funding rate 飙升，30 天可能达到 3-5%
+      - 这个成本量级和交易手续费相当，不可忽略
+
+   检查项：
+   □ 回测是否在每个 funding settlement 周期扣除/添加 funding fee
+   □ settlement 频率是否与实际交易对匹配（不是所有合约都是 8h）
+   □ funding rate 数据是否为历史实际值
+   □ funding fee 基于 notional 计算（正确）而非基于 margin（错误）
+   □ funding fee 是否影响了 equity 和后续的保证金率计算
+
+7. ADL（自动减仓）风险提示：
+
+   交易所在对手方爆仓且保险基金不足时，会触发 ADL（Auto-Deleveraging），
+   强制减少盈利方的仓位。
+
+   这个机制无法在回测中精确模拟（依赖交易所内部排名算法），但审计时
+   需要意识到：
+   - 回测中的大幅盈利仓位，在实盘极端行情中可能被 ADL 提前平仓
+   - 如果策略依赖"在极端行情中持有大仓位赚取巨额利润"，ADL 风险很高
+   - 回测结果在极端行情时段会比实盘乐观
+   - 在回测报告中标注：如果某笔交易的盈利超过 X%（如 50%），
+     该笔交易的实盘可复制性存疑（ADL 风险）
+
+8. 验证方法 — 极端行情压力测试：
+
+   设计以下测试场景并验证回测引擎的行为：
+
+   a. Flash Crash 测试（插针爆仓）：
+      - 构造一根 bar：close 正常，但 low 比 close 低 20%
+      - 在 3x 杠杆下开 long，仓位占 equity 的 80%
+      - 预期：该 bar 应触发清算（80% × 20% = 16% 亏损 > 可用保证金）
+      - 如果回测报告此 bar 无事发生 → 缺少 wick 检查
+
+   b. 多仓位连锁清算测试（全仓共享保证金）：
+      - 同时持有 3 个不同标的的 long 仓位，各占 equity 的 30%
+      - 其中一个标的暴跌 15%
+      - 预期：该仓位浮亏 = 30% × 15% = 4.5% equity，
+        如果总维持保证金要求接近剩余 equity → 可能触发全账户清算
+      - 如果回测只清算了那一个仓位而保留其他两个 → 可能是逐仓逻辑的 bug
+
+   c. 保证金不足开仓测试（available balance）：
+      - equity = $10,000, 已有 $8,000 notional 仓位, leverage = 5x
+      - initial_margin = $8,000 / 5 = $1,600
+      - available_balance = $10,000 - $1,600 = $8,400
+      - 尝试开 $50,000 notional 新仓位（需要 $10,000 initial margin）
+      - 预期：开仓应被拒绝或限制大小至 available_balance × leverage
+      - 如果回测允许开仓 → 缺少 available_balance 检查
+
+   d. Funding Rate 累积测试：
+      - 持仓 30 天，使用历史 funding rate 数据
+      - 计算预期 funding 成本并与回测结果对比
+      - 预期：两者误差 < 1%
+      - 如果回测完全没有 funding 成本 → 缺少 funding 模拟
+
+诊断 checklist（汇总）：
+□ grep "margin_ratio\|maintenance_margin\|liquidat\|margin_rate" — 找到保证金代码
+□ grep "available.*balance\|free.*margin\|can_open" — 找到可用余额检查
+□ grep "funding.*rate\|funding.*fee\|settlement" — 找到 funding rate 代码
+□ 确认每根 bar 都有保证金检查，而非只在交易信号时检查
+□ 确认清算判断使用了 high/low 而非只用 close
+□ 确认 equity < 0 在回测结果中从未出现（出现 = 缺少爆仓检查）
+□ 确认多仓位场景下 equity 是共享计算的（全仓模式核心）
+□ 确认开仓时有 available_balance 检查
+□ 如果策略持仓超过一个 funding 周期，确认 funding rate 被纳入计算
+□ 跑一次极端行情压力测试（上述 a-d），验证引擎在极端条件下的行为
+```
+
+### 2.9 回测日志输出与可分析性
+
+回测日志是策略迭代的基础设施。如果日志不够完整，你无法回答"这笔为什么亏了"；
+如果日志管理混乱，你无法回答"上周那个版本比现在好在哪"。
+
+回测日志和实盘运行日志（3.5 节）是两个完全不同的东西：
+- 实盘日志：用于**监控和排障**，记录运行时事件（下单/报错/重连）
+- 回测日志：用于**策略分析和版本对比**，记录每笔交易的决策过程和结果
+
+```
+检查项：
+
+1. Trade Log（交易记录）— 最核心的输出，必须是结构化格式（CSV/JSON）：
+
+   必须字段（缺任何一个 = 无法做基本分析）：
+   - trade_id: 唯一标识
+   - symbol: 交易标的
+   - direction: long / short
+   - entry_time / exit_time: 开仓和平仓时间
+   - entry_price / exit_price: 开仓和平仓价格
+   - position_size: 仓位大小（notional，不是 margin）
+   - pnl_gross: 毛利（不含手续费）
+   - fee_total: 手续费总额（开仓 + 平仓 + funding）
+   - pnl_net: 净利（= pnl_gross - fee_total）
+   - exit_reason: 平仓原因（止盈/止损/清算/信号反转/强制平仓...）
+
+   推荐字段（缺了能跑，但无法做深度归因分析）：
+   - entry_signal: 触发开仓的信号或因子得分
+   - market_regime: 开仓时的市场状态（如果策略有 regime 检测）
+   - score_at_entry: 综合信号评分
+   - leverage: 实际使用的杠杆
+   - holding_bars: 持仓根数
+   - max_favorable / max_adverse: 持仓期间最大浮盈/浮亏
+   - funding_fee: 持仓期间累计 funding cost（合约）
+   - trailing_activated: 是否触发过移动止盈
+   - dca_count: 加仓次数
+
+   验证方法：
+   □ Σ pnl_net（所有交易）+ 残余持仓浮盈 ≈ 最终 equity - 初始 equity
+     如果对不上 → PnL 模型或日志记录有 bug
+   □ 每笔交易的 fee_total / notional × 10000 ≈ 预期费率 (bps)
+     如果偏差大 → fee 计算或记录有误
+   □ exit_reason 是否有值、是否覆盖了所有平仓路径
+     如果存在空值 → 某些平仓路径没有正确标记原因
+
+2. Equity Log（权益曲线时间序列）— 用于画图和计算风险指标：
+
+   每根 bar 一条记录（或至少每个交易周期一条）：
+   - timestamp
+   - equity: 总权益（wallet_balance + unrealized_pnl）
+   - wallet_balance: 已实现权益
+   - unrealized_pnl: 未实现浮盈/浮亏
+   - drawdown_pct: 当前回撤百分比
+   - position_count: 当前持仓数量
+   - total_exposure: 总敞口（Σ |notional|）
+   - margin_ratio: 保证金率（全仓模式，见 2.8）
+
+   这个日志的分析价值：
+   - 画 equity curve 和 drawdown overlay
+   - 计算 rolling Sharpe、rolling max drawdown
+   - 定位最大回撤的起止时间，结合 trade log 分析原因
+   - 观察 margin_ratio 是否曾接近危险区域
+
+3. Decision Log（决策日志）— 最容易被忽略但调试价值最高：
+
+   记录策略在每个决策点"做了什么"以及"为什么没做"：
+   - 开仓决策：信号得分、阈值、是否满足入场条件
+   - 跳过开仓的原因：信号不够强 / 保证金不足 / 冷却期 / 敞口上限
+   - 关仓决策：触发了哪个退出条件
+   - 选币决策：哪些标的被选中、哪些被过滤掉、评分排名
+
+   这个日志不需要每根 bar 都记录（太多了），但至少在以下时刻记录：
+   - 信号触发但未执行时（记录拒绝原因）
+   - 实际开仓/关仓时（记录触发条件和关键参数值）
+   - 选币/再平衡时（记录候选列表和最终选择）
+
+   为什么重要：
+   - 没有 decision log，你只能看到"发生了什么"，看不到"为什么没发生"
+   - 策略优化时最大的盲区是"被过滤掉的好机会"和"不该放过的坏交易"
+   - 如果所有被跳过的信号都记录了原因，你能快速判断是阈值太高还是
+     保证金限制太紧
+
+4. Run Summary（运行摘要）— 每次回测的"身份证"：
+
+   每次回测运行必须输出一个摘要，包含：
+
+   a. 运行元数据：
+      - 运行时间戳
+      - 代码版本（git commit hash，如果有）
+      - 使用的配置/preset 名称
+      - 关键参数快照（至少包含：策略名、标的列表、杠杆、fee rate、
+        回测时间范围、初始资金）
+
+   b. 核心绩效指标：
+      - Total Return / CAGR
+      - Sharpe Ratio / Sortino Ratio
+      - Max Drawdown（金额和百分比）
+      - Profit Factor
+      - Win Rate / 平均盈亏比
+      - Total Trades / 平均持仓时长
+      - Total Fees / Fee-to-PnL Ratio
+
+   c. 风险指标（全仓模式必须）：
+      - 最低 equity 点
+      - 最高 margin_ratio（最接近爆仓的时刻）
+      - 是否触发过清算
+      - 累计 funding cost
+
+   为什么需要运行元数据：
+   - 两周后你看到一个日志文件，如果没有配置快照，你不知道它是用什么参数跑的
+   - 对比两次回测结果时，先 diff 配置快照，确认差异只来自你想测试的变量
+
+5. 日志文件管理 — 每次运行必须生成独立文件：
+
+   a. 核心原则：每次回测启动 = 一组新的日志文件
+      - 绝不 append 到旧文件（无法区分不同运行的结果）
+      - 绝不覆盖旧文件（丢失历史对比数据）
+
+   b. 文件命名规范（推荐）：
+      {strategy}_{preset}_{YYYYMMDD_HHmmss}/
+        ├── trades.csv          # Trade Log
+        ├── equity.csv          # Equity Log
+        ├── decisions.log       # Decision Log（可选，文本格式也行）
+        └── summary.json        # Run Summary（JSON 方便程序读取）
+
+      或用单目录 + 前缀：
+        backtest_results/
+        ├── 20250325_143022_momentum_v2_trades.csv
+        ├── 20250325_143022_momentum_v2_equity.csv
+        └── 20250325_143022_momentum_v2_summary.json
+
+      关键：时间戳在最前面或目录名中 → 按文件名排序 = 按时间排序
+      推荐包含策略名/preset名 → 不用打开文件就知道是什么配置
+
+   c. 格式选择：
+      - Trade Log / Equity Log：CSV（pandas 直接读取，方便分析）
+      - Run Summary：JSON（结构化，方便程序对比）
+      - Decision Log：CSV 或纯文本（取决于是否需要程序化分析）
+      - 不推荐用纯 print 输出 — 无法程序化分析，只能人工看
+
+   d. 旧日志清理策略：
+      - 不要自动删除旧日志（你以为不需要，直到某天要回溯对比）
+      - 如果磁盘空间有限，可以设一个保留策略（如保留最近 100 次运行）
+      - 至少保留每次"配置变更"后的第一次运行结果
+
+6. 可分析性验证 — 日志能回答以下问题吗：
+
+   基本分析（trade log 足够回答）：
+   □ 按标的/方向/月份分组的 win rate 和 PnL
+   □ 持仓时长 vs PnL 的分布
+   □ 最大单笔亏损的完整信息（何时何价入场、为什么出场）
+   □ exit_reason 的分布（止盈 vs 止损 vs 清算的比例）
+
+   深度分析（需要推荐字段 + equity log）：
+   □ 按 market_regime 分组的策略表现
+   □ 信号得分 vs 实际 PnL 的相关性（信号质量评估）
+   □ 最大回撤期间发生了哪些交易
+   □ 保证金率的时间分布（是否经常接近危险线）
+
+   版本对比（需要 run summary + 一致的文件命名）：
+   □ 两次运行的配置 diff
+   □ 两个版本的 equity curve 叠加对比
+   □ 参数 sweep 多次运行的 CAGR/Sharpe 对比表
+
+   调试分析（需要 decision log）：
+   □ "这段时间为什么没有交易"→ 查 decision log 中的拒绝原因
+   □ "这笔交易的入场信号是什么"→ 查 trade log 的 entry_signal
+   □ "选币为什么没选到 X"→ 查选币决策记录
+
+诊断 checklist：
+□ 回测是否输出了结构化的 trade log（CSV/JSON，非纯 print）
+□ trade log 是否包含所有必须字段（至少 11 个）
+□ trade log 的 Σ pnl_net 是否与最终 equity 变化一致
+□ 是否有 equity 时间序列输出（用于画 equity curve）
+□ 每次回测运行是否生成独立的新文件（非 append / 非覆盖）
+□ 文件命名是否包含时间戳和策略/配置标识
+□ 是否有 run summary 包含配置快照和核心指标
+□ exit_reason 是否覆盖了所有可能的平仓路径
+□ 日志格式是否支持 pandas 直接读取分析
 ```
 
 ---
@@ -615,7 +1132,33 @@ AI 生成的测试代码有三种常见的"永远通过"模式，在量化系统
 数据需求：[满足 / 不满足（列出）]
 
 ### 维度二：回测真实性
-[逐项结果]
+| # | 检查项 | 状态 | 备注 |
+|---|--------|------|------|
+| 2.1 | 成本模型 | ✅/❌ | fee rate / maker-taker / 滑点 |
+| 2.2 | 执行假设 | ✅/❌ | 成交假设 / 延迟 |
+| 2.3 | 数据偏差 | ✅/❌ | 幸存者/前视偏差 |
+| 2.4 | PnL计算 | ✅/❌ | 自洽性 / 精度 |
+| 2.5 | 杠杆保证金模型 | ✅/❌ | PnL公式 / 全仓模式 |
+| 2.6 | 手续费复利 | ✅/❌ | commission sweep 结果 |
+| 2.7 | 因子有效性 | ✅/❌ | 方向性 / 正交性 |
+| 2.8 | 全仓爆仓模拟 | ✅/❌ | 保证金率/wick/available balance/funding |
+| 2.9 | 回测日志可分析性 | ✅/❌ | trade log/equity log/文件管理 |
+
+2.8 详细子项：
+- 每bar保证金检查：[有/无]
+- Wick模拟方式：[close only(🔴)/high-low(🟡)/OHLC路径(✅)]
+- Available Balance追踪：[有/无]
+- Funding Rate模拟：[有/无/不适用(现货)]
+- 极端行情压力测试：[通过/未通过/未执行]
+
+2.9 回测日志：
+- Trade Log：[结构化输出(✅)/纯print(🔴)/无(🔴)]
+- Trade Log 必须字段完整性：[完整/缺N个（列出）]
+- Equity Log：[有/无]
+- 文件管理：[每次新文件(✅)/append旧文件(🔴)/覆盖(🔴)]
+- 文件命名含时间戳+配置：[是/否]
+- Run Summary含配置快照：[是/否]
+- Σ pnl_net 与 equity 变化一致性：[通过/偏差X%]
 
 ### 维度三：运维鲁棒性
 [逐项结果]
@@ -676,3 +1219,15 @@ AI 生成的测试代码有三种常见的"永远通过"模式，在量化系统
 17. **宽泛的 try/catch 是 bug 的藏身之处** — `except Exception` 把 I/O 错误和编程错误（TypeError/KeyError）混在一起处理。实盘中下单成功但状态更新抛了 KeyError，被 catch 吞掉了，下个周期就会重复开仓。只捕获你预期的、知道怎么处理的异常。
 18. **测试要能"红"才有价值** — 如果删掉被测函数的核心逻辑后测试仍然通过，这个测试就是摆设。用 mutation testing 思维审查：故意改错一个阈值，看测试是否能发现。
 19. **调试日志删早了比没有更糟** — 实盘 bug 依赖特定的市场+持仓+时间窗口组合，极难复现。AI 修 bug 时顺手删日志是常见陋习。纪律：日志由人决定何时清理，修复期间只增不删。
+20. **全仓模式下杠杆不参与 PnL 计算** — 在 Binance USDT-M Cross Margin 中，杠杆仅影响保证金分配，不影响实际盈亏。`PnL = notional × Δp/p`，不需要乘以任何杠杆系数。如果回测中 PnL 公式包含 `sqrt(leverage)` 或 `leverage` 乘数，那是一个会让结果虚高数十倍的严重 bug。这个 bug 曾把一个真实 CAGR ≈ 0% 的策略包装成 CAGR +147%。
+21. **有效费率反推是最快的 fee model 验证方法** — `effective_bps = median(|fee|) / median(notional) × 10000`。如果计算出的有效费率 < 交易所最低档公告费率（如 Binance VIP0 taker 4.5bps），fee model 几乎一定有 bug。不需要逐行审计代码，一个数字就能暴露问题。
+22. **Commission sweep 是策略真实性的石蕊测试** — 在 1bps 到 5bps 之间以 0.5bps 步长 sweep commission，画 CAGR 曲线。健康的策略应在 3-5bps 区间仍保持正 CAGR。如果 CAGR 在 2-3bps 之间由正转负，说明策略全部"alpha"来自 fee 假设，不是真正的信号。
+23. **条件因子 ≠ 方向因子** — volume anomaly、wick rejection、volatility compression 这类因子检测"有趣的市场状态"但不预测价格方向。对 long-only 策略完全无效（真实案例：6 个条件因子全部产生负 CAGR）。方向性因子（momentum, BTC-relative strength, trend quality）才能预测"做多会赚钱"。
+24. **Score threshold 是被低估的超参数** — 因子得分的入场阈值对收益影响巨大。实测中 threshold 0.30 → 9073 trades, CAGR +0.3%；threshold 0.50 → 4487 trades, CAGR +13.3%。交易数量减半但 CAGR 翻 40 倍。原因：低质量交易的手续费会侵蚀高质量交易赚来的 alpha。
+25. **回测性能优化的两个关键模式** — (a) 对时间序列数据用 `pd.merge_asof()` 预计算对齐，避免 per-bar 的 pandas 过滤查找（真实案例：从 timeout 降到 78 秒）；(b) 因子得分用缓存+冷却间隔（如 24h 重算一次），避免每根 bar 对所有标的重算全部因子。
+26. **全仓模式下爆仓是全账户事件** — 一个仓位的暴亏会吃掉所有仓位的保证金。回测如果把每个仓位当作独立逐仓处理（只关心单个仓位的 PnL），会严重低估尾部风险。真实场景：3 个各占 30% equity 的 long 仓位，其中一个跌 15%，在全仓模式下总 equity 损失 4.5%，可能触发全账户清算。"伪全仓"回测只会清算那一个仓位。
+27. **插针是加密市场的常态，不是异常** — BTC 在 2021-2024 年间多次出现 5min 内下跌 10%+ 后 V 型反弹。如果回测只用 close 判断清算和止损，这些插针对回测完全不存在。实盘中你的仓位会被清算，然后眼看价格弹回。使用 bar 的 high/low 做极端价格检查是最低限度的保护；用 OHLC 路径顺序模拟（阳线 O→L→H→C，阴线 O→H→L→C）则能正确处理同一根 bar 内止盈和止损的优先级。
+28. **Available Balance 是隐形的开仓限制** — 全仓模式下，已有仓位的 initial margin 会锁定一部分 equity。如果回测不追踪 available_balance，会出现"幽灵杠杆"：总敞口远超实际可用保证金，回测结果看起来很好，但实盘根本无法复制这些交易（开仓被交易所拒绝）。
+29. **Funding Rate 的频率和幅度都不能假设** — 不同交易所、不同交易对的 settlement 周期各异（8h/4h/1h），极端行情时 funding rate 可以从正常的 0.01% 飙升到 0.1%+。用固定值（如"每次 0.01%"）做回测会严重低估持仓成本。必须使用交易所 API 提供的历史 funding rate 数据（如 ccxt 的 fetchFundingRateHistory），且按交易对实际的 settlement 频率扣除。
+30. **回测日志 append 到旧文件是版本对比的噩梦** — 你跑了 20 次参数 sweep，结果全混在一个 trades.csv 里，哪些行属于哪次运行？无法区分。每次运行必须生成独立文件，文件名包含时间戳和关键配置标识。两周后你要回溯"上周那个好结果用的什么参数"，靠的就是文件名和 summary.json 里的配置快照。
+31. **"为什么没有交易"比"为什么交易了"更难调试** — 回测跑出来 30 天只有 2 笔交易，问题在哪？如果只有 trade log，你只能看到那 2 笔交易的信息。但真正需要知道的是：其他时间策略在干什么？信号触发了但被什么条件拦截了？是阈值太高、保证金不足、还是冷却期？没有 decision log（记录每次"决定不交易"的原因），策略调试就是盲人摸象。
