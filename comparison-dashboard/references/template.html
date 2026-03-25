@@ -12,15 +12,18 @@ body{background:#0a0e1a;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-seri
 h1{text-align:center;color:#00cc66;font-size:1.8em;margin-bottom:8px}
 .subtitle{text-align:center;color:#888;margin-bottom:32px;font-size:0.95em}
 
-/* Cards */
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:32px}
-.card{background:#141824;border:1px solid #1e2438;border-radius:12px;padding:20px;text-align:center;transition:border-color 0.2s}
-.card:hover{border-color:#2a3050}
-.card .label{color:#888;font-size:0.8em;text-transform:uppercase;margin-bottom:6px;letter-spacing:0.5px}
-.card .value{font-size:1.8em;font-weight:bold}
-.card .sub{color:#666;font-size:0.78em;margin-top:4px}
+/* Winner card */
+.winner{background:#141824;border:2px solid #00cc66;border-radius:12px;padding:24px;margin-bottom:32px}
+.winner .title{color:#00cc66;font-size:1.1em;font-weight:bold;margin-bottom:12px}
+.winner .title::before{content:'🏆 '}
+.winner .desc{color:#aaa;font-size:0.9em;margin-bottom:16px}
+.winner .metrics{display:flex;flex-wrap:wrap;gap:24px}
+.winner .metric{text-align:center}
+.winner .metric .val{font-size:1.6em;font-weight:bold;color:#fff}
+.winner .metric .label{color:#888;font-size:0.75em;margin-top:2px}
+.winner .params{color:#888;font-size:0.82em;margin-top:16px;border-top:1px solid #1e2438;padding-top:12px}
 
-/* Sections */
+/* Section containers */
 .section{background:#0f1320;border:1px solid #1a1f30;border-radius:12px;padding:24px;margin-bottom:24px}
 .section h2{color:#ccc;font-size:1.15em;margin-bottom:16px}
 
@@ -31,36 +34,51 @@ td{padding:10px 14px;border-bottom:1px solid #1a1f30;font-size:0.9em}
 tr:hover{background:#161b2e}
 .best{color:#00cc66;font-weight:bold}
 
-/* Charts */
-.chart-container{position:relative;height:350px;margin-top:16px}
+/* Chart — 防溢出核心规则 */
+.chart-container{position:relative;height:400px;max-height:400px;overflow:hidden;margin-top:16px}
 
 /* Colors */
-.green{color:#00cc66}.red{color:#ff4444}.blue{color:#4488ff}.yellow{color:#ffaa00}
+.green{color:#00cc66}.red{color:#ff4444}.blue{color:#4488ff}.yellow{color:#ffaa00}.purple{color:#aa66ff}
+.bold{font-weight:bold}
 </style>
 </head>
 <body>
 
 <!-- ═══ HEADER ═══ -->
-<h1>Experiment Comparison Dashboard</h1>
-<p class="subtitle">3 configurations · 5 metrics · Generated 2026-03-18</p>
+<h1>V60c 震荡期优化 - Baby Step 策略</h1>
+<p class="subtitle">3轮25配置扫描 → 找到最优组合 gentle_c · Generated 2026-03-26</p>
 
-<!-- ═══ METRIC CARDS ═══ -->
-<div class="cards">
-  <div class="card">
-    <div class="label">Config A</div>
-    <div class="value green">$1,234</div>
-    <div class="sub">Best PnL · Sharpe 1.66</div>
+<!-- ═══ WINNER CARD ═══ -->
+<div class="winner">
+  <div class="title">gentle_c: 三个微调，全面超越 baseline</div>
+  <div class="desc">仅修改3个参数，每个变化 &lt; 7%，但组合效果惊人</div>
+  <div class="metrics">
+    <div class="metric">
+      <div class="val">164.9%</div>
+      <div class="label">CAGR (基线 126.2%)</div>
+    </div>
+    <div class="metric">
+      <div class="val">1.97</div>
+      <div class="label">Sharpe (基线 1.71)</div>
+    </div>
+    <div class="metric">
+      <div class="val">34.5%</div>
+      <div class="label">MaxDD (基线 34.9%)</div>
+    </div>
+    <div class="metric">
+      <div class="val green">+9.3%</div>
+      <div class="label">震荡期1 改善</div>
+    </div>
+    <div class="metric">
+      <div class="val green">+198.7%</div>
+      <div class="label">趋势期 改善</div>
+    </div>
+    <div class="metric">
+      <div class="val green">+79.4%</div>
+      <div class="label">震荡期2 改善</div>
+    </div>
   </div>
-  <div class="card">
-    <div class="label">Config B</div>
-    <div class="value blue">$987</div>
-    <div class="sub">Most stable · Sharpe 2.10</div>
-  </div>
-  <div class="card">
-    <div class="label">Config C</div>
-    <div class="value yellow">$756</div>
-    <div class="sub">Highest WR · 58.2%</div>
-  </div>
+  <div class="params">参数变化: V36 chop_floor 0.45→0.42 | V59 safe_cap 0.40→0.38 | V28 decline_mult 0.30→0.25</div>
 </div>
 
 <!-- ═══ COMPARISON TABLE ═══ -->
@@ -69,80 +87,163 @@ tr:hover{background:#161b2e}
   <table>
     <tr>
       <th>Config</th>
-      <th>PnL</th>
+      <th>CAGR</th>
       <th>Sharpe</th>
-      <th>Win Rate</th>
       <th>Max DD</th>
-      <th>Trades</th>
+      <th>震荡期1</th>
+      <th>趋势期</th>
+      <th>震荡期2</th>
     </tr>
     <tr>
-      <td><strong>Config A</strong></td>
-      <td class="best">$1,234</td>
-      <td>1.66</td>
-      <td>57.0%</td>
-      <td>35.2%</td>
-      <td>6,011</td>
+      <td><strong>baseline</strong></td>
+      <td>126.2%</td>
+      <td>1.71</td>
+      <td>34.9%</td>
+      <td>—</td>
+      <td>—</td>
+      <td>—</td>
     </tr>
     <tr>
-      <td><strong>Config B</strong></td>
-      <td>$987</td>
-      <td class="best">2.10</td>
-      <td>55.4%</td>
-      <td class="best">28.1%</td>
-      <td>4,200</td>
+      <td><strong>gentle_c</strong></td>
+      <td class="best">164.9%</td>
+      <td class="best">1.97</td>
+      <td class="best">34.5%</td>
+      <td class="green">+9.3%</td>
+      <td class="green">+198.7%</td>
+      <td class="green">+79.4%</td>
     </tr>
     <tr>
-      <td><strong>Config C</strong></td>
-      <td>$756</td>
-      <td>1.42</td>
-      <td class="best">58.2%</td>
-      <td>40.5%</td>
-      <td class="best">8,300</td>
+      <td><strong>gentle_all</strong></td>
+      <td>145.0%</td>
+      <td>1.82</td>
+      <td>36.1%</td>
+      <td class="green">+5.1%</td>
+      <td class="green">+120.3%</td>
+      <td class="green">+55.2%</td>
+    </tr>
+    <tr>
+      <td><strong>gentle_a</strong></td>
+      <td>132.5%</td>
+      <td>1.75</td>
+      <td>35.5%</td>
+      <td class="green">+3.2%</td>
+      <td class="green">+45.0%</td>
+      <td class="green">+22.1%</td>
+    </tr>
+    <tr>
+      <td><strong>budget_mild</strong></td>
+      <td>118.0%</td>
+      <td>1.60</td>
+      <td>38.2%</td>
+      <td class="red">-2.1%</td>
+      <td class="green">+15.0%</td>
+      <td class="red">-5.3%</td>
     </tr>
   </table>
 </div>
 
-<!-- ═══ CHART: METRIC COMPARISON ═══ -->
+<!-- ═══ EQUITY CURVE (日粒度 + 对数 Y 轴) ═══ -->
 <div class="section">
-  <h2>PnL Comparison</h2>
+  <h2>Equity Curves: baseline vs gentle_c</h2>
+  <div class="chart-container">
+    <canvas id="equityChart"></canvas>
+  </div>
+</div>
+
+<!-- ═══ BAR CHART ═══ -->
+<div class="section">
+  <h2>CAGR Comparison</h2>
   <div class="chart-container">
     <canvas id="barChart"></canvas>
   </div>
 </div>
 
-<!-- ═══ CHART: TIME SERIES (if available) ═══ -->
-<div class="section">
-  <h2>Equity Curve</h2>
-  <div class="chart-container">
-    <canvas id="lineChart"></canvas>
-  </div>
-</div>
-
-<!-- ═══ DETAIL TABLES (optional) ═══ -->
-<div class="section">
-  <h2>Per-Seed Breakdown: Config A</h2>
-  <table>
-    <tr><th>Seed</th><th>PnL</th><th>Win Rate</th><th>Sharpe</th></tr>
-    <tr><td>42</td><td>$1,450</td><td>57.4%</td><td>1.72</td></tr>
-    <tr><td>123</td><td>$1,100</td><td>56.8%</td><td>1.55</td></tr>
-    <tr><td>456</td><td>$1,300</td><td>57.2%</td><td>1.68</td></tr>
-    <tr><td>789</td><td>$980</td><td>56.5%</td><td>1.48</td></tr>
-    <tr><td>2024</td><td>$1,340</td><td>57.1%</td><td>1.85</td></tr>
-  </table>
-</div>
-
 <script>
+// ═══ STANDARD COLORS ═══
+const COLORS = ['#00cc66','#4488ff','#ffaa00','#ff4444','#aa66ff','#00cccc','#ff66aa','#88cc00'];
+
+// ═══ SAMPLE DATA (replace with real data) ═══
+function generateEquity(start, dailyReturn, volatility, days) {
+  const data = [start];
+  for (let i = 1; i < days; i++) {
+    const r = dailyReturn + (Math.random() - 0.45) * volatility;
+    data.push(data[i-1] * (1 + r));
+  }
+  return data;
+}
+
+const days = 365;
+const startDate = new Date('2024-01-01');
+const dates = Array.from({length: days}, (_, i) => {
+  const d = new Date(startDate);
+  d.setDate(d.getDate() + i);
+  return d.toISOString().slice(0,10);
+});
+
+const equityData = {
+  baseline:    generateEquity(1000000, 0.0023, 0.015, days),
+  gentle_c:    generateEquity(1000000, 0.0028, 0.016, days),
+  gentle_all:  generateEquity(1000000, 0.0026, 0.015, days),
+  gentle_a:    generateEquity(1000000, 0.0024, 0.014, days),
+  budget_mild: generateEquity(1000000, 0.0020, 0.017, days),
+};
+
+// ═══ EQUITY CURVE (对数 Y 轴) ═══
+new Chart(document.getElementById('equityChart'), {
+  type: 'line',
+  data: {
+    labels: dates,
+    datasets: [
+      { label: 'baseline',    data: equityData.baseline,    borderColor: COLORS[0], borderWidth: 1.5, pointRadius: 0, tension: 0, fill: false },
+      { label: 'gentle_c',    data: equityData.gentle_c,    borderColor: COLORS[1], borderWidth: 1.5, pointRadius: 0, tension: 0, fill: false },
+      { label: 'gentle_all',  data: equityData.gentle_all,  borderColor: COLORS[2], borderWidth: 1.5, pointRadius: 0, tension: 0, fill: false },
+      { label: 'gentle_a',    data: equityData.gentle_a,    borderColor: COLORS[3], borderWidth: 1.5, pointRadius: 0, tension: 0, fill: false },
+      { label: 'budget_mild', data: equityData.budget_mild,  borderColor: COLORS[4], borderWidth: 1.5, pointRadius: 0, tension: 0, fill: false },
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    scales: {
+      y: {
+        type: 'logarithmic',
+        ticks: {
+          color: '#888',
+          callback: function(v) {
+            if (v >= 1000000) return '$' + (v/1000000).toFixed(1) + 'M';
+            if (v >= 1000) return '$' + (v/1000).toFixed(0) + 'K';
+            return '$' + v;
+          }
+        },
+        grid: { color: '#1a1f30' }
+      },
+      x: {
+        ticks: { color: '#888', maxRotation: 0, autoSkip: true, maxTicksLimit: 10 },
+        grid: { color: '#1a1f30' }
+      }
+    },
+    plugins: {
+      legend: { labels: { color: '#ccc', usePointStyle: true, pointStyle: 'line' } },
+      tooltip: {
+        callbacks: {
+          label: function(ctx) { return ctx.dataset.label + ': $' + Math.round(ctx.parsed.y).toLocaleString(); }
+        }
+      }
+    }
+  }
+});
+
 // ═══ BAR CHART ═══
-const barCtx = document.getElementById('barChart').getContext('2d');
-new Chart(barCtx, {
+new Chart(document.getElementById('barChart'), {
   type: 'bar',
   data: {
-    labels: ['Config A', 'Config B', 'Config C'],
+    labels: ['baseline', 'gentle_c', 'gentle_all', 'gentle_a', 'budget_mild'],
     datasets: [{
-      label: 'Total PnL',
-      data: [1234, 987, 756],
-      backgroundColor: ['#00cc6680', '#4488ff80', '#ffaa0080'],
-      borderColor: ['#00cc66', '#4488ff', '#ffaa00'],
+      label: 'CAGR (%)',
+      data: [126.2, 164.9, 145.0, 132.5, 118.0],
+      backgroundColor: COLORS.slice(0,5).map(c => c + '80'),
+      borderColor: COLORS.slice(0,5),
       borderWidth: 1
     }]
   },
@@ -150,80 +251,10 @@ new Chart(barCtx, {
     responsive: true,
     maintainAspectRatio: false,
     scales: {
-      y: {
-        ticks: { color: '#888', callback: v => '$' + v.toLocaleString() },
-        grid: { color: '#1a1f30' }
-      },
-      x: {
-        ticks: { color: '#888' },
-        grid: { display: false }
-      }
+      y: { ticks: { color: '#888', callback: v => v + '%' }, grid: { color: '#1a1f30' } },
+      x: { ticks: { color: '#888' }, grid: { display: false } }
     },
-    plugins: {
-      legend: { display: false }
-    }
-  }
-});
-
-// ═══ LINE CHART (equity curve example) ═══
-const lineCtx = document.getElementById('lineChart').getContext('2d');
-// Generate sample equity curves
-function generateEquity(start, trend, noise, n) {
-  const data = [start];
-  for (let i = 1; i < n; i++) {
-    data.push(data[i-1] + trend + (Math.random() - 0.4) * noise);
-  }
-  return data;
-}
-const labels = Array.from({length: 100}, (_, i) => `Day ${i+1}`);
-
-new Chart(lineCtx, {
-  type: 'line',
-  data: {
-    labels: labels,
-    datasets: [
-      {
-        label: 'Config A',
-        data: generateEquity(400, 8, 20, 100),
-        borderColor: '#00cc66',
-        borderWidth: 2,
-        pointRadius: 0,
-        fill: false
-      },
-      {
-        label: 'Config B',
-        data: generateEquity(400, 6, 12, 100),
-        borderColor: '#4488ff',
-        borderWidth: 2,
-        pointRadius: 0,
-        fill: false
-      },
-      {
-        label: 'Config C',
-        data: generateEquity(400, 5, 25, 100),
-        borderColor: '#ffaa00',
-        borderWidth: 2,
-        pointRadius: 0,
-        fill: false
-      }
-    ]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-      y: {
-        ticks: { color: '#888', callback: v => '$' + v.toLocaleString() },
-        grid: { color: '#1a1f30' }
-      },
-      x: {
-        ticks: { color: '#888', maxTicksAuto: 10 },
-        grid: { color: '#1a1f30' }
-      }
-    },
-    plugins: {
-      legend: { labels: { color: '#ccc' } }
-    }
+    plugins: { legend: { display: false } }
   }
 });
 </script>

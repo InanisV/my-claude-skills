@@ -25,204 +25,259 @@ experiment results across multiple configurations.
 - Any "N configurations × M metrics" comparison
 - User asks for "dashboard", "可视化", "看板", "comparison chart"
 
-## Dashboard anatomy
+## 铁律：UI 样式不允许自由发挥
 
-Every comparison dashboard has these building blocks. Pick the ones
-that fit the data:
+**每次生成 dashboard 时，必须从 `references/template.html` 复制 CSS 和 Chart.js 配置。**
+不要凭记忆写 CSS，不要"参考风格后自由发挥"，不要微调颜色/间距/字号。
+直接复制 template 中的 `<style>` 块和 Chart.js options，只修改数据部分。
 
-### 1. Header section
-Title, subtitle with context (date, data source, key parameters).
+为什么这么严格：AI 每次"参考风格"都会产生微妙的偏移——字号差 0.1em、
+间距差 4px、颜色差一个色阶——累积起来用户每次看到的 dashboard 都长得不一样。
+唯一的解法是 **逐字复制**，不是"参考"。
 
-### 2. Metric cards (the "headline numbers")
-3-5 top-level KPIs as large colored cards. Use these to show the
-most important metric for each configuration at a glance.
+## Dashboard 构成
 
-Color scheme:
-- Green (#00cc66) for best/positive values
-- Red (#ff4444) for worst/negative values
-- Blue (#4488ff) for neutral/informational
-- Yellow (#ffaa00) for warnings/caution
+### 1. Header（标题区）
+标题 + 副标题（日期、数据源、关键参数变化摘要）。
 
-### 3. Comparison table
-The core of any comparison dashboard. Rows = configs, columns = metrics.
-Highlight the best value in each column with bold + color.
+### 2. Winner Card（冠军卡片）
+用绿色边框高亮最优配置，展示 3-6 个核心指标 + vs baseline 的变化百分比。
+只有一个 winner card，不要给每个 config 都做一张大卡片。
 
-### 4. Charts (optional, when time-series or distributions exist)
-- Line charts for equity curves / time-series
-- Bar charts for metric comparisons
-- Use Chart.js 4 (CDN: `https://cdn.jsdelivr.net/npm/chart.js@4`)
+### 3. Comparison Table（对比表）
+行 = configs，列 = metrics。每列最优值加粗绿色高亮。
+这是 dashboard 的核心，必须有。
 
-### 5. Detail tables (optional)
-Per-config breakdowns (e.g., per-seed results, per-asset results).
+### 4. Equity Curve（权益曲线）— 必须有
+**每个 dashboard 都必须包含日粒度的权益曲线图。** 这是用户最需要的可视化。
 
-## How to build it
+要求：
+- Y 轴必须用**对数坐标**（`type: 'logarithmic'`），方便比较不同量级的增长
+- X 轴为日期，格式 `YYYY-MM-DD` 或 `MMM DD`
+- 每条曲线一个 config，用不同颜色区分
+- `pointRadius: 0`，`borderWidth: 1.5`（线不能太粗）
+- 固定高度 `400px`，不允许超出
 
-### Step 1: Structure the data
+### 5. 其他图表（可选）
+Bar chart 对比、drawdown 曲线等。同样遵守高度约束。
 
-Before writing HTML, organize the comparison data into this mental model:
+### 6. Detail Tables（可选）
+Per-seed、per-asset 的明细数据。
 
-```
-configs = [
-  { name: "Config A", metrics: { pnl: 1000, sharpe: 1.5, wr: 0.57, ... } },
-  { name: "Config B", metrics: { pnl: 800, sharpe: 2.1, wr: 0.55, ... } },
-]
-```
+## Chart.js 防溢出铁律
 
-If there are sub-results (per-seed, per-asset), structure them as nested data:
+**Chart.js 图表高度溢出是最常见的 bug，以下规则必须严格遵守：**
 
-```
-configs[0].details = [
-  { seed: 42, pnl: 1200, sharpe: 1.6 },
-  { seed: 123, pnl: 800, sharpe: 1.4 },
-]
-```
-
-### Step 2: Choose what to show
-
-Not every metric deserves a card or chart. Prioritize:
-
-1. **Cards**: The single most important metric (usually the primary objective)
-   plus 1-2 secondary metrics. One card per config.
-2. **Table**: All metrics, all configs. This is the reference.
-3. **Charts**: Only if there's meaningful time-series data or distributions.
-   Don't force charts on tabular-only data.
-
-### Step 3: Write the HTML
-
-Use the template in `references/template.html` as a starting point.
-Key principles:
-
-- **Single file**: Everything (HTML + CSS + JS) in one `.html` file.
-  No external dependencies except Chart.js CDN.
-- **Dark theme**: `background: #0a0e1a`, text `#e0e0e0`. This is the
-  standard for data dashboards and looks professional.
-- **Responsive grid**: Use CSS Grid with `repeat(auto-fit, minmax(250px, 1fr))`
-  for cards, and standard table for comparisons.
-- **No frameworks**: Plain HTML/CSS/JS. No React, no Tailwind, no build step.
-- **Embed data as JS**: Put the comparison data as a JS object directly in
-  a `<script>` tag. Don't fetch from external files.
-
-### Step 4: Format numbers well
-
-This matters more than people think:
-
-- Large numbers: use `toLocaleString()` → `$1,234,567`
-- Percentages: one decimal → `57.3%`
-- Small decimals: two decimals → `1.66`
-- Negative numbers: red color + minus sign → <span style="color:red">-$45</span>
-- Highlight best-in-class values with bold + green
-
-### Step 5: Save and present
-
-Save the dashboard HTML to the project directory (not a temp location).
-Tell the user where it is and provide a direct link.
-
-## CSS patterns to use
-
-```css
-/* Base */
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: #0a0e1a; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; padding: 24px; }
-
-/* Title */
-h1 { text-align: center; color: #00cc66; font-size: 1.8em; margin-bottom: 8px; }
-.subtitle { text-align: center; color: #888; margin-bottom: 32px; font-size: 0.95em; }
-
-/* Cards grid */
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 32px; }
-.card { background: #141824; border: 1px solid #1e2438; border-radius: 12px; padding: 20px; text-align: center; }
-.card .label { color: #888; font-size: 0.8em; text-transform: uppercase; margin-bottom: 6px; }
-.card .value { font-size: 1.8em; font-weight: bold; }
-.card .sub { color: #666; font-size: 0.78em; margin-top: 4px; }
-
-/* Section containers */
-.section { background: #0f1320; border: 1px solid #1a1f30; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
-.section h2 { color: #ccc; font-size: 1.15em; margin-bottom: 16px; }
-
-/* Tables */
-table { width: 100%; border-collapse: collapse; }
-th { background: #1a1f30; color: #aaa; padding: 10px 14px; text-align: left; font-weight: 600; font-size: 0.85em; }
-td { padding: 10px 14px; border-bottom: 1px solid #1a1f30; font-size: 0.9em; }
-tr:hover { background: #161b2e; }
-
-/* Colors */
-.green { color: #00cc66; }
-.red { color: #ff4444; }
-.blue { color: #4488ff; }
-.yellow { color: #ffaa00; }
-.bold { font-weight: bold; }
-```
-
-## Chart.js patterns
-
-For time-series (equity curves, cumulative metrics):
-
+### 规则 1：canvas 必须包在固定高度容器中
 ```html
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-<script>
-new Chart(document.getElementById('myChart'), {
+<div class="chart-container">
+  <canvas id="myChart"></canvas>
+</div>
+```
+
+### 规则 2：CSS 必须同时设置 height + max-height + overflow
+```css
+.chart-container {
+  position: relative;
+  height: 400px;
+  max-height: 400px;
+  overflow: hidden;      /* 兜底：即使 Chart.js 渲染出错也不溢出 */
+  margin-top: 16px;
+}
+```
+
+### 规则 3：Chart.js options 中必须同时设置这两项
+```js
+options: {
+  responsive: true,
+  maintainAspectRatio: false,  // ← 没有这行 Chart.js 会忽略容器高度！
+  ...
+}
+```
+
+### 规则 4：不允许用 aspectRatio 替代固定高度
+不要写 `aspectRatio: 2` 之类的配置。在不同屏幕宽度下 aspectRatio 会导致
+高度不可预测。永远用固定高度容器 + `maintainAspectRatio: false`。
+
+### 规则 5：多个图表各自独立容器
+每个 `<canvas>` 单独一个 `.chart-container`，不要把多个 canvas 放在同一个
+容器里。
+
+## 对数坐标权益曲线（标准 pattern）
+
+**直接复制这段代码，只改 data 部分：**
+
+```js
+new Chart(document.getElementById('equityChart'), {
   type: 'line',
   data: {
-    labels: timestamps,  // array of date strings or numbers
+    labels: dates,  // ['2024-01-01', '2024-01-02', ...]
     datasets: configs.map((c, i) => ({
       label: c.name,
-      data: c.equityCurve,
-      borderColor: ['#00cc66','#4488ff','#ffaa00','#ff4444'][i],
-      borderWidth: 2,
+      data: c.equity,  // [1000000, 1002500, ...]
+      borderColor: COLORS[i],
+      borderWidth: 1.5,
       pointRadius: 0,
+      tension: 0,
       fill: false,
     }))
   },
   options: {
     responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: 'index',
+      intersect: false,
+    },
     scales: {
       y: {
-        ticks: { color: '#888', callback: v => '$' + v.toLocaleString() },
+        type: 'logarithmic',
+        ticks: {
+          color: '#888',
+          callback: function(v) {
+            if (v >= 1000000) return '$' + (v/1000000).toFixed(1) + 'M';
+            if (v >= 1000) return '$' + (v/1000).toFixed(0) + 'K';
+            return '$' + v;
+          }
+        },
         grid: { color: '#1a1f30' }
       },
       x: {
-        ticks: { color: '#888', maxTicksAuto: 8 },
+        ticks: {
+          color: '#888',
+          maxRotation: 0,
+          autoSkip: true,
+          maxTicksLimit: 10
+        },
         grid: { color: '#1a1f30' }
       }
     },
     plugins: {
-      legend: { labels: { color: '#ccc' } }
+      legend: {
+        labels: { color: '#ccc', usePointStyle: true, pointStyle: 'line' }
+      },
+      tooltip: {
+        callbacks: {
+          label: function(ctx) {
+            return ctx.dataset.label + ': $' + ctx.parsed.y.toLocaleString();
+          }
+        }
+      }
     }
   }
 });
-</script>
 ```
 
-For bar comparisons:
+## Bar Chart（标准 pattern）
 
 ```js
-new Chart(ctx, {
+new Chart(document.getElementById('barChart'), {
   type: 'bar',
   data: {
     labels: configs.map(c => c.name),
     datasets: [{
       label: metricName,
-      data: configs.map(c => c.metrics[metricKey]),
-      backgroundColor: configs.map((c, i) =>
-        ['#00cc6680','#4488ff80','#ffaa0080','#ff444480'][i]
-      ),
-      borderColor: ['#00cc66','#4488ff','#ffaa00','#ff4444'],
+      data: configs.map(c => c.metrics[key]),
+      backgroundColor: configs.map((_, i) => COLORS[i] + '80'),
+      borderColor: configs.map((_, i) => COLORS[i]),
       borderWidth: 1
     }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      y: {
+        ticks: { color: '#888' },
+        grid: { color: '#1a1f30' }
+      },
+      x: {
+        ticks: { color: '#888' },
+        grid: { display: false }
+      }
+    },
+    plugins: { legend: { display: false } }
   }
 });
 ```
 
-## Common mistakes to avoid
+## 标准颜色表
 
-- Don't generate charts for data that's better as a table (small config counts)
-- Don't use `localhost` URLs or external data files — everything must be embedded
-- Don't use white/light backgrounds — dark theme is standard for data dashboards
-- Don't forget to `toLocaleString()` large numbers
-- Don't put 20 metrics in cards — pick 3-5 that matter most
-- Don't skip the "best value" highlighting in comparison tables
+```js
+const COLORS = [
+  '#00cc66',  // green  - 通常给 winner / baseline
+  '#4488ff',  // blue
+  '#ffaa00',  // yellow/orange
+  '#ff4444',  // red
+  '#aa66ff',  // purple
+  '#00cccc',  // cyan
+  '#ff66aa',  // pink
+  '#88cc00',  // lime
+];
+```
+
+固定顺序，不要随意换。用户看多了会形成颜色→配置的直觉。
+
+## 完整 CSS（逐字复制）
+
+```css
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0e1a;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;padding:24px;max-width:1400px;margin:0 auto}
+
+/* Header */
+h1{text-align:center;color:#00cc66;font-size:1.8em;margin-bottom:8px}
+.subtitle{text-align:center;color:#888;margin-bottom:32px;font-size:0.95em}
+
+/* Winner card */
+.winner{background:#141824;border:2px solid #00cc66;border-radius:12px;padding:24px;margin-bottom:32px}
+.winner .title{color:#00cc66;font-size:1.1em;font-weight:bold;margin-bottom:12px}
+.winner .title::before{content:'🏆 '}
+.winner .desc{color:#aaa;font-size:0.9em;margin-bottom:16px}
+.winner .metrics{display:flex;flex-wrap:wrap;gap:24px}
+.winner .metric{text-align:center}
+.winner .metric .val{font-size:1.6em;font-weight:bold;color:#fff}
+.winner .metric .label{color:#888;font-size:0.75em;margin-top:2px}
+.winner .params{color:#888;font-size:0.82em;margin-top:16px;border-top:1px solid #1e2438;padding-top:12px}
+
+/* Section containers */
+.section{background:#0f1320;border:1px solid #1a1f30;border-radius:12px;padding:24px;margin-bottom:24px}
+.section h2{color:#ccc;font-size:1.15em;margin-bottom:16px}
+
+/* Tables */
+table{width:100%;border-collapse:collapse}
+th{background:#1a1f30;color:#aaa;padding:10px 14px;text-align:left;font-weight:600;font-size:0.85em;text-transform:uppercase;letter-spacing:0.3px}
+td{padding:10px 14px;border-bottom:1px solid #1a1f30;font-size:0.9em}
+tr:hover{background:#161b2e}
+.best{color:#00cc66;font-weight:bold}
+
+/* Chart — 防溢出核心规则 */
+.chart-container{position:relative;height:400px;max-height:400px;overflow:hidden;margin-top:16px}
+
+/* Colors */
+.green{color:#00cc66}.red{color:#ff4444}.blue{color:#4488ff}.yellow{color:#ffaa00}.purple{color:#aa66ff}
+.bold{font-weight:bold}
+```
+
+## 格式化数字
+
+- 大数字：`toLocaleString()` → `$1,234,567`
+- 百分比：一位小数 → `57.3%`
+- 小数：两位 → `1.66`
+- 负值：红色 + 负号
+- 最优值：绿色加粗（`.best` class）
+
+## 常见错误提醒
+
+1. ❌ 忘记 `maintainAspectRatio: false` → 图表无视容器高度，撑满屏幕
+2. ❌ 用 `aspectRatio` 代替固定高度 → 不同屏幕宽度下高度不可预测
+3. ❌ 没有 `.chart-container` 包裹 → canvas 直接撑满父元素
+4. ❌ 多个 canvas 共享一个容器 → 高度叠加
+5. ❌ 权益曲线用线性 Y 轴 → 早期平坦、后期陡峭，看不出中间的波动
+6. ❌ 自由发挥 CSS → 每次生成的 dashboard 长得不一样
+7. ❌ 给每个 config 都做一张大卡片 → 卡片太多太占空间，应该只高亮 winner
+8. ❌ 缺少权益曲线图 → 用户每次都要问"曲线呢"
 
 ## Reference
 
-See `references/template.html` for a complete working example dashboard.
-Use it as a starting point and modify to fit the specific data.
+See `references/template.html` for a complete working example.
+**生成 dashboard 时直接复制 template 的结构和 CSS，只替换数据。**
