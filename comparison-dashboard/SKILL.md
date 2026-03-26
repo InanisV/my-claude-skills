@@ -113,6 +113,58 @@ options: {
 每个 `<canvas>` 单独一个 `.chart-container`，不要把多个 canvas 放在同一个
 容器里。
 
+### 规则 6：X 轴禁止使用 `type: 'time'`，只用默认 category 类型
+
+**这是 Chart.js 最常踩的坑，必须严格遵守。**
+
+Chart.js 的 `type: 'time'` 轴依赖 date adapter（如 chartjs-adapter-date-fns），
+如果没有正确安装 adapter，或者日期字符串格式有任何偏差，Chart.js 会静默地将日期
+解析为错误的时间戳，导致 X 轴出现 2022→2116 这种荒谬的刻度。
+
+**正确做法**：X 轴用默认的 category 类型（不写 `type`），labels 传字符串数组：
+
+```js
+// ✅ 正确：用字符串数组做 labels，X 轴不设 type
+labels: ['2022-03-01', '2022-03-08', ...],  // 纯字符串
+scales: {
+  x: {
+    // 不要写 type: 'time' ！
+    ticks: {
+      color: '#888',
+      maxTicksLimit: 10,  // 控制最多显示几个刻度
+      maxRotation: 0,     // 水平显示
+      autoSkip: true,     // 自动跳过密集标签
+    },
+    grid: { color: '#1a1f30' }
+  }
+}
+```
+
+```js
+// ❌ 错误：不要这样写
+scales: {
+  x: {
+    type: 'time',  // ← 这行是万恶之源！
+    time: { unit: 'month' },
+    ...
+  }
+}
+```
+
+**为什么 category 类型就够了**：
+- 我们的 labels 已经是排好序的日期字符串，Chart.js 按顺序显示即可
+- `autoSkip: true` + `maxTicksLimit: 10` 会自动均匀选取 ~10 个标签显示
+- 不需要 Chart.js 理解日期的语义，只需要按顺序展示字符串
+
+**额外安全措施**：生成 labels 时自行做采样和格式化，不要依赖 Chart.js 做日期运算：
+```js
+// 如果原始日期太多，先采样再传给 Chart.js
+const step = allDates.length > 500 ? 7 : allDates.length > 200 ? 3 : 1;
+const labels = allDates.filter((_, i) => i % step === 0);
+// 对应的 equity 数据也要同步采样
+const data = allEquity.filter((_, i) => i % step === 0);
+```
+
 ## 对数坐标权益曲线（标准 pattern）
 
 **直接复制这段代码，只改 data 部分：**
@@ -288,6 +340,8 @@ canvas{max-height:400px}
 6. ❌ 自由发挥 CSS → 每次生成的 dashboard 长得不一样
 7. ❌ 给每个 config 都做一张大卡片 → 卡片太多太占空间，应该只高亮 winner
 8. ❌ 缺少权益曲线图 → 用户每次都要问"曲线呢"
+9. ❌ X 轴用 `type: 'time'` → 没有 date adapter 时日期解析错乱，出现 2022→2116 的荒谬刻度
+10. ❌ labels 和 data 长度不匹配 → 采样时只采了 labels 没采 data（或反过来），导致曲线错位
 
 ## Reference
 
