@@ -35,33 +35,43 @@ experiment results across multiple configurations.
 间距差 4px、颜色差一个色阶——累积起来用户每次看到的 dashboard 都长得不一样。
 唯一的解法是 **逐字复制**，不是"参考"。
 
-## Dashboard 构成
+## Dashboard 构成（按 v42 参考布局，从上到下）
 
 ### 1. Header（标题区）
-标题 + 副标题（日期、数据源、关键参数变化摘要）。
+标题用 `#ff44ff`（品红色）。副标题灰色，包含日期、数据源、关键发现摘要。
 
-### 2. Winner Card（冠军卡片）
-用绿色边框高亮最优配置，展示 3-6 个核心指标 + vs baseline 的变化百分比。
-只有一个 winner card，不要给每个 config 都做一张大卡片。
+### 2. Highlight Block（冠军高亮区）— `.highlight`
+渐变底色 `linear-gradient(135deg, #1a0a2e, #0a1a2e)` + 品红色半透明边框。
+内部用 `.key-diff` 2x2 网格展示 winner vs baseline 的核心指标差异。
+底部灰色小字说明核心改动。
 
-### 3. Comparison Table（对比表）
-行 = configs，列 = metrics。每列最优值加粗绿色高亮。
-这是 dashboard 的核心，必须有。
+### 3. Metric Cards（概要数字）— `.cards`
+一行 3-5 个小卡片，每个卡片一个大数字 + 标签 + 副标签。
+用于展示 REF 和 best 的关键指标对比、实验总数等概要信息。
 
 ### 4. Equity Curve（权益曲线）— 必须有
 **每个 dashboard 都必须包含日粒度的权益曲线图。** 这是用户最需要的可视化。
 
 要求：
-- Y 轴必须用**对数坐标**（`type: 'logarithmic'`），方便比较不同量级的增长
-- X 轴为日期，格式 `YYYY-MM-DD` 或 `MMM DD`
-- 每条曲线一个 config，用不同颜色区分
-- `pointRadius: 0`，`borderWidth: 1.5`（线不能太粗）
-- 固定高度 `400px`，不允许超出
+- Y 轴必须用**对数坐标**（`type: 'logarithmic'`）
+- X 轴为日期，`maxRotation: 0`，`autoSkip: true`
+- Winner 线粗 3px，baseline 2.5px，其他 1.5px（视觉区分主角）
+- `pointRadius: 0`，`tension: 0.1`（轻微平滑）
+- 数据超过 200 天时做采样（每 3-7 天取一个点），避免 canvas 卡顿
+- 容器高度 `380px`，`max-height: 400px`
 
-### 5. 其他图表（可选）
-Bar chart 对比、drawdown 曲线等。同样遵守高度约束。
+### 5. Comparison Table（全指标对比表）
+行 = configs，列 = metrics。最优值用 `.best`（品红色加粗）高亮。
+正值用 `.good`（绿色），负值用 `.bad`（红色），N/A 用 `.neutral`（灰色）。
+Winner 行加深背景 `#1a0a2e`，REF 行加深背景 `#0d1525`。
 
-### 6. Detail Tables（可选）
+### 6. 其他图表（可选）
+Bar chart（分时期收益对比等）。同样遵守高度约束。
+
+### 7. Verdict（关键发现）— `.verdict`
+左侧品红竖线，展示实验的核心结论和根因分析。适合放在 dashboard 最后。
+
+### 8. Detail Tables（可选）
 Per-seed、per-asset 的明细数据。
 
 ## Chart.js 防溢出铁律
@@ -108,59 +118,51 @@ options: {
 **直接复制这段代码，只改 data 部分：**
 
 ```js
+// 数据采样（日线数据超过 200 天时每 N 天取一个点，避免 canvas 渲染卡顿）
+const step = dates.length > 500 ? 7 : dates.length > 200 ? 3 : 1;
+const sampledDates = dates.filter((_, i) => i % step === 0);
+const sampledIdx = dates.map((_, i) => i).filter(i => i % step === 0);
+
 new Chart(document.getElementById('equityChart'), {
   type: 'line',
   data: {
-    labels: dates,  // ['2024-01-01', '2024-01-02', ...]
+    labels: sampledDates,
     datasets: configs.map((c, i) => ({
       label: c.name,
-      data: c.equity,  // [1000000, 1002500, ...]
-      borderColor: COLORS[i],
-      borderWidth: 1.5,
+      data: sampledIdx.map(j => c.equity[j]),
+      borderColor: c.color || COLORS[i],
+      // winner 线粗 3px，baseline 2.5px，其他 1.5px
+      borderWidth: c.isWinner ? 3 : c.isBaseline ? 2.5 : 1.5,
       pointRadius: 0,
-      tension: 0,
+      tension: 0.1,  // 轻微平滑，视觉更舒服
       fill: false,
     }))
   },
   options: {
     responsive: true,
     maintainAspectRatio: false,
-    interaction: {
-      mode: 'index',
-      intersect: false,
-    },
+    interaction: { intersect: false, mode: 'index' },
     scales: {
       y: {
         type: 'logarithmic',
         ticks: {
           color: '#888',
-          callback: function(v) {
-            if (v >= 1000000) return '$' + (v/1000000).toFixed(1) + 'M';
-            if (v >= 1000) return '$' + (v/1000).toFixed(0) + 'K';
-            return '$' + v;
-          }
+          callback: v => '$' + v.toLocaleString()
         },
         grid: { color: '#1a1f30' }
       },
       x: {
-        ticks: {
-          color: '#888',
-          maxRotation: 0,
-          autoSkip: true,
-          maxTicksLimit: 10
-        },
+        ticks: { color: '#888', maxTicksAuto: 10, autoSkip: true, maxRotation: 0 },
         grid: { color: '#1a1f30' }
       }
     },
     plugins: {
       legend: {
-        labels: { color: '#ccc', usePointStyle: true, pointStyle: 'line' }
+        labels: { color: '#ccc', usePointStyle: true, padding: 16 }
       },
       tooltip: {
         callbacks: {
-          label: function(ctx) {
-            return ctx.dataset.label + ': $' + ctx.parsed.y.toLocaleString();
-          }
+          label: ctx => `${ctx.dataset.label}: $${ctx.parsed.y?.toLocaleString(undefined, {maximumFractionDigits: 0})}`
         }
       }
     }
@@ -218,26 +220,29 @@ const COLORS = [
 
 固定顺序，不要随意换。用户看多了会形成颜色→配置的直觉。
 
-## 完整 CSS（逐字复制）
+## 完整 CSS（逐字复制，源自 v42_adaptive_plateau_dashboard.html）
 
 ```css
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0a0e1a;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;padding:24px;max-width:1400px;margin:0 auto}
 
 /* Header */
-h1{text-align:center;color:#00cc66;font-size:1.8em;margin-bottom:8px}
+h1{text-align:center;color:#ff44ff;font-size:1.8em;margin-bottom:8px}
 .subtitle{text-align:center;color:#888;margin-bottom:32px;font-size:0.95em}
 
-/* Winner card */
-.winner{background:#141824;border:2px solid #00cc66;border-radius:12px;padding:24px;margin-bottom:32px}
-.winner .title{color:#00cc66;font-size:1.1em;font-weight:bold;margin-bottom:12px}
-.winner .title::before{content:'🏆 '}
-.winner .desc{color:#aaa;font-size:0.9em;margin-bottom:16px}
-.winner .metrics{display:flex;flex-wrap:wrap;gap:24px}
-.winner .metric{text-align:center}
-.winner .metric .val{font-size:1.6em;font-weight:bold;color:#fff}
-.winner .metric .label{color:#888;font-size:0.75em;margin-top:2px}
-.winner .params{color:#888;font-size:0.82em;margin-top:16px;border-top:1px solid #1e2438;padding-top:12px}
+/* Highlight block (冠军高亮区，渐变底色) */
+.highlight{background:linear-gradient(135deg,#1a0a2e,#0a1a2e);border:1px solid #ff44ff40;border-radius:12px;padding:20px;margin-bottom:24px}
+.highlight h2{color:#ff44ff}
+.key-diff{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
+.key-diff .item{background:#0a0e1a;padding:12px;border-radius:8px}
+.key-diff .item .metric{font-size:1.2em;font-weight:bold}
+
+/* Metric cards (概要数字一行排列) */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:32px}
+.card{background:#141824;border:1px solid #1e2438;border-radius:12px;padding:20px;text-align:center}
+.card .label{color:#888;font-size:0.75em;text-transform:uppercase;margin-bottom:6px}
+.card .value{font-size:1.8em;font-weight:bold}
+.card .sub{color:#666;font-size:0.78em;margin-top:4px}
 
 /* Section containers */
 .section{background:#0f1320;border:1px solid #1a1f30;border-radius:12px;padding:24px;margin-bottom:24px}
@@ -245,17 +250,24 @@ h1{text-align:center;color:#00cc66;font-size:1.8em;margin-bottom:8px}
 
 /* Tables */
 table{width:100%;border-collapse:collapse}
-th{background:#1a1f30;color:#aaa;padding:10px 14px;text-align:left;font-weight:600;font-size:0.85em;text-transform:uppercase;letter-spacing:0.3px}
+th{background:#1a1f30;color:#aaa;padding:10px 14px;text-align:left;font-weight:600;font-size:0.85em;white-space:nowrap}
 td{padding:10px 14px;border-bottom:1px solid #1a1f30;font-size:0.9em}
 tr:hover{background:#161b2e}
-.best{color:#00cc66;font-weight:bold}
+.best{color:#ff44ff;font-weight:bold}
 
-/* Chart — 防溢出核心规则 */
-.chart-container{position:relative;height:400px;max-height:400px;overflow:hidden;margin-top:16px}
+/* Verdict block (关键发现区) */
+.verdict{background:#141824;border-left:4px solid #ff44ff;padding:16px 20px;margin-top:16px;border-radius:0 8px 8px 0}
+.verdict h3{color:#ff44ff;margin-bottom:8px}
+.verdict p{color:#bbb;line-height:1.6}
+
+/* Chart — 防溢出核心规则（双保险：容器 + canvas 本身） */
+canvas{max-height:400px}
+.chart-container{position:relative;height:380px;max-height:400px;overflow:hidden;margin-bottom:16px}
 
 /* Colors */
+.good{color:#00cc66}.bad{color:#ff4444}.neutral{color:#888}
 .green{color:#00cc66}.red{color:#ff4444}.blue{color:#4488ff}.yellow{color:#ffaa00}.purple{color:#aa66ff}
-.bold{font-weight:bold}
+.config-desc{color:#666;font-size:0.8em}
 ```
 
 ## 格式化数字

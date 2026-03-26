@@ -9,19 +9,22 @@
 body{background:#0a0e1a;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;padding:24px;max-width:1400px;margin:0 auto}
 
 /* Header */
-h1{text-align:center;color:#00cc66;font-size:1.8em;margin-bottom:8px}
+h1{text-align:center;color:#ff44ff;font-size:1.8em;margin-bottom:8px}
 .subtitle{text-align:center;color:#888;margin-bottom:32px;font-size:0.95em}
 
-/* Winner card */
-.winner{background:#141824;border:2px solid #00cc66;border-radius:12px;padding:24px;margin-bottom:32px}
-.winner .title{color:#00cc66;font-size:1.1em;font-weight:bold;margin-bottom:12px}
-.winner .title::before{content:'🏆 '}
-.winner .desc{color:#aaa;font-size:0.9em;margin-bottom:16px}
-.winner .metrics{display:flex;flex-wrap:wrap;gap:24px}
-.winner .metric{text-align:center}
-.winner .metric .val{font-size:1.6em;font-weight:bold;color:#fff}
-.winner .metric .label{color:#888;font-size:0.75em;margin-top:2px}
-.winner .params{color:#888;font-size:0.82em;margin-top:16px;border-top:1px solid #1e2438;padding-top:12px}
+/* Highlight block (冠军高亮区) */
+.highlight{background:linear-gradient(135deg,#1a0a2e,#0a1a2e);border:1px solid #ff44ff40;border-radius:12px;padding:20px;margin-bottom:24px}
+.highlight h2{color:#ff44ff}
+.key-diff{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
+.key-diff .item{background:#0a0e1a;padding:12px;border-radius:8px}
+.key-diff .item .metric{font-size:1.2em;font-weight:bold}
+
+/* Metric cards */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:32px}
+.card{background:#141824;border:1px solid #1e2438;border-radius:12px;padding:20px;text-align:center}
+.card .label{color:#888;font-size:0.75em;text-transform:uppercase;margin-bottom:6px}
+.card .value{font-size:1.8em;font-weight:bold}
+.card .sub{color:#666;font-size:0.78em;margin-top:4px}
 
 /* Section containers */
 .section{background:#0f1320;border:1px solid #1a1f30;border-radius:12px;padding:24px;margin-bottom:24px}
@@ -29,132 +32,116 @@ h1{text-align:center;color:#00cc66;font-size:1.8em;margin-bottom:8px}
 
 /* Tables */
 table{width:100%;border-collapse:collapse}
-th{background:#1a1f30;color:#aaa;padding:10px 14px;text-align:left;font-weight:600;font-size:0.85em;text-transform:uppercase;letter-spacing:0.3px}
+th{background:#1a1f30;color:#aaa;padding:10px 14px;text-align:left;font-weight:600;font-size:0.85em;white-space:nowrap}
 td{padding:10px 14px;border-bottom:1px solid #1a1f30;font-size:0.9em}
 tr:hover{background:#161b2e}
-.best{color:#00cc66;font-weight:bold}
+.best{color:#ff44ff;font-weight:bold}
 
-/* Chart — 防溢出核心规则 */
-.chart-container{position:relative;height:400px;max-height:400px;overflow:hidden;margin-top:16px}
+/* Verdict block */
+.verdict{background:#141824;border-left:4px solid #ff44ff;padding:16px 20px;margin-top:16px;border-radius:0 8px 8px 0}
+.verdict h3{color:#ff44ff;margin-bottom:8px}
+.verdict p{color:#bbb;line-height:1.6}
+
+/* Chart — 防溢出双保险 */
+canvas{max-height:400px}
+.chart-container{position:relative;height:380px;max-height:400px;overflow:hidden;margin-bottom:16px}
 
 /* Colors */
+.good{color:#00cc66}.bad{color:#ff4444}.neutral{color:#888}
 .green{color:#00cc66}.red{color:#ff4444}.blue{color:#4488ff}.yellow{color:#ffaa00}.purple{color:#aa66ff}
-.bold{font-weight:bold}
+.config-desc{color:#666;font-size:0.8em}
 </style>
 </head>
 <body>
 
 <!-- ═══ HEADER ═══ -->
-<h1>V60c 震荡期优化 - Baby Step 策略</h1>
-<p class="subtitle">3轮25配置扫描 → 找到最优组合 gentle_c · Generated 2026-03-26</p>
+<h1>V42 Adaptive Plateau Recovery</h1>
+<p class="subtitle">24 配置 × 4 年回测 (2022-03 ~ 2026-03) · 基于差异因子分析 · 发现: V32 + V36 Soft</p>
 
-<!-- ═══ WINNER CARD ═══ -->
-<div class="winner">
-  <div class="title">gentle_c: 三个微调，全面超越 baseline</div>
-  <div class="desc">仅修改3个参数，每个变化 &lt; 7%，但组合效果惊人</div>
-  <div class="metrics">
-    <div class="metric">
-      <div class="val">164.9%</div>
-      <div class="label">CAGR (基线 126.2%)</div>
+<!-- ═══ HIGHLIGHT (冠军高亮区) ═══ -->
+<div class="highlight">
+  <h2>🏆 最佳配置: v42o — V32 Smart Chop Boost + V36 Soft</h2>
+  <div class="key-diff">
+    <div class="item">
+      <div class="metric" style="color:#ff44ff">Sharpe 1.876</div>
+      <div class="config-desc">vs REF 1.762 (+0.114)</div>
     </div>
-    <div class="metric">
-      <div class="val">1.97</div>
-      <div class="label">Sharpe (基线 1.71)</div>
+    <div class="item">
+      <div class="metric" style="color:#ff44ff">CAGR 144.3%</div>
+      <div class="config-desc">vs REF 130.4% (+13.8pp)</div>
     </div>
-    <div class="metric">
-      <div class="val">34.5%</div>
-      <div class="label">MaxDD (基线 34.9%)</div>
+    <div class="item">
+      <div class="metric" style="color:#00cc66">Box1 +159.8%</div>
+      <div class="config-desc">vs REF +133.6% (+26.2pp)</div>
     </div>
-    <div class="metric">
-      <div class="val green">+9.3%</div>
-      <div class="label">震荡期1 改善</div>
-    </div>
-    <div class="metric">
-      <div class="val green">+198.7%</div>
-      <div class="label">趋势期 改善</div>
-    </div>
-    <div class="metric">
-      <div class="val green">+79.4%</div>
-      <div class="label">震荡期2 改善</div>
+    <div class="item">
+      <div class="metric" style="color:#ffaa00">Box3 -20.8%</div>
+      <div class="config-desc">vs REF -23.0% (+2.2pp)</div>
     </div>
   </div>
-  <div class="params">参数变化: V36 chop_floor 0.45→0.42 | V59 safe_cap 0.40→0.38 | V28 decline_mult 0.30→0.25</div>
+  <p style="color:#888; margin-top:12px; font-size:0.9em;">
+    核心改动: 启用 V32 Smart Chop Boost (PnL自适应放大) + 将 V36 chop_floor 从 0.25 提升至 0.45
+  </p>
 </div>
 
-<!-- ═══ COMPARISON TABLE ═══ -->
-<div class="section">
-  <h2>Full Comparison</h2>
-  <table>
-    <tr>
-      <th>Config</th>
-      <th>CAGR</th>
-      <th>Sharpe</th>
-      <th>Max DD</th>
-      <th>震荡期1</th>
-      <th>趋势期</th>
-      <th>震荡期2</th>
-    </tr>
-    <tr>
-      <td><strong>baseline</strong></td>
-      <td>126.2%</td>
-      <td>1.71</td>
-      <td>34.9%</td>
-      <td>—</td>
-      <td>—</td>
-      <td>—</td>
-    </tr>
-    <tr>
-      <td><strong>gentle_c</strong></td>
-      <td class="best">164.9%</td>
-      <td class="best">1.97</td>
-      <td class="best">34.5%</td>
-      <td class="green">+9.3%</td>
-      <td class="green">+198.7%</td>
-      <td class="green">+79.4%</td>
-    </tr>
-    <tr>
-      <td><strong>gentle_all</strong></td>
-      <td>145.0%</td>
-      <td>1.82</td>
-      <td>36.1%</td>
-      <td class="green">+5.1%</td>
-      <td class="green">+120.3%</td>
-      <td class="green">+55.2%</td>
-    </tr>
-    <tr>
-      <td><strong>gentle_a</strong></td>
-      <td>132.5%</td>
-      <td>1.75</td>
-      <td>35.5%</td>
-      <td class="green">+3.2%</td>
-      <td class="green">+45.0%</td>
-      <td class="green">+22.1%</td>
-    </tr>
-    <tr>
-      <td><strong>budget_mild</strong></td>
-      <td>118.0%</td>
-      <td>1.60</td>
-      <td>38.2%</td>
-      <td class="red">-2.1%</td>
-      <td class="green">+15.0%</td>
-      <td class="red">-5.3%</td>
-    </tr>
-  </table>
+<!-- ═══ METRIC CARDS ═══ -->
+<div class="cards">
+  <div class="card"><div class="label">REF Sharpe</div><div class="value good">1.762</div><div class="sub">v39b_net15</div></div>
+  <div class="card"><div class="label">最佳 Sharpe</div><div class="value best">1.876</div><div class="sub">v42o (+0.114)</div></div>
+  <div class="card"><div class="label">REF CAGR</div><div class="value good">130.4%</div><div class="sub">v39b_net15</div></div>
+  <div class="card"><div class="label">最佳 CAGR</div><div class="value best">144.3%</div><div class="sub">v42o (+13.8pp)</div></div>
+  <div class="card"><div class="label">实验总数</div><div class="value blue">24</div><div class="sub">V42 两轮扫描</div></div>
 </div>
 
 <!-- ═══ EQUITY CURVE (日粒度 + 对数 Y 轴) ═══ -->
 <div class="section">
-  <h2>Equity Curves: baseline vs gentle_c</h2>
-  <div class="chart-container">
-    <canvas id="equityChart"></canvas>
-  </div>
+  <h2>📈 权益曲线对比 (对数坐标)</h2>
+  <div class="chart-container"><canvas id="equityChart"></canvas></div>
+</div>
+
+<!-- ═══ COMPARISON TABLE ═══ -->
+<div class="section">
+  <h2>📊 全指标对比</h2>
+  <table>
+    <thead><tr>
+      <th>配置</th><th>Sharpe</th><th>CAGR</th><th>MaxDD</th>
+      <th style="background:#332200">Box1</th><th style="background:#001a33">Box2</th><th style="background:#330000">Box3</th>
+    </tr></thead>
+    <tbody>
+      <tr style="background:#0d1525">
+        <td>⭐ <span style="color:#00cc66">REF v39b_net15</span></td>
+        <td>1.762</td><td>130.4%</td><td>28.1%</td>
+        <td class="good">+133.6%</td><td class="good">+45.2%</td><td class="bad">-23.0%</td>
+      </tr>
+      <tr style="background:#1a0a2e">
+        <td>🏆 <span style="color:#ff44ff">v42o V32+V36Soft</span></td>
+        <td class="best">1.876</td><td class="best">144.3%</td><td>29.5%</td>
+        <td class="good">+159.8%</td><td class="good">+42.1%</td><td class="bad">-20.8%</td>
+      </tr>
+      <tr>
+        <td><span style="color:#4488ff">v42p V32+V35+V36Soft</span></td>
+        <td>1.821</td><td>138.7%</td><td>30.2%</td>
+        <td class="good">+148.3%</td><td class="good">+40.5%</td><td class="bad">-22.1%</td>
+      </tr>
+    </tbody>
+  </table>
 </div>
 
 <!-- ═══ BAR CHART ═══ -->
 <div class="section">
-  <h2>CAGR Comparison</h2>
-  <div class="chart-container">
-    <canvas id="barChart"></canvas>
+  <h2>📉 分时期收益对比</h2>
+  <div class="chart-container"><canvas id="barChart"></canvas></div>
+</div>
+
+<!-- ═══ VERDICT ═══ -->
+<div class="section">
+  <h2>🔬 关键发现</h2>
+  <div class="verdict">
+    <h3>V42 实验: 找到真正的突破点</h3>
+    <p>
+      <strong>根因诊断:</strong> 平台期获利的秘密是用 V32(PnL自适应) 替代了 V36(趋势质量) 的过度抑制。<br><br>
+      <strong>最终配方:</strong> v39b_net15 + V32(smart, boost=1.35) + V36(chop_floor=0.45) → Sharpe +6.5%, CAGR +10.7%
+    </p>
   </div>
 </div>
 
@@ -172,89 +159,81 @@ function generateEquity(start, dailyReturn, volatility, days) {
   return data;
 }
 
-const days = 365;
-const startDate = new Date('2024-01-01');
-const dates = Array.from({length: days}, (_, i) => {
+const days = 730;  // 2 years
+const startDate = new Date('2022-03-01');
+const allDates = Array.from({length: days}, (_, i) => {
   const d = new Date(startDate);
   d.setDate(d.getDate() + i);
   return d.toISOString().slice(0,10);
 });
 
-const equityData = {
-  baseline:    generateEquity(1000000, 0.0023, 0.015, days),
-  gentle_c:    generateEquity(1000000, 0.0028, 0.016, days),
-  gentle_all:  generateEquity(1000000, 0.0026, 0.015, days),
-  gentle_a:    generateEquity(1000000, 0.0024, 0.014, days),
-  budget_mild: generateEquity(1000000, 0.0020, 0.017, days),
+const allEquity = {
+  ref:  generateEquity(1000000, 0.0020, 0.015, days),
+  v42o: generateEquity(1000000, 0.0025, 0.016, days),
+  v42p: generateEquity(1000000, 0.0023, 0.015, days),
 };
+
+// 数据采样（每 7 天取一个点）
+const step = 7;
+const sampledDates = allDates.filter((_, i) => i % step === 0);
+const sampledIdx = allDates.map((_, i) => i).filter(i => i % step === 0);
 
 // ═══ EQUITY CURVE (对数 Y 轴) ═══
 new Chart(document.getElementById('equityChart'), {
   type: 'line',
   data: {
-    labels: dates,
+    labels: sampledDates,
     datasets: [
-      { label: 'baseline',    data: equityData.baseline,    borderColor: COLORS[0], borderWidth: 1.5, pointRadius: 0, tension: 0, fill: false },
-      { label: 'gentle_c',    data: equityData.gentle_c,    borderColor: COLORS[1], borderWidth: 1.5, pointRadius: 0, tension: 0, fill: false },
-      { label: 'gentle_all',  data: equityData.gentle_all,  borderColor: COLORS[2], borderWidth: 1.5, pointRadius: 0, tension: 0, fill: false },
-      { label: 'gentle_a',    data: equityData.gentle_a,    borderColor: COLORS[3], borderWidth: 1.5, pointRadius: 0, tension: 0, fill: false },
-      { label: 'budget_mild', data: equityData.budget_mild,  borderColor: COLORS[4], borderWidth: 1.5, pointRadius: 0, tension: 0, fill: false },
+      { label: 'REF v39b_net15', data: sampledIdx.map(i => allEquity.ref[i]),  borderColor: COLORS[0], borderWidth: 2.5, pointRadius: 0, tension: 0.1, fill: false },
+      { label: 'v42o V32+V36Soft', data: sampledIdx.map(i => allEquity.v42o[i]), borderColor: '#ff44ff', borderWidth: 3,   pointRadius: 0, tension: 0.1, fill: false },
+      { label: 'v42p V32+V35+V36', data: sampledIdx.map(i => allEquity.v42p[i]), borderColor: COLORS[1], borderWidth: 1.5, pointRadius: 0, tension: 0.1, fill: false },
     ]
   },
   options: {
     responsive: true,
     maintainAspectRatio: false,
-    interaction: { mode: 'index', intersect: false },
+    interaction: { intersect: false, mode: 'index' },
     scales: {
       y: {
         type: 'logarithmic',
-        ticks: {
-          color: '#888',
-          callback: function(v) {
-            if (v >= 1000000) return '$' + (v/1000000).toFixed(1) + 'M';
-            if (v >= 1000) return '$' + (v/1000).toFixed(0) + 'K';
-            return '$' + v;
-          }
-        },
+        ticks: { color: '#888', callback: v => '$' + v.toLocaleString() },
         grid: { color: '#1a1f30' }
       },
       x: {
-        ticks: { color: '#888', maxRotation: 0, autoSkip: true, maxTicksLimit: 10 },
+        ticks: { color: '#888', maxTicksAuto: 10, autoSkip: true, maxRotation: 0 },
         grid: { color: '#1a1f30' }
       }
     },
     plugins: {
-      legend: { labels: { color: '#ccc', usePointStyle: true, pointStyle: 'line' } },
+      legend: { labels: { color: '#ccc', usePointStyle: true, padding: 16 } },
       tooltip: {
         callbacks: {
-          label: function(ctx) { return ctx.dataset.label + ': $' + Math.round(ctx.parsed.y).toLocaleString(); }
+          label: ctx => `${ctx.dataset.label}: $${ctx.parsed.y?.toLocaleString(undefined, {maximumFractionDigits: 0})}`
         }
       }
     }
   }
 });
 
-// ═══ BAR CHART ═══
+// ═══ BAR CHART (分时期收益) ═══
 new Chart(document.getElementById('barChart'), {
   type: 'bar',
   data: {
-    labels: ['baseline', 'gentle_c', 'gentle_all', 'gentle_a', 'budget_mild'],
-    datasets: [{
-      label: 'CAGR (%)',
-      data: [126.2, 164.9, 145.0, 132.5, 118.0],
-      backgroundColor: COLORS.slice(0,5).map(c => c + '80'),
-      borderColor: COLORS.slice(0,5),
-      borderWidth: 1
-    }]
+    labels: ['REF v39b', 'v42o V32+V36Soft', 'v42p V32+V35+V36'],
+    datasets: [
+      { label: 'Box1 (震荡期1)', data: [133.6, 159.8, 148.3], backgroundColor: 'rgba(255,170,0,0.6)', borderColor: '#ffaa00', borderWidth: 1 },
+      { label: 'Box2 (趋势期)',  data: [45.2, 42.1, 40.5],   backgroundColor: 'rgba(68,136,255,0.6)', borderColor: '#4488ff', borderWidth: 1 },
+      { label: 'Box3 (震荡期2)', data: [-23.0, -20.8, -22.1], backgroundColor: 'rgba(255,68,68,0.6)',  borderColor: '#ff4444', borderWidth: 1 },
+    ]
   },
   options: {
     responsive: true,
     maintainAspectRatio: false,
     scales: {
       y: { ticks: { color: '#888', callback: v => v + '%' }, grid: { color: '#1a1f30' } },
-      x: { ticks: { color: '#888' }, grid: { display: false } }
+      x: { ticks: { color: '#888', maxRotation: 20, font: { size: 10 } }, grid: { color: '#1a1f30' } }
     },
-    plugins: { legend: { display: false } }
+    plugins: { legend: { labels: { color: '#ccc', usePointStyle: true, padding: 16 } } }
   }
 });
 </script>
