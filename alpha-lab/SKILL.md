@@ -74,16 +74,20 @@ commit	sharpe	cagr	maxdd	box1	box2	box3	score	status	hypothesis	conclusion
 
 ### 复合评分公式
 
-不能只看一个指标。使用加权复合评分：
+不能只看一个指标。使用加权复合评分，**权重根据当前研究阶段动态调整**
+（详见"研究阶段策略"章节）：
 
 ```python
-# 默认权重（可根据用户偏好调整）
+# 默认权重（Phase 1 增长期）
 score = (
-    0.40 * normalize(sharpe) +      # 风险调整收益是核心
-    0.25 * normalize(cagr) +         # 绝对收益
-    0.20 * normalize(-maxdd) +       # 回撤越小越好（取负）
-    0.15 * normalize(regime_consistency)  # 各 regime 表现一致性
+    0.30 * normalize(sharpe) +
+    0.40 * normalize(cagr) +         # Phase 1 重 CAGR
+    0.15 * normalize(-maxdd) +
+    0.15 * normalize(regime_consistency)
 )
+
+# Phase 2（防御期）：0.35 sharpe + 0.20 cagr + 0.30 maxdd + 0.15 consistency
+# Phase 3（打磨期）：0.30 sharpe + 0.20 cagr + 0.20 maxdd + 0.30 consistency
 
 # regime_consistency = min(box1, box2, box3) / max(box1, box2, box3)
 # 越接近 1 说明策略在不同市况下表现越均衡
@@ -108,6 +112,117 @@ discard — score 下降，或触及红线
 trade-off — score 某些维度提升、某些下降（记录但不自动 keep，标记待人工决策）
 crash   — 回测报错
 ```
+
+## 研究阶段策略（三阶段渐进框架）
+
+研究不是漫无目的地优化所有指标。根据策略当前的成熟度，研究重心应该有明确的阶段性聚焦。
+每次研究开始时，先判断当前处于哪个阶段，然后按该阶段的优先级生成假设。
+
+### Phase 1：增长期（Growth）— 主攻 CAGR
+
+**进入条件**：CAGR 仍有明显提升空间（距离历史最佳或理论天花板 > 15%）
+
+**核心目标**：最大化绝对收益
+
+**策略**：
+- 实验方向集中在信号灵敏度、入场时机、仓位放大、趋势捕捉等
+- 此阶段可以容忍稍大的回撤（红线内），换取更高的 CAGR
+- 复合评分权重偏移：
+
+```python
+# Phase 1 权重：重 CAGR，轻 MaxDD
+phase1_score = (
+    0.30 * normalize(sharpe) +
+    0.40 * normalize(cagr) +         # ← 权重最高
+    0.15 * normalize(-maxdd) +       # ← 适度放松
+    0.15 * normalize(regime_consistency)
+)
+```
+
+**退出信号**：连续 10+ 个实验 CAGR 提升 < 1%，或 CAGR 已触达用户设定的天花板值
+
+### Phase 2：防御期（Defense）— 主攻回撤
+
+**进入条件**：Phase 1 退出，CAGR 已在高位但回撤仍然显著
+
+**核心目标**：在尽量不损失非回撤期收益的前提下，减小最大回撤和回撤持续时间
+
+**策略**：
+- 实验方向集中在止损逻辑、风控模块、震荡期仓位缩减、回撤期信号过滤等
+- **铁律：非回撤期的收益不能显著下降**（< 5% 损失为可接受代价）
+- 如果一个改动让 MaxDD 减少 5pp 但 CAGR 掉 3pp，这通常是好 trade-off
+- 如果一个改动让 MaxDD 减少 2pp 但 CAGR 掉 8pp，这是坏 trade-off
+- 复合评分权重偏移：
+
+```python
+# Phase 2 权重：重 MaxDD，保 CAGR
+phase2_score = (
+    0.35 * normalize(sharpe) +
+    0.20 * normalize(cagr) +         # ← 保住就好
+    0.30 * normalize(-maxdd) +       # ← 权重最高
+    0.15 * normalize(regime_consistency)
+)
+```
+
+**评估技巧**：
+- 将权益曲线的回撤段单独标出，对比改动前后的回撤深度和恢复速度
+- 关注 Calmar Ratio（CAGR / MaxDD）作为阶段性辅助指标
+- 红线调整：CAGR 不能比 Phase 1 最终值低 > 10%
+
+**退出信号**：MaxDD 已低于目标值，或连续 10+ 个实验 MaxDD 改善 < 0.5pp
+
+### Phase 3：打磨期（Polish）— 主攻平台期
+
+**进入条件**：Phase 2 退出，CAGR 高、回撤小，但权益曲线仍有明显"走平"段
+
+**核心目标**：在尽量不损失非平台期收益的前提下，缩短平台期（将横盘转为增长）
+
+**策略**：
+- 先识别权益曲线的平台期（连续 N 天收益率 ≈ 0 的区间）
+- 分析平台期对应的市况：是震荡？是低波动？是假突破频发？
+- 实验方向：针对平台期市况的专门信号（如震荡期网格、低波动期的均值回归）
+- **铁律：非平台期（已有正收益的区间）不能显著受损**（< 3% 损失为可接受代价）
+- 复合评分权重偏移：
+
+```python
+# Phase 3 权重：重 regime 一致性（消除弱 regime = 消除平台期）
+phase3_score = (
+    0.30 * normalize(sharpe) +
+    0.20 * normalize(cagr) +
+    0.20 * normalize(-maxdd) +
+    0.30 * normalize(regime_consistency)  # ← 权重最高
+)
+```
+
+**评估技巧**：
+- 定义"平台期"指标：max consecutive days with cumulative return < X%
+- 对比改动前后各 regime 的收益分布，确保正收益 regime 不被拖累
+- 关注 regime_consistency 指标提升（各段表现更均衡 = 平台期被填补）
+
+**退出信号**：权益曲线已接近理想形态（平滑上升），或无法再缩短平台期
+
+### 阶段判定与切换
+
+```
+研究开始时的阶段判定流程：
+
+1. 运行 baseline，获取指标
+2. 判断阶段：
+   - CAGR < 用户目标值 * 0.85        → Phase 1（增长期）
+   - CAGR >= 目标值 * 0.85 且 MaxDD > 目标值  → Phase 2（防御期）
+   - CAGR 达标 且 MaxDD 达标 且有明显平台期    → Phase 3（打磨期）
+
+3. 在 results.tsv 的 hypothesis 列标注当前阶段：
+   [P1] lower entry threshold for more trades
+   [P2] add trailing stop in drawdown regime
+   [P3] enable mean-reversion in low-vol plateau
+
+4. 阶段切换时，重新计算 score（用新阶段的权重），
+   但保留旧阶段的 results 记录供参考
+```
+
+**重要**：阶段不是严格线性的。如果 Phase 2 的某个实验意外让 CAGR 大幅跳升，
+可以回到 Phase 1 继续挖掘增长空间。灵活判断，但每个实验必须有明确的阶段归属。
 
 ## 实验循环
 
@@ -196,12 +311,19 @@ d4e5f6g	0.000	0.0	0.0	0	0	0	0.000	crash	double model width	OOM during backtest
 
 ### Step 8：回到 Step 1
 
-生成下一个假设。假设来源：
+生成下一个假设。**先确认当前处于哪个研究阶段**，然后按该阶段的优先级选择方向：
+
+**Phase 1（增长期）假设方向**：信号灵敏度、入场时机优化、仓位放大、趋势捕捉增强
+**Phase 2（防御期）假设方向**：止损逻辑、风控模块、震荡期仓位缩减、回撤期信号过滤
+**Phase 3（打磨期）假设方向**：平台期市况专门信号、低波动期策略、均值回归补充
+
+通用假设来源（所有阶段适用）：
 - 上一个实验的结论暗示的方向
 - 之前 discard 的实验中接近成功的方向（"近失"回收）
 - 简洁性测试：尝试删除某个模块，看 score 是否不变
 - 参数边界探索：当前最佳参数 ± 小幅调整
 - 灵感来源：读策略代码中的注释、TODO、已禁用的功能
+- **阶段切换检查**：当前阶段的退出信号是否已触发？
 
 ## 永不停止
 
