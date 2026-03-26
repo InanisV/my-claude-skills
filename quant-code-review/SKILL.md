@@ -388,6 +388,58 @@ Profit Factor (PF) 解读：
 
    多仓位场景：清算价不是固定值，而是随所有仓位的 mark price 动态变化
 
+1b. 平台特定保证金规则适配（多交易所项目必查）：
+
+   **核心原则：Margin Sim 的计算规则必须对齐实盘所用交易所的真实规则。**
+   不同交易所的全仓保证金算法存在显著差异，不能用一套通用公式"差不多就行"。
+
+   平台差异对照表：
+
+   | 维度 | Binance USDT-M | Hyperliquid | OKX | Bybit |
+   |------|----------------|-------------|-----|-------|
+   | 阶梯保证金档位 | 按币种独立，6-12档 | 统一 3 档 | 按币种独立，5-8档 | 按币种独立 |
+   | MMR 计算 | notional × mmr - cum | 类似但档位阈值不同 | notional × mmr - cum | notional × mmr |
+   | 清算触发条件 | equity ≤ maint_margin | account_value ≤ maint_margin | margin_ratio ≥ 100% | margin_ratio ≥ 100% |
+   | 清算执行方式 | 逐仓平亏损最大仓位 | 全仓一次清算 | 逐仓减仓至安全 | 逐仓减仓至安全 |
+   | Funding 频率 | 每 8h（部分 4h） | 每 1h | 每 8h | 每 8h |
+   | 保险基金机制 | 有，穿仓由保险基金覆盖 | 有，Vault 机制 | 有 | 有 |
+   | Mark Price | 加权平均 + funding | Oracle 价格 | 加权平均 | 加权平均 |
+   | Brackets 数据源 | GET /fapi/v1/leverageBracket | /info endpoint | GET /api/v5/public/position-tiers | GET /v5/market/risk-limit |
+
+   审计 checklist（多平台适配）：
+
+   □ 确认 margin_simulator 加载的阶梯保证金数据来源与实盘交易所一致
+     → 不同交易所的 JSON schema 不同，解析器必须适配
+     → brackets 数据应定期更新（交易所会调整档位），建议脚本化拉取
+
+   □ 如果项目支持多交易所（如同时跑 Binance 和 Hyperliquid），
+     margin_simulator 必须根据当前实盘配置的交易所动态切换规则：
+     → 配置中应有 EXCHANGE 或 PLATFORM 参数指定当前交易所
+     → margin sim 根据该参数加载对应的 brackets 和 MMR 算法
+     → 不允许 hardcode 某一个交易所的规则
+
+   □ Funding rate settlement 频率必须匹配实盘交易所：
+     → Binance 大多 8h 但部分合约 4h
+     → Hyperliquid 每 1h（差 8 倍！对长持仓策略影响巨大）
+     → 如果回测按 8h 扣 funding 但实盘在 1h 频率的交易所，成本模型偏差很大
+
+   □ Mark Price 的计算方式因交易所而异：
+     → 有些用 index price + funding premium，有些直接用 oracle price
+     → 回测中用 close price 做近似是可接受的，但审计时需标注这个简化
+
+   □ contract_size / contract_multiplier 因交易所和币种而异：
+     → Binance USDT-M 合约大多 contract_size = 1.0（直接以币计价）
+     → 部分交易所的 inverse 合约（如 BTCUSD）contract_size ≠ 1.0
+     → 如果 PnL 计算中用到 contract_size，确认数据来源正确
+     → 审计时检查所有 universe 内币种的 contract_size 是否都已验证
+
+   □ 如果项目从交易所 A 迁移到交易所 B，必须：
+     a. 更新 leverage brackets 数据文件
+     b. 验证 MMR 计算公式是否仍适用（有些交易所没有 cum 字段）
+     c. 更新 funding rate settlement 频率
+     d. 重新跑回测，对比迁移前后的 margin metrics
+     e. 特别注意：小币种在不同交易所的 MMR 差异可能很大
+
 2. 每根 bar 的保证金检查（回测引擎必须实现）：
 
    for each bar:
