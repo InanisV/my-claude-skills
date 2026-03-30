@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Experiment Comparison Dashboard</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0a0e1a;color:#e0e0e0;font-family:'Segoe UI',system-ui,sans-serif;padding:24px;max-width:1400px;margin:0 auto}
@@ -45,6 +45,7 @@ tr:hover{background:#161b2e}
 /* Chart — 防溢出双保险 */
 canvas{max-height:400px}
 .chart-container{position:relative;height:380px;max-height:400px;overflow:hidden;margin-bottom:16px}
+.chart-container-short{position:relative;height:300px;max-height:320px;overflow:hidden;margin-bottom:16px}
 
 /* Colors */
 .good{color:#00cc66}.bad{color:#ff4444}.neutral{color:#888}
@@ -97,6 +98,12 @@ canvas{max-height:400px}
 <div class="section">
   <h2>📈 权益曲线对比 (对数坐标)</h2>
   <div class="chart-container"><canvas id="equityChart"></canvas></div>
+</div>
+
+<!-- ═══ DRAWDOWN CHART (回撤图，紧跟权益曲线) ═══ -->
+<div class="section">
+  <h2>📉 回撤走势 (Drawdown)</h2>
+  <div class="chart-container-short"><canvas id="drawdownChart"></canvas></div>
 </div>
 
 <!-- ═══ COMPARISON TABLE ═══ -->
@@ -209,6 +216,53 @@ new Chart(document.getElementById('equityChart'), {
       tooltip: {
         callbacks: {
           label: ctx => `${ctx.dataset.label}: $${ctx.parsed.y?.toLocaleString(undefined, {maximumFractionDigits: 0})}`
+        }
+      }
+    }
+  }
+});
+
+// ═══ DRAWDOWN CHART (回撤走势) ═══
+// Generate sample drawdown data from equity curves
+function computeDrawdown(equity) {
+  let peak = equity[0];
+  return equity.map(v => { peak = Math.max(peak, v); return (v - peak) / peak; });
+}
+const allDrawdown = {
+  ref:  computeDrawdown(allEquity.ref),
+  v42o: computeDrawdown(allEquity.v42o),
+  v42p: computeDrawdown(allEquity.v42p),
+};
+
+new Chart(document.getElementById('drawdownChart'), {
+  type: 'line',
+  data: {
+    labels: sampledDates,
+    datasets: [
+      { label: 'REF v39b_net15', data: sampledIdx.map(i => allDrawdown.ref[i]),  borderColor: COLORS[0], backgroundColor: COLORS[0] + '30', borderWidth: 2.5, pointRadius: 0, tension: 0.1, fill: true },
+      { label: 'v42o V32+V36Soft', data: sampledIdx.map(i => allDrawdown.v42o[i]), borderColor: '#ff44ff', backgroundColor: '#ff44ff30', borderWidth: 2.5, pointRadius: 0, tension: 0.1, fill: true },
+      { label: 'v42p V32+V35+V36', data: sampledIdx.map(i => allDrawdown.v42p[i]), borderColor: COLORS[1], backgroundColor: COLORS[1] + '30', borderWidth: 1.5, pointRadius: 0, tension: 0.1, fill: true },
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { intersect: false, mode: 'index' },
+    scales: {
+      y: {
+        ticks: { color: '#888', callback: v => (v * 100).toFixed(0) + '%' },
+        grid: { color: '#1a1f30' }
+      },
+      x: {
+        ticks: { color: '#888', maxTicksLimit: 12, autoSkip: true, maxRotation: 0 },
+        grid: { color: '#1a1f30' }
+      }
+    },
+    plugins: {
+      legend: { labels: { color: '#ccc', usePointStyle: true, padding: 16 } },
+      tooltip: {
+        callbacks: {
+          label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y * 100).toFixed(1)}%`
         }
       }
     }

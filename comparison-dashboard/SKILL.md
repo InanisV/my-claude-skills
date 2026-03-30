@@ -53,12 +53,22 @@ experiment results across multiple configurations.
 **每个 dashboard 都必须包含日粒度的权益曲线图。** 这是用户最需要的可视化。
 
 要求：
+- **数据必须是日线粒度**，完整嵌入 HTML（不要后端降采样，不要引用外部文件）
 - Y 轴必须用**对数坐标**（`type: 'logarithmic'`）
 - X 轴为日期，`maxRotation: 0`，`autoSkip: true`
 - Winner 线粗 3px，baseline 2.5px，其他 1.5px（视觉区分主角）
 - `pointRadius: 0`，`tension: 0.1`（轻微平滑）
-- 数据超过 200 天时做采样（每 3-7 天取一个点），避免 canvas 卡顿
+- 前端 JS 中做渲染采样（>500天取每7天，>200天取每3天），原始数据保留
 - 容器高度 `380px`，`max-height: 400px`
+
+### 4.5. Drawdown Chart（回撤图）— 必须有
+**紧跟在权益曲线下方，展示各配置的回撤走势。** 与权益曲线构成"增长+风险"双视图。
+
+要求：
+- Y 轴线性坐标（不是对数），显示百分比（`-60%`, `-40%`, ...）
+- 填充区域（`fill: true`），半透明背景色（颜色 + `'30'` alpha）
+- 容器高度 `300px`（比权益曲线矮一点，主次分明）
+- 数据采样方式与权益曲线一致
 
 ### 5. Comparison Table（全指标对比表）
 行 = configs，列 = metrics。最优值用 `.best`（品红色加粗）高亮。
@@ -315,6 +325,7 @@ tr:hover{background:#161b2e}
 /* Chart — 防溢出核心规则（双保险：容器 + canvas 本身） */
 canvas{max-height:400px}
 .chart-container{position:relative;height:380px;max-height:400px;overflow:hidden;margin-bottom:16px}
+.chart-container-short{position:relative;height:300px;max-height:320px;overflow:hidden;margin-bottom:16px}
 
 /* Colors */
 .good{color:#00cc66}.bad{color:#ff4444}.neutral{color:#888}
@@ -330,6 +341,112 @@ canvas{max-height:400px}
 - 负值：红色 + 负号
 - 最优值：绿色加粗（`.best` class）
 
+## 🔴 Chart.js CDN 路径铁律
+
+**CDN 路径写错是最致命的 bug——所有图表静默空白，页面上没有任何可视的错误提示。**
+
+```html
+<!-- ✅ 正确：使用 UMD bundle 的完整路径 -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<!-- ❌ 错误：这些路径在 v4 中都不存在 -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js/dist/chart.min.js"></script>
+```
+
+为什么会踩坑：Chart.js v2/v3 时代 `chart.min.js` 是正确的，但 v4 重构了构建产物，
+UMD 包改名为 `chart.umd.min.js`。写 `chart.min.js` CDN 返回 404，
+浏览器只在 DevTools Console 报错，页面上所有图表区域都是空白。
+
+简写 `chart.js@4`（不带 `/dist/...`）也可以（jsDelivr 会自动解析），
+但显式写 `chart.umd.min.js` 更安全，不依赖 CDN 的 auto-resolve 行为。
+
+## 🔴 数据必须嵌入 HTML，禁止引用外部文件
+
+Dashboard 必须是 **100% 自包含的单个 HTML 文件**。所有数据直接嵌入 JS 变量中。
+
+```js
+// ✅ 正确：数据直接嵌入
+const chartData = {
+  dates: ["2022-03-01", "2022-03-02", ...],
+  baseline: { equity: [100000, 100234, ...], drawdown: [0, -0.002, ...] },
+};
+
+// ❌ 错误：外部文件加载
+fetch('./equity_curves.json').then(r => r.json()).then(data => { ... })
+```
+
+Dashboard 经常被移动、分享、在不同设备上打开。外部引用会断链，用户看到空白图表。
+1487 天 × 4 配置 ≈ 200KB 额外体积，换来的是零依赖、永不失效。
+
+## 🔴 权益曲线数据粒度：日线是底线
+
+**禁止在后端做 weekly/monthly 采样。** 用户需要看到每天的波动来评估策略质量——
+周线会平滑掉短期回撤，月线完全看不出日内剧烈波动。
+
+性能优化在**前端 JS 做渲染采样**，原始数据完整保留：
+
+```js
+const RAW_DATES = [...];   // 完整日线，嵌入 HTML
+const step = RAW_DATES.length > 500 ? 7 : RAW_DATES.length > 200 ? 3 : 1;
+const sampledDates = RAW_DATES.filter((_, i) => i % step === 0);
+// equity/drawdown 数据同步采样
+```
+
+## 🔴 回撤图是标配，不是可选
+
+**每个 dashboard 必须包含回撤（Drawdown）图，紧跟在权益曲线下方。**
+
+回撤图和权益曲线是量化分析的"双视图"——权益曲线看增长，回撤图看风险。
+缺少回撤图用户无法判断 MaxDD 的时间分布和恢复速度，每次都要追加要求。
+
+回撤图标准 pattern（直接复制，只改 data）：
+
+```js
+new Chart(document.getElementById('drawdownChart'), {
+  type: 'line',
+  data: {
+    labels: sampledDates,
+    datasets: configs.map((c, i) => ({
+      label: c.name,
+      data: sampledIdx.map(j => c.drawdown[j]),
+      borderColor: c.color || COLORS[i],
+      backgroundColor: (c.color || COLORS[i]) + '30',  // 半透明填充
+      borderWidth: c.isWinner ? 2.5 : 1.5,
+      fill: true,       // 填充区域，视觉强调回撤深度
+      pointRadius: 0,
+      tension: 0.1,
+    }))
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { intersect: false, mode: 'index' },
+    scales: {
+      y: {
+        ticks: {
+          color: '#888',
+          callback: v => (v * 100).toFixed(0) + '%'
+        },
+        grid: { color: '#1a1f30' }
+      },
+      x: {
+        ticks: { color: '#888', maxTicksLimit: 12, autoSkip: true, maxRotation: 0 },
+        grid: { color: '#1a1f30' }
+      }
+    },
+    plugins: {
+      legend: { labels: { color: '#ccc', usePointStyle: true, padding: 16 } },
+      tooltip: {
+        callbacks: {
+          label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y * 100).toFixed(1)}%`
+        }
+      }
+    }
+  }
+});
+```
+
 ## 常见错误提醒
 
 1. ❌ 忘记 `maintainAspectRatio: false` → 图表无视容器高度，撑满屏幕
@@ -342,6 +459,10 @@ canvas{max-height:400px}
 8. ❌ 缺少权益曲线图 → 用户每次都要问"曲线呢"
 9. ❌ X 轴用 `type: 'time'` → 没有 date adapter 时日期解析错乱，出现 2022→2116 的荒谬刻度
 10. ❌ labels 和 data 长度不匹配 → 采样时只采了 labels 没采 data（或反过来），导致曲线错位
+11. ❌ **CDN 路径用 `chart.min.js`** → v4 不存在此文件，所有图表静默空白（最阴险的 bug）
+12. ❌ **数据放在外部 JSON 文件** → 文件移动后图表断链，看到空白
+13. ❌ **后端做 weekly/monthly 采样** → 丢失日内波动，用户要求重新生成
+14. ❌ **缺少回撤图** → 无法评估风险分布，每次追加要求
 
 ## Reference
 
