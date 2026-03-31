@@ -2,7 +2,7 @@
 name: quant-code-review
 description: |
   量化交易系统代码审计 — 在每次重大代码改动后自动执行全面审查。
-  覆盖九个维度：(P) 项目阶段与部署就绪度（前置，最先执行），(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐，(2) 回测引擎真实性（含 2.10 数据真实性审计 + 2.11 Margin-Ratio 自动减仓），(3) 实盘运维鲁棒性（含 3.6 MarginMonitor 实时保证金监控），(4) 状态持久化完整性，(5) 代码性能，(6) AI协作代码质量。
+  覆盖十个维度：(P) 项目阶段与部署就绪度（前置，最先执行），(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐，(2) 回测引擎真实性（含 2.10 数据真实性审计 + 2.11 Margin-Ratio 自动减仓），(3) 实盘运维鲁棒性（含 3.6 MarginMonitor 实时保证金监控），(4) 状态持久化完整性，(5) 代码性能，(6) AI协作代码质量，(7) 供应链与运行时安全。
 
   触发时机（非常重要）：
   - 完成策略逻辑修改后（参数、信号、仓位管理、PnL模型等）
@@ -36,12 +36,12 @@ description: |
 2. **定位项目关键文件**：找到回测引擎和实盘bot的主文件、配置文件
 3. **理解策略架构**：识别项目使用的策略类型（趋势跟踪、均值回归、套利、做市等）
 4. **维度零：模块清单盘点**：先用自动化方法扫出"回测有但实盘没有"的功能模块（这一步往往能发现最严重的问题）
-5. **按六个维度逐项检查**：使用下面的checklist框架，适配到具体项目
+5. **按七个维度逐项检查**：使用下面的checklist框架，适配到具体项目
 6. **输出结构化报告**
 
 ## 审计流程
 
-按以下维度顺序执行（P → 0-6 + 2.10 数据真实性子维度）。维度 P 最先执行，它决定后续哪些维度适用。每个维度是一个 checklist 框架，根据具体项目适配检查项。
+按以下维度顺序执行（P → 0-7 + 2.10 数据真实性子维度）。维度 P 最先执行，它决定后续哪些维度适用。每个维度是一个 checklist 框架，根据具体项目适配检查项。
 
 ---
 
@@ -160,6 +160,7 @@ description: |
   ✅ 维度 2（回测真实性）— 全量检查
   ✅ 维度 5（代码性能）— 只检查回测性能
   ✅ 维度 6（AI 协作质量）— 全量检查
+  ✅ 维度 7（供应链安全）— 检查 7.1 依赖链 + 7.3 密钥管理（即使纯回测也需要保护 API Key 和依赖安全）
   🔴 维度 P.2（部署就绪度）— 输出缺失清单，标注"距离可部署缺以下组件"
   ⚪ 维度 0（模块盘点）— 标注"仅回测侧，实盘侧 N/A"
   ⚪ 维度 1（策略对齐）— 标注"无实盘可对比，N/A"
@@ -170,7 +171,7 @@ description: |
   全部维度适用，但对缺失组件标注"开发中 / TODO"
 
 项目阶段 C/D（可部署/已上线）：
-  全部维度全量检查
+  全部维度全量检查（维度 7 全量，含运行时隔离和网络出站控制）
 ```
 
 ---
@@ -1616,6 +1617,232 @@ AI 生成的测试代码有三种常见的"永远通过"模式，在量化系统
 - 审计时检查：最近的 commit 是否在修 bug 的同时删除了 logging 语句
 ```
 
+## 维度七：供应链与运行时安全
+
+量化交易系统是高价值目标：它持有交易所 API Key（通常有交易权限），7x24 无人值守运行，
+直接操控真金白银。供应链攻击一旦成功，攻击者可以：窃取 API Key 转移资产、
+篡改策略逻辑制造亏损、植入后门长期潜伏。
+
+**真实案例参考**（2026-03 axios 供应链攻击）：
+攻击者通过盗取 npm 维护者凭证，发布了含恶意 postinstall 脚本的 axios 1.14.1。
+该脚本通过 XOR+Base64 双层混淆，下载跨平台 RAT（远程访问木马），并在安装完成后
+自动清除所有痕迹（用干净的 package.json 替换恶意版本）。从发布到下架仅 2-3 小时，
+但足以感染大量 CI/CD 管道。
+
+### 7.1 依赖链审计
+
+```
+核心原则：你的安全性等于你最弱的依赖的安全性。
+
+检查项：
+
+□ Lockfile 存在且被 commit
+  → Python: requirements.txt 或 poetry.lock（带哈希 --hash）
+  → Node: package-lock.json 或 yarn.lock
+  → 没有 lockfile = 每次 install 可能拉到不同版本 = 不可复现 + 投毒窗口
+
+□ 版本锁定（pinning）
+  → 🔴 "ccxt>=4.0" — 开放范围，可能被投毒的新版本命中
+  → ✅ "ccxt==4.2.31" — 精确锁定
+  → 检查所有 requirements.txt / package.json 中的版本约束
+
+□ 幽灵依赖检测（Phantom Dependencies）
+  → 在 manifest（package.json / requirements.txt）中声明了，但代码中从未 import
+  → 这是 axios 攻击的核心手法：加入 plain-crypto-js 作为依赖，
+    代码不引用它，但 postinstall 脚本会自动执行
+  → 扫描方法：列出所有声明的依赖 → grep 代码中的 import/require → 找出差集
+
+□ 依赖数量合理性
+  → 量化系统的核心依赖通常不多：ccxt/exchange SDK、numpy/pandas、TA 库
+  → 如果 dependencies 列表异常庞大（>30），逐一审查每个依赖的必要性
+  → 关注"你不认识的"依赖——你说不出它干什么的，就不应该在项目里
+
+□ 新增依赖审查
+  → 每次 code review 时，如果 requirements.txt / package.json 有改动：
+    - 新加的依赖是什么？干什么的？谁维护的？
+    - npm/PyPI 上发布多久了？下载量如何？
+    - 有没有 typosquatting 嫌疑（如 ccxt-utils vs ccxt_utils）
+```
+
+### 7.2 安装脚本与构建钩子
+
+```
+核心原则：postinstall / setup.py 中的任意代码执行是供应链攻击的主要入口。
+
+检查项：
+
+□ postinstall 脚本审计（Node 项目）
+  → 检查 node_modules 中所有 package.json 的 "scripts" 字段
+  → 快速扫描：find node_modules -name package.json -exec grep -l "postinstall\|preinstall" {} \;
+  → 任何触发外部下载（curl/wget/fetch）或执行（exec/spawn/eval）的 postinstall = 🔴
+
+□ setup.py / pyproject.toml 审计（Python 项目）
+  → setup.py 可以在 install 时执行任意 Python 代码
+  → 检查 cmdclass 自定义命令、__builtins__ 操作、网络请求
+  → 优选使用声明式 pyproject.toml 而非可执行的 setup.py
+
+□ 混淆代码检测
+  → 扫描依赖中的 eval()、exec()、compile()、__import__()
+  → 检查 Base64 编码块、XOR 解码函数、charCodeAt 链
+  → 量化项目的依赖不应该包含混淆代码——这不是前端 minification
+
+□ CI/CD 安全
+  → GitHub Actions / CI 中的 npm install / pip install 是否使用 --ignore-scripts？
+  → 是否有 lockfile integrity check（如 npm ci 而非 npm install）？
+  → CI 环境是否有出站网络白名单？
+```
+
+### 7.3 密钥与敏感信息管理
+
+```
+核心原则：API Key 是交易系统的"最高权限凭证"，泄露 = 资产被转移。
+
+检查项：
+
+□ 硬编码密钥扫描
+  → grep -rn "api_key\|api_secret\|apiKey\|apiSecret\|private_key" --include="*.py" --include="*.js" --include="*.ts"
+  → 排除 .env.example / config.example 中的占位符
+  → 🔴 任何真实密钥出现在代码文件中 = Critical（即使在 .gitignore 的文件里也不行，
+    因为可能有其他工具/agent 读取代码时泄露）
+
+□ .env / 配置文件安全
+  → .env 是否在 .gitignore 中？
+  → .env 的权限是否 600（仅所有者可读写）？
+  → 是否有 .env.example 模板（不含真实值）？
+  → 配置中是否有 withdrawal 相关权限？量化 bot 通常只需 trade 权限，不需要 withdraw
+
+□ Git 历史中的密钥泄露
+  → 即使当前代码没有密钥，历史 commit 中可能曾经有
+  → git log -p --all -S "api_key" --since="1 year ago" 快速扫描
+  → 如发现历史泄露 → 🔴 必须立即轮换该密钥
+
+□ AI Agent 上下文中的密钥暴露
+  → 量化项目经常使用 AI（包括本 skill 所在的 Claude）辅助开发
+  → 确保 .env 文件不会被 AI agent 读取或出现在对话上下文中
+  → 确保 config 加载逻辑不会在日志/错误信息中打印密钥值
+  → logger.error(f"Config: {config}") → 🔴 如果 config 包含密钥
+```
+
+### 7.4 网络出站控制
+
+```
+核心原则：交易 bot 的合法出站连接非常有限——只有交易所 API。
+任何其他出站请求都是异常信号。
+
+检查项：
+
+□ 合法出站清单
+  → 列出代码中所有硬编码的 URL/域名/IP
+  → 交易所 API（api.binance.com, api.hyperliquid.xyz 等）→ ✅ 合法
+  → Telegram Bot API（用于通知）→ ✅ 合法
+  → 其他任何域名 → 🟡 需要解释为什么需要
+
+□ 动态 URL 检测
+  → 搜索从环境变量/配置/远程读取 URL 后发起请求的代码
+  → requests.get(config["webhook_url"]) → 🟡 URL 来源可控吗？
+  → eval(response.text) / exec(downloaded_code) → 🔴 远程代码执行
+
+□ DNS 与出站防火墙（生产环境）
+  → 实盘 bot 运行的服务器是否配置了出站白名单？
+  → 建议：iptables / ufw 只允许交易所 IP + Telegram IP 的出站连接
+  → 所有非白名单出站请求 = 告警
+
+□ WebSocket 连接审计
+  → 量化系统常用 WS 接收实时数据
+  → 检查 WS 连接的目标地址是否全部指向合法交易所
+  → 检查 WS 消息处理是否有反序列化漏洞（如 pickle.loads / JSON.parse + eval）
+```
+
+### 7.5 运行时隔离与权限最小化
+
+```
+核心原则：即使代码被攻破，限制攻击者能做的事。
+
+检查项：
+
+□ 运行用户权限
+  → bot 是否以 root 运行？→ 🔴 不要用 root
+  → 应创建专用用户，只对必要目录有读写权限
+
+□ API Key 权限最小化
+  → 交易所 API Key 是否只开启了必要权限？
+  → ✅ spot trading / futures trading
+  → 🔴 withdrawal（提现）— 量化 bot 绝不需要提现权限
+  → 🟡 universal transfer — 除非策略需要跨账户调拨
+  → 如果交易所支持 IP 白名单 → 必须绑定 bot 服务器 IP
+
+□ 文件系统隔离
+  → bot 是否只能访问自己的工作目录？
+  → 是否能读取其他用户的 home 目录、~/.ssh/、~/.aws/ 等敏感路径？
+  → Docker 化部署可以天然实现文件系统隔离
+
+□ 进程监控
+  → 是否有机制检测 bot 进程产生的异常子进程？
+  → 正常的量化 bot 不应 fork/spawn 未知子进程
+  → 如果使用 systemd：配置 ProtectHome=true, ProtectSystem=strict
+```
+
+### 7.6 代码完整性与变更审计
+
+```
+核心原则：确保运行的代码就是你审计过的代码。
+
+检查项：
+
+□ 部署完整性
+  → 生产环境的代码是否从 git tag/release 部署？
+  → 是否有机制验证部署的代码和 git 中的一致（如 git diff --stat）？
+  → 手动改了生产服务器上的文件但没 commit → 🔴 不可追溯
+
+□ AI Agent 代码变更审计（与 alpha-lab 配合）
+  → 当 AI agent（如 alpha-lab 研究循环）自主修改策略代码时：
+  → 每次修改都有 git commit → ✅（已在 alpha-lab 中要求）
+  → 里程碑版本经过 quant-code-review → ✅（已在 alpha-lab 中要求）
+  → 但需额外检查：AI 是否引入了不在修改范围内的变更？
+    git diff --stat 是否只改了预期的文件？
+  → 🔴 AI 修改了 .env / config 中的 API endpoint / 加了新依赖但没说明
+
+□ 依赖更新时的差异审查
+  → pip install --upgrade / npm update 后：
+  → 检查 lockfile diff，确认只有预期的包被更新
+  → 对更新的包检查 changelog，是否有异常（如 maintainer 变更、
+    突然增加新依赖、postinstall 脚本变更）
+
+□ 定期安全扫描
+  → pip audit / npm audit 定期运行
+  → 关注 Critical 和 High 级别的 CVE
+  → 尤其关注涉及 RCE（远程代码执行）和 SSRF 的漏洞
+```
+
+### 7.7 量化系统特有的攻击面
+
+```
+这些攻击面是量化交易系统独有的，通用安全指南通常不会覆盖：
+
+□ 数据源投毒
+  → 如果策略依赖第三方数据源（非交易所直接 API），
+    数据被篡改 → 策略做出错误决策 → 亏损
+  → 检查：数据源是否有 HTTPS + 证书验证？
+  → 检查：是否有数据合理性校验（价格在合理范围内、无突变等）？
+
+□ 策略逻辑外泄
+  → 策略代码是核心知识产权
+  → 是否有日志/错误信息泄露策略细节？
+  → 是否有遥测/分析工具在收集代码行为数据？
+  → AI agent 对话记录中是否包含完整策略逻辑？
+
+□ Telegram / 通知渠道安全
+  → Telegram Bot Token 泄露 = 攻击者可以伪造通知
+  → 更严重：如果 bot 支持通过 Telegram 命令控制（如 /stop /close_all），
+    Token 泄露 = 攻击者可以远程操控你的交易
+  → 检查：Telegram 命令是否有鉴权（如白名单 chat_id）？
+
+□ 时间同步攻击
+  → 量化系统依赖准确的时间戳（K线对齐、funding settlement 时间等）
+  → NTP 被劫持或服务器时间漂移 → 策略在错误的时间做决策
+  → 检查：服务器是否配置了多个 NTP 源？是否有时间偏差告警？
+```
+
 ---
 
 ## 输出格式
@@ -1726,6 +1953,23 @@ P.2 部署就绪度（如适用）：
 | 6.3 | 测试质量 | ✅/🟡/❌ | 弱断言 / 硬编码拟合 / TDD |
 | 6.4 | 调试日志纪律 | ✅/🟡/❌ | 是否有修 bug 时误删日志 |
 
+### 维度七：供应链与运行时安全
+| # | 检查项 | 状态 | 备注 |
+|---|--------|------|------|
+| 7.1 | 依赖链审计 | ✅/🟡/🔴 | lockfile/pinning/幽灵依赖 |
+| 7.2 | 安装脚本审计 | ✅/🟡/🔴 | postinstall/混淆代码 |
+| 7.3 | 密钥管理 | ✅/🟡/🔴 | 硬编码/.env/git历史/权限 |
+| 7.4 | 网络出站控制 | ✅/🟡/🔴 | 合法出站清单/动态URL/防火墙 |
+| 7.5 | 运行时隔离 | ✅/🟡/🔴 | 用户权限/API权限/文件系统 |
+| 7.6 | 代码完整性 | ✅/🟡/🔴 | 部署验证/AI变更审计/依赖diff |
+| 7.7 | 量化特有攻击面 | ✅/🟡/🔴 | 数据源/策略外泄/通知渠道/NTP |
+
+7.3 关键子项：
+- API Key 提现权限：[未开启(✅)/已开启(🔴)]
+- API Key IP白名单：[已绑定(✅)/未绑定(🟡)]
+- .env 在 .gitignore：[是(✅)/否(🔴)]
+- Git 历史密钥泄露：[未发现(✅)/发现N处(🔴)]
+
 ### 发现的问题
 [按严重程度排列：🔴 Critical / 🟡 Warning / 🟢 Info]
 
@@ -1780,3 +2024,7 @@ P.2 部署就绪度（如适用）：
 39. **Equity 增长后保证金率会自然恶化** — 随着策略赚钱，equity 从 $10K 涨到 $2.9M，持仓 notional 也等比增长（保持同样的 target_leverage）。但大 notional 进入交易所的高档位保证金（如 HL 的阶梯 MMR），导致同样的 weights 在高 equity 时 margin_ratio 更高。真实案例：在 $10K equity 时 3.05x 杠杆的 margin_ratio ≈ 0.05（极安全），但在 $2.9M equity 时同样的杠杆 margin_ratio 上升到 0.12+。这意味着策略成功本身会增加爆仓风险，必须在回测中用阶梯 MMR 正确模拟，不能用固定 MMR。
 40. **Bear regime 零仓位是真正的 alpha** — 如果回测数据显示 bear 市交易是净亏损的（即使是做空），最优策略可能是 bear 期间完全空仓（regime_leverage_bear = 0.0）。这不是"躲避风险"——它实际上同时提升了 CAGR（+10pp）和降低了 MaxDD，因为避免了 bear 市中动量因子反转带来的系统性亏损。这个发现的前提是：strategy 有可靠的 regime 检测机制。如果 regime 检测不准，零 bear 仓位可能错过 V 型反弹。
 41. **轮询式 MarginMonitor 无法防御瞬时闪崩** — 这是一个必须清醒认知的局限。即使 MarginMonitor 每 15 秒轮询一次，如果 wick 在 3 秒内触及最低点又弹回（加密市场常见），monitor 可能完全看不到 MR 峰值。真实案例：2025-10-10 wick MR=0.93，但这个极端值可能只存在了几秒。MarginMonitor 真正擅长防御的是"缓慢恶化"场景（连续多天阴跌，MR 从 0.3 逐步升到 0.7）。对于瞬时闪崩，唯一可靠的防御是静态杠杆上限（确保即使历史最差 wick 也不爆仓）。架构含义：(a) 不要依赖 MarginMonitor 作为唯一防线；(b) 静态杠杆上限要留足 buffer（如 MR=0.93 时的 3.05x，而不是 MR=0.999 的 3.10x）；(c) MarginMonitor 是补充保护（处理超越历史的缓慢恶化），不是主要保护。
+42. **供应链攻击的窗口可以短到 2 小时** — 2026-03 axios 事件：攻击者用窃取的 npm 凭证发布了含恶意 postinstall 脚本的版本，2-3 小时后就被下架了——但这个时间窗口足以感染所有在此期间运行 `npm install` 的 CI/CD 管道。对量化系统的启示：(a) 永远精确锁定依赖版本（`==` 而非 `>=`），不要自动拉取最新版；(b) `npm ci --ignore-scripts` 或 `pip install --no-deps` 在自动化环境中是基本功；(c) 新版本发布后至少等 24-48 小时再更新，因为大部分恶意包在发布后 24 小时内会被检测和下架。
+43. **幽灵依赖是供应链投毒的典型手法** — axios 攻击中，恶意代码不在 axios 自身，而是通过新增一个"幽灵依赖"（`plain-crypto-js`）注入——该包在代码中从未被 import，唯一目的是触发 postinstall 脚本下载 RAT。审计时必须检查：manifest（package.json/requirements.txt）中的每个依赖是否真的被代码引用。用不到的依赖 = 潜在攻击面。
+44. **API Key 提现权限是量化系统最大的单点风险** — 如果 API Key 同时有 trade + withdraw 权限，一旦密钥泄露（通过供应链攻击、日志泄露、或 AI 对话上下文），攻击者可以直接提走全部资产。这比策略代码泄露严重得多——代码泄露只是知识产权损失，提现权限泄露是真金白银的损失。铁律：量化 bot 的 API Key 永远不开 withdraw 权限；如果交易所支持 IP 白名单，必须绑定。
+45. **AI Agent 自主修改代码时是供应链风险的放大器** — alpha-lab 等 AI 研究循环会自主修改策略代码并运行回测。如果 AI 被 prompt injection 或恶意上下文影响（如读取了含恶意指令的"研究论文"），可能引入隐蔽的后门（如在特定日期触发异常交易逻辑）。防御：(a) AI 修改的范围限定在约定文件内（alpha-lab 已有此规则）；(b) 每次里程碑必须经过 code review；(c) `git diff --stat` 验证只改了预期文件；(d) 不要让 AI agent 读取 .env 或密钥文件。
