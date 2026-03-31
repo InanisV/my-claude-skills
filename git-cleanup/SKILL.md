@@ -52,21 +52,30 @@ rm -f .git/index.lock .git/HEAD.lock
 
 **如果 `rm` 报 `Operation not permitted`（沙箱 immutable 保护），使用 /tmp 中转**：
 ```bash
-# 1. 复制 .git 到可写的 /tmp
+# 1. 备份 .git/config（关键！rsync 会覆盖它——见 Step 0.5）
+cp .git/config /tmp/git-config-backup
+
+# 2. 复制 .git 到可写的 /tmp
 cp -r .git /tmp/git-clean
 
-# 2. 在 /tmp 中删除 lock 文件
+# 3. 在 /tmp 中删除 lock 文件
 rm -f /tmp/git-clean/index.lock /tmp/git-clean/HEAD.lock
 
-# 3. 后续所有 git 操作使用环境变量指向 /tmp
+# 4. 后续所有 git 操作使用环境变量指向 /tmp
 export GIT_DIR=/tmp/git-clean
 export GIT_WORK_TREE=$(pwd)
 
-# 4. 所有 git 操作完成后，同步回原目录（排除 lock 文件）
+# 5. 所有 git 操作完成后，同步回原目录（排除 lock 文件）
 rsync -a /tmp/git-clean/ .git/ --exclude='*.lock'
+
+# 6. 恢复被 rsync 覆盖的 config
+cp /tmp/git-config-backup .git/config
+rm /tmp/git-config-backup
+
+# 7. 清除环境变量
 unset GIT_DIR GIT_WORK_TREE
 
-# 5. 清理临时目录
+# 8. 清理临时目录
 rm -rf /tmp/git-clean
 ```
 
@@ -75,6 +84,66 @@ rm -rf /tmp/git-clean
 - 如果 `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` 未配置，也需要一并设置（沙箱可能没有 git config）
 - rsync 回写时 `--exclude='*.lock'` 防止把新产生的 lock 同步回去
 - 如果没有 lock 文件，跳过此步骤，正常执行后续流程
+
+### Step 0.5: /tmp 中转后的 git 完整性校验（关键！）
+
+**⚠ 血泪教训**：`rsync -a /tmp/git-clean/ .git/` 会用 /tmp 中新建的 `.git/config`
+覆盖原有的 config，导致以下关键信息丢失：
+- `[remote "origin"]` — remote URL 和 fetch 规则消失 → VS Code 显示 "Publish Branch" 而非 "Push"
+- `[branch "master"]` — tracking 关系消失 → `git push` 不知道推到哪里
+- `[user]` — name/email 丢失 → 后续 commit 报 "Author identity unknown"
+
+这个问题非常隐蔽：commit 本身能成功，但 push/pull 全部失效，用户往往在很后面才发现。
+所以每次使用 /tmp 中转后，必须立即校验。
+
+**校验清单（每次 rsync 回写后必须执行）**：
+
+```bash
+# 1. 检查 remote 是否存在
+REMOTE_URL=$(git remote get-url origin 2>/dev/null)
+if [ -z "$REMOTE_URL" ]; then
+    echo "❌ remote origin 丢失！正在恢复..."
+    # 从 FETCH_HEAD 提取 URL（上次 fetch/pull 的记录）
+    RECOVERED_URL=$(grep -oP 'https?://\S+' .git/FETCH_HEAD 2>/dev/null | head -1)
+    if [ -n "$RECOVERED_URL" ]; then
+        git remote add origin "$RECOVERED_URL"
+        echo "✅ 已恢复 remote: $RECOVERED_URL"
+    else
+        echo "⚠️ 无法自动恢复 remote URL，请手动设置: git remote add origin <URL>"
+    fi
+fi
+
+# 2. 检查 branch tracking
+CURRENT_BRANCH=$(git branch --show-current)
+TRACKING=$(git config branch.$CURRENT_BRANCH.remote 2>/dev/null)
+if [ -z "$TRACKING" ]; then
+    echo "❌ branch tracking 丢失！正在恢复..."
+    git config branch.$CURRENT_BRANCH.remote origin
+    git config branch.$CURRENT_BRANCH.merge refs/heads/$CURRENT_BRANCH
+    echo "✅ 已恢复 $CURRENT_BRANCH → origin/$CURRENT_BRANCH"
+fi
+
+# 3. 检查 user identity
+USER_NAME=$(git config user.name 2>/dev/null)
+USER_EMAIL=$(git config user.email 2>/dev/null)
+if [ -z "$USER_NAME" ] || [ -z "$USER_EMAIL" ]; then
+    echo "❌ user identity 丢失！正在从 commit 历史恢复..."
+    git config user.name "$(git log -1 --format='%an')"
+    git config user.email "$(git log -1 --format='%ae')"
+    echo "✅ 已恢复: $(git config user.name) <$(git config user.email)>"
+fi
+
+# 4. 最终确认
+echo "--- Git 完整性校验 ---"
+echo "Remote: $(git remote get-url origin 2>/dev/null || echo 'MISSING')"
+echo "Branch: $CURRENT_BRANCH → $(git config branch.$CURRENT_BRANCH.remote 2>/dev/null || echo 'UNTRACKED')/$(git config branch.$CURRENT_BRANCH.merge 2>/dev/null || echo 'NONE')"
+echo "User:   $(git config user.name) <$(git config user.email)>"
+echo "------------------------"
+```
+
+**Step 0 已内置了 config 备份/恢复**，所以正常流程下 Step 0.5 只是"保险校验"。
+但如果因为任何原因 config 还是被覆盖了（比如操作顺序出错、中途中断），
+Step 0.5 的自动恢复能兜底。
 
 ### Step 1: Assess the workspace
 
@@ -186,6 +255,8 @@ EOF
 Run `git status` after committing to confirm the working tree is clean.
 If there are still untracked files that should be ignored, go back to step 3.
 
+**如果使用了 /tmp 中转（Step 0），额外执行 Step 0.5 的完整性校验。**
+
 ## Important rules
 
 - **Never** commit files that likely contain secrets (`.env`, `credentials.json`,
@@ -205,6 +276,7 @@ After cleanup, give a concise summary:
 
 ```
 🔓 Lock cleared: .git/index.lock (via /tmp workaround)
+🔧 Git integrity verified: remote ✓ | tracking ✓ | user ✓
 ✅ Committed: 3 files (feat: add adaptive settlement scripts)
 🚫 Ignored: 8 HTML reports (added to .gitignore)
 🗑️ Deleted: 12 files — __pycache__ (3), .pytest_cache (1), *.pyc (5), tmp_debug_* (3)
