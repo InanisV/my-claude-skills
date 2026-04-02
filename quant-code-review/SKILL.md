@@ -2,7 +2,7 @@
 name: quant-code-review
 description: |
   量化交易系统代码审计 — 在每次重大代码改动后自动执行全面审查。
-  覆盖十个维度：(P) 项目阶段与部署就绪度（前置，最先执行），(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐，(2) 回测引擎真实性（含 2.10 数据真实性审计 + 2.11 Margin-Ratio 自动减仓），(3) 实盘运维鲁棒性（含 3.6 MarginMonitor 实时保证金监控 + 3.7 账户资金流水过滤），(4) 状态持久化完整性，(5) 代码性能，(6) AI协作代码质量，(7) 供应链与运行时安全。
+  覆盖十个维度：(P) 项目阶段与部署就绪度（前置，最先执行），(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐，(2) 回测引擎真实性（含 2.10 数据真实性审计 + 2.11 Margin-Ratio 自动减仓），(3) 实盘运维鲁棒性（含 3.6 MarginMonitor 实时保证金监控 + 3.7 账户资金流水过滤 + 3.8 实盘日志体系），(4) 状态持久化完整性，(5) 代码性能，(6) AI协作代码质量，(7) 供应链与运行时安全。
 
   触发时机（非常重要）：
   - 完成策略逻辑修改后（参数、信号、仓位管理、PnL模型等）
@@ -1422,6 +1422,241 @@ class EquityTracker:
   - 如果回测引擎支持 DCA 但只用简单收益率 → **严重 bug**，标记为 🔴
 - 实盘-回测对比时：实盘必须用 adjusted_equity，否则对比无意义
 
+### 3.8 实盘日志体系（Performance-Analysis-Ready Logging）
+
+**为什么重要**：实盘 bot 的日志不只是用来排错的——它是事后分析策略表现的唯一数据源。如果日志不完整、格式混乱、或者多次启动的记录混在一起，你根本无法回答以下关键问题：
+- 这个版本比上个版本好在哪？差在哪？
+- 那笔亏损交易当时的决策依据是什么？信号分数是多少？
+- 为什么那段时间一笔交易都没有？是没信号，还是被风控拦截了？
+- 策略从第几天开始表现衰减？是市场环境变了还是代码改了？
+
+**核心原则：每次启动 = 一个独立的 session，对应独立的日志文件。**
+
+**审查清单**：
+
+```
+1. 日志文件隔离（每次启动独立文件）：
+   □ 每次启动是否创建新的日志文件（而非 append 到旧文件）
+   □ 文件名是否包含足够的辨识信息：
+     推荐格式：{strategy}_{version}_{YYYYMMDD_HHmmss}_{session_id}.jsonl
+     示例：momentum_v2.3.1_20260401_143022_a1b2c3.jsonl
+     反例：bot.log、output.txt、latest.log（无法区分版本和时间）
+   □ 是否避免了 log rotation 把同一个 session 拆到多个文件
+     （rotation 只应在 session 之间生效，不应在 session 内部切割）
+   □ 是否有 symlink 指向最新的 session 日志（方便 tail -f 实时查看）
+     示例：latest.log -> momentum_v2.3.1_20260401_143022_a1b2c3.jsonl
+
+2. Session 元数据（启动时必须记录）：
+   □ 启动时间（UTC，毫秒精度）
+   □ 策略版本标识（git commit hash 或 version tag）
+   □ 完整的配置快照（config dump，含所有参数值）
+     - 不只是用户修改的参数，也包含所有 default 值
+     - 需要能从日志独立还原"这次运行用了什么配置"
+   □ 运行环境信息（Python 版本、关键依赖版本、OS、hostname）
+   □ 交易所连接信息（exchange, market_type, 但不包含 API key）
+   □ 初始账户状态（equity, positions, available_balance）
+   □ 上次 session 的结束原因（graceful shutdown / crash / kill switch / manual stop）
+
+3. 交易决策日志（每个 rebalance 周期必须记录）：
+   □ 是否记录了每笔实际执行的交易：
+     - 标的、方向、数量、目标价、实际成交价、滑点
+     - 手续费（预估 vs 实际）
+     - 下单方式（limit/market）、是否 reduce_only
+     - 从信号产生到成交的延迟（latency）
+   □ 是否记录了"决定不交易"的原因（这比交易记录更重要！）：
+     - 信号分数低于阈值 → 记录分数值和阈值
+     - 冷却期未过 → 记录剩余冷却时间
+     - 保证金不足 → 记录 available_balance 和需要的 margin
+     - 风控拦截 → 记录触发的风控规则
+     - Regime filter → 记录当前 regime 和对应的 leverage 设置
+     示例：{"decision": "skip", "symbol": "ETH", "reason": "score_below_threshold",
+            "score": 0.42, "threshold": 0.50, "next_check": "2026-04-01T15:00:00Z"}
+   □ 每个周期的完整决策上下文：
+     - 所有候选标的的因子得分（不只是最终选中的）
+     - 当前 regime 判定及依据
+     - 仓位权重计算中间值
+     - 目标仓位 vs 当前仓位 vs 实际执行的调整
+
+4. 定期快照（固定间隔的状态记录）：
+   □ 是否有固定间隔（推荐每 1-5 分钟）的 equity 快照
+   □ 快照是否包含：
+     - 总 equity（raw 和 adjusted）
+     - 各仓位的 unrealized PnL
+     - margin_ratio
+     - 当前 drawdown（from peak）
+     - 累计已实现 PnL（本 session 内）
+   □ 是否有每日 summary（每天固定时间输出当日汇总）：
+     - 当日交易次数、胜率、总 PnL
+     - 当日最大回撤
+     - 当日手续费总额
+     - 当日 funding fee 收支
+
+5. 异常与风控事件日志：
+   □ API 错误（含完整 response body，不只是 status code）
+   □ 订单被拒绝（原因、当时的账户状态）
+   □ MarginMonitor 触发（MR 值、动作、减仓详情）
+   □ Kill switch 触发（连续减仓次数、触发时的完整状态）
+   □ 未预期的 equity 变化（unexplained_delta，与 3.7 联动）
+   □ 数据异常（K 线缺失、价格跳变超过阈值）
+   □ 连接断开/重连事件
+
+6. 关机日志（session 结束时必须记录）：
+   □ 关机原因分类：
+     - GRACEFUL: 用户手动停止或计划内维护
+     - CRASH: 未捕获异常（含完整 traceback）
+     - KILL_SWITCH: 风控触发的自动停止
+     - OOM: 内存不足
+     - SIGNAL: 收到 SIGTERM/SIGINT
+   □ 关机时的最终状态快照（与启动时相同格式，方便对比）
+   □ Session 汇总统计：
+     - 运行时长
+     - 总交易次数、胜率
+     - 总 PnL（绝对值 + 百分比）
+     - 最大回撤
+     - 总手续费
+     - 发生的异常事件数量
+
+7. 日志格式与可查询性：
+   □ 格式是否为结构化格式（强烈推荐 JSON Lines / .jsonl）
+     - 反模式：纯文本 print()、Python logging 的默认 format
+     - 原因：结构化日志可以用 jq/pandas 直接分析，纯文本需要正则解析
+   □ 每条日志是否包含统一的基础字段：
+     {"ts": "2026-04-01T14:30:22.456Z", "level": "INFO",
+      "session_id": "a1b2c3", "event": "trade_executed", ...}
+   □ 时间戳是否统一为 UTC（避免时区混乱）
+   □ 数值精度是否足够（价格至少 8 位小数，数量至少 6 位）
+   □ 是否避免了在日志中记录敏感信息（API key, secret, passphrase）
+```
+
+**参考实现（SessionLogger 伪代码）**：
+
+```python
+import json
+import os
+from datetime import datetime, timezone
+
+class SessionLogger:
+    def __init__(self, strategy_name: str, version: str, log_dir: str = "./logs"):
+        self.session_id = os.urandom(4).hex()
+        self.start_time = datetime.now(timezone.utc)
+        ts = self.start_time.strftime("%Y%m%d_%H%M%S")
+        self.filename = f"{strategy_name}_{version}_{ts}_{self.session_id}.jsonl"
+        self.filepath = os.path.join(log_dir, self.filename)
+        os.makedirs(log_dir, exist_ok=True)
+        self._file = open(self.filepath, "a")
+
+        # symlink latest.log → 当前 session 文件
+        latest = os.path.join(log_dir, "latest.log")
+        if os.path.islink(latest):
+            os.unlink(latest)
+        os.symlink(self.filename, latest)
+
+        # 统计计数器
+        self.stats = {"trades": 0, "skips": 0, "errors": 0,
+                      "total_pnl": 0.0, "total_fees": 0.0}
+
+    def log(self, event: str, level: str = "INFO", **data):
+        record = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "level": level,
+            "session_id": self.session_id,
+            "event": event,
+            **data
+        }
+        self._file.write(json.dumps(record, default=str) + "\n")
+        self._file.flush()  # 实盘日志必须立即刷盘，crash 时不丢数据
+
+    def log_startup(self, config: dict, git_hash: str,
+                    initial_equity: float, positions: list):
+        self.log("session_start",
+                 config=config,
+                 git_hash=git_hash,
+                 initial_equity=initial_equity,
+                 positions=positions,
+                 python_version=sys.version,
+                 pid=os.getpid())
+
+    def log_trade(self, symbol, side, qty, target_price, fill_price,
+                  fee, order_type, latency_ms, reason):
+        slippage_bps = abs(fill_price - target_price) / target_price * 10000
+        self.log("trade_executed",
+                 symbol=symbol, side=side, qty=qty,
+                 target_price=target_price, fill_price=fill_price,
+                 slippage_bps=round(slippage_bps, 2),
+                 fee=fee, order_type=order_type,
+                 latency_ms=latency_ms, reason=reason)
+        self.stats["trades"] += 1
+        self.stats["total_fees"] += fee
+
+    def log_skip(self, symbol, reason, **context):
+        """记录"决定不交易"— 这条比 trade 更重要"""
+        self.log("trade_skipped", symbol=symbol,
+                 reason=reason, **context)
+        self.stats["skips"] += 1
+
+    def log_equity_snapshot(self, raw_equity, adjusted_equity,
+                            positions_pnl, margin_ratio, drawdown_pct):
+        self.log("equity_snapshot",
+                 raw_equity=raw_equity,
+                 adjusted_equity=adjusted_equity,
+                 positions_pnl=positions_pnl,
+                 margin_ratio=margin_ratio,
+                 drawdown_pct=drawdown_pct)
+
+    def log_shutdown(self, reason: str, final_equity: float,
+                     error: str = None):
+        self.log("session_end",
+                 reason=reason,
+                 final_equity=final_equity,
+                 duration_seconds=(datetime.now(timezone.utc)
+                                   - self.start_time).total_seconds(),
+                 stats=self.stats,
+                 error=error)
+        self._file.close()
+```
+
+**日志分析场景示例**（验证日志是否支撑这些查询）：
+
+```bash
+# 1. 某个 session 的交易统计
+cat session_xxx.jsonl | jq 'select(.event=="trade_executed")' | jq -s 'length'
+
+# 2. 为什么某段时间没有交易？
+cat session_xxx.jsonl | jq 'select(.event=="trade_skipped" and .ts >= "2026-04-01" and .ts < "2026-04-02")'
+
+# 3. 对比两个版本的胜率
+cat v2.3_*.jsonl | jq 'select(.event=="session_end") | .stats'
+cat v2.4_*.jsonl | jq 'select(.event=="session_end") | .stats'
+
+# 4. 滑点分析
+cat session_xxx.jsonl | jq 'select(.event=="trade_executed") | .slippage_bps' | \
+  jq -s 'add/length'  # 平均滑点
+
+# 5. 每日 equity 曲线（pandas 友好）
+import pandas as pd
+df = pd.read_json("session_xxx.jsonl", lines=True)
+equity = df[df.event == "equity_snapshot"][["ts", "adjusted_equity"]]
+```
+
+**常见反模式**：
+
+| 反模式 | 后果 | 正确做法 |
+|--------|------|----------|
+| 所有 session 写同一个 `bot.log` | 无法区分版本表现 | 每次启动新文件 |
+| 只 log 交易，不 log 跳过原因 | "为什么没交易"无法回答 | `trade_skipped` 事件 |
+| 用 `print()` 而非结构化日志 | 无法用程序分析 | JSON Lines |
+| 不记录启动时的 config | 事后无法还原"当时的参数" | startup 事件含完整 config |
+| 不记录关机原因 | 不知道 session 是正常结束还是崩了 | shutdown 事件含 reason |
+| 日志中记录 API key | 安全泄露 | 脱敏处理 |
+| equity 快照间隔不固定 | 画出的曲线时间轴不均匀 | 固定间隔（如每 60 秒） |
+| 不 flush | crash 时丢失最后几分钟的日志 | 每条 flush 或定期 flush |
+| log rotation 在 session 内切割 | 同一次运行的日志散布多个文件 | rotation 只在 session 边界 |
+
+**与回测日志的对齐**：
+- 回测引擎的 trade log 格式应与实盘日志的 `trade_executed` 事件使用相同 schema
+- 这样同一套分析脚本可以同时分析回测和实盘结果
+- 如果回测日志和实盘日志格式不一致 → 标记为 🟡，建议统一
+
 ---
 
 ## 维度四：状态持久化完整性
@@ -2040,11 +2275,18 @@ P.2 部署就绪度（如适用）：
 - 通知机制：[Telegram(✅)/日志(🟡)/无(🔴)]
 
 ### 维度三：运维鲁棒性
-[逐项结果，含 3.6 MarginMonitor + 3.7 资金流水过滤]
+[逐项结果，含 3.6 MarginMonitor + 3.7 资金流水过滤 + 3.8 日志体系]
 - 3.7 Transfer Isolation：[已实现(✅)/部分(🟡)/未实现(🔴)]
 - adjusted_equity 使用：[全部下游(✅)/部分(🟡)/未使用(🔴)]
 - unexplained_delta 检测：[有(✅)/无(🔴)]
 - Exchange income API 集成：[有(✅)/无(🔴)]
+- 3.8 日志体系：[完备(✅)/部分(🟡)/不足(🔴)]
+- 每次启动独立日志文件：[是(✅)/否(🔴)]
+- 结构化格式（JSON Lines）：[是(✅)/否(🔴)]
+- 启动元数据（config+git hash）：[有(✅)/无(🔴)]
+- 决策日志（含 skip 原因）：[有(✅)/仅交易(🟡)/无(🔴)]
+- 定期 equity 快照：[有(✅)/无(🔴)]
+- 关机原因记录：[有(✅)/无(🔴)]
 
 ### 维度四：状态持久化完整性
 | # | 检查项 | 状态 | 备注 |
@@ -2146,3 +2388,4 @@ P.2 部署就绪度（如适用）：
 44. **API Key 提现权限是量化系统最大的单点风险** — 如果 API Key 同时有 trade + withdraw 权限，一旦密钥泄露（通过供应链攻击、日志泄露、或 AI 对话上下文），攻击者可以直接提走全部资产。这比策略代码泄露严重得多——代码泄露只是知识产权损失，提现权限泄露是真金白银的损失。铁律：量化 bot 的 API Key 永远不开 withdraw 权限；如果交易所支持 IP 白名单，必须绑定。
 45. **AI Agent 自主修改代码时是供应链风险的放大器** — alpha-lab 等 AI 研究循环会自主修改策略代码并运行回测。如果 AI 被 prompt injection 或恶意上下文影响（如读取了含恶意指令的"研究论文"），可能引入隐蔽的后门（如在特定日期触发异常交易逻辑）。防御：(a) AI 修改的范围限定在约定文件内（alpha-lab 已有此规则）；(b) 每次里程碑必须经过 code review；(c) `git diff --stat` 验证只改了预期文件；(d) 不要让 AI agent 读取 .env 或密钥文件。
 46. **充值/提现会伪装成策略盈亏** — 如果实盘 bot 直接用 `new_equity - old_equity` 计算 PnL，任何充值都会被计为"盈利"，提现计为"亏损"。这不只是数字失真——它会导致仓位管理基于错误的 equity 做决策（如按 equity 百分比开仓时，充值后仓位会突然变大），回撤保护被错误重置（充值让 equity 创新高，drawdown 归零），实盘-回测对比完全失去意义（回测不存在充提）。防御：维护 `adjusted_equity = raw_equity - cumulative_transfers`，所有下游计算（PnL、drawdown、position sizing）必须基于 adjusted_equity。更隐蔽的资金流还包括：funding fee 结算、空投、跨账户划转、手动交易——这些需要通过交易所 income API 分类识别。
+47. **日志不隔离 = 版本对比是盲猜** — 实盘 bot 如果所有 session 写同一个 `bot.log`，你无法回答"v2.3 和 v2.4 哪个表现好"这种基本问题。更隐蔽的问题：只记录了交易但没记录"为什么没交易"（trade_skipped），导致"那段时间为什么没开仓"永远是个谜。同样危险的是不记录启动时的完整 config——两周后你想复现某次好的表现，却不知道当时用的什么参数。正确做法：每次启动创建独立的 `.jsonl` 文件，文件名含策略版本+时间戳+session_id；启动时 dump 完整 config 和 git hash；每个决策周期记录 trade_executed 和 trade_skipped；关机时记录原因和 session 汇总统计。这套日志不只是用来排错——它是策略迭代的数据基础。
