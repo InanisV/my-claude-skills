@@ -2,7 +2,7 @@
 name: quant-code-review
 description: |
   量化交易系统代码审计 — 在每次重大代码改动后自动执行全面审查。
-  覆盖十个维度：(P) 项目阶段与部署就绪度（前置，最先执行），(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐，(2) 回测引擎真实性（含 2.10 数据真实性审计 + 2.11 Margin-Ratio 自动减仓），(3) 实盘运维鲁棒性（含 3.6 MarginMonitor 实时保证金监控），(4) 状态持久化完整性，(5) 代码性能，(6) AI协作代码质量，(7) 供应链与运行时安全。
+  覆盖十个维度：(P) 项目阶段与部署就绪度（前置，最先执行），(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐，(2) 回测引擎真实性（含 2.10 数据真实性审计 + 2.11 Margin-Ratio 自动减仓），(3) 实盘运维鲁棒性（含 3.6 MarginMonitor 实时保证金监控 + 3.7 账户资金流水过滤），(4) 状态持久化完整性，(5) 代码性能，(6) AI协作代码质量，(7) 供应链与运行时安全。
 
   触发时机（非常重要）：
   - 完成策略逻辑修改后（参数、信号、仓位管理、PnL模型等）
@@ -1309,6 +1309,119 @@ Profit Factor (PF) 解读：
    □ 减仓订单被交易所拒绝时的处理（如仓位已被清算）
 ```
 
+### 3.7 账户资金流水过滤（Transfer/Deposit/Withdrawal Isolation）
+
+**为什么重要**：实盘 bot 通过 `equity` 变化来计算 PnL。但账户 equity 的变化不全是策略贡献——充值（deposit）会让 equity 暴涨（看起来像盈利），提现（withdrawal）会让 equity 骤降（看起来像亏损）。如果不隔离这些外部资金流，策略的 PnL、Sharpe、MaxDD 全部失真，导致：
+- 策略表现评估完全不可信
+- 仓位管理基于错误的 equity 做决策（如 position sizing 按 equity 百分比计算）
+- 回撤保护/止损逻辑在充值后被错误重置
+- 实盘与回测的 PnL 无法对比（回测不存在充提）
+
+**隐蔽场景（容易遗漏的 equity 变化来源）**：
+- 合约 funding fee 结算（定期且双向，容易与策略盈亏混淆）
+- 空投、返佣、邀请奖励等平台活动
+- 跨账户划转（现货→合约、子账户→主账户）
+- 手动交易（用户在 bot 之外手动开平仓）
+- 清算保险基金返还
+- Bonus / Coupon 到账（部分交易所有体验金机制）
+
+**审查清单**：
+
+```
+1. Equity 变化来源识别：
+   □ 每次 equity 变化是否区分了：策略交易盈亏 vs 外部资金流
+   □ 是否存在 "unexplained delta" 检测逻辑：
+     delta = new_equity - old_equity
+     expected_delta = sum(position_pnl_changes) + sum(realized_pnl) - sum(fees)
+     unexplained = delta - expected_delta
+     if abs(unexplained) > threshold → 标记为疑似外部资金流
+   □ threshold 是否合理设置（推荐：max(1 USDT, 0.1% * equity)，过小会误报）
+
+2. Exchange API 资金流查询：
+   □ 是否调用了交易所的 income/transaction history API
+     - Binance: GET /fapi/v1/income (type: TRANSFER, DEPOSIT, WITHDRAW, FUNDING_FEE, COMMISSION, INSURANCE_CLEAR, etc.)
+     - OKX: GET /api/v5/account/bills (type: 1=transfer, 2=trade, etc.)
+     - Bybit: GET /v5/account/transaction-log
+   □ 是否对 income type 做了完整分类：
+     - 策略相关：REALIZED_PNL, COMMISSION/FEE → 计入 PnL
+     - 外部资金流：TRANSFER, DEPOSIT, WITHDRAW → 不计入 PnL
+     - Funding fee：根据策略设计决定（如策略本身利用 funding rate → 计入；否则单独记录）
+     - 其他：INSURANCE_CLEAR, AIRDROP, REBATE, BONUS → 不计入 PnL，单独记录
+   □ API 调用频率是否足够（至少每次 equity 快照时同步查询）
+   □ 是否处理了 API 分页（income history 可能很长）
+
+3. Adjusted Equity 跟踪：
+   □ 是否维护了 cumulative_transfers 变量：
+     cumulative_transfers += deposit_amount  （充值累加）
+     cumulative_transfers -= withdrawal_amount  （提现累减）
+   □ 策略使用的 equity 是否为 adjusted_equity：
+     adjusted_equity = raw_equity - cumulative_transfers
+   □ 所有下游计算是否基于 adjusted_equity：
+     - PnL 计算：pnl = adjusted_equity - initial_equity
+     - 收益率：return = adjusted_equity / initial_equity - 1
+     - Drawdown：基于 adjusted_equity 的 peak 计算
+     - Position sizing：基于 adjusted_equity 计算仓位大小
+   □ initial_equity 是否正确记录（首次启动时的 equity，不含后续充提）
+
+4. 状态持久化（与维度四联动）：
+   □ cumulative_transfers 是否持久化到 state file
+   □ transfer_history（每笔充提记录）是否持久化
+   □ 重启后是否正确恢复 adjusted_equity
+
+5. 日志与告警：
+   □ 检测到外部资金流时是否记录详细日志（时间、金额、类型、来源）
+   □ unexplained_delta 超过较大阈值时是否发送告警
+     （可能意味着：被盗、API key 泄露、有人手动操作了账户）
+   □ 定期报告中是否区分展示：策略 PnL vs 外部资金流 vs 总 equity 变化
+```
+
+**参考实现（EquityTracker 伪代码）**：
+
+```python
+class EquityTracker:
+    def __init__(self, initial_equity: float):
+        self.initial_equity = initial_equity
+        self.cumulative_transfers = 0.0  # 累计外部资金流
+        self.transfer_history = []       # 每笔记录
+        self.last_income_timestamp = 0   # API 增量查询游标
+
+    def sync_transfers(self, exchange_client):
+        """从交易所 API 同步资金流水"""
+        incomes = exchange_client.get_income_history(
+            start_time=self.last_income_timestamp,
+            income_types=["TRANSFER", "DEPOSIT", "WITHDRAW",
+                         "INSURANCE_CLEAR", "AIRDROP", "REBATE"]
+        )
+        for inc in incomes:
+            self.cumulative_transfers += inc.amount  # deposit>0, withdraw<0
+            self.transfer_history.append(inc)
+            self.last_income_timestamp = max(self.last_income_timestamp, inc.timestamp)
+
+    def get_adjusted_equity(self, raw_equity: float) -> float:
+        """返回排除外部资金流后的策略净值"""
+        return raw_equity - self.cumulative_transfers
+
+    def detect_unexplained_delta(self, old_equity, new_equity,
+                                  position_pnl_delta, fees):
+        """检测不可解释的 equity 变化"""
+        expected_delta = position_pnl_delta - fees
+        actual_delta = new_equity - old_equity
+        unexplained = actual_delta - expected_delta
+        threshold = max(1.0, 0.001 * old_equity)
+        if abs(unexplained) > threshold:
+            logger.warning(f"Unexplained equity delta: {unexplained:.2f} USDT")
+            return unexplained
+        return 0.0
+```
+
+**回测中的考量**：
+- 标准回测（固定初始资金）：不存在充提问题，无需处理
+- DCA 策略回测（定期加仓）：需要使用 MWRR（Modified Dietz）或 TWRR（时间加权收益率）而非简单的 `final/initial - 1`
+  - TWRR = ∏(1 + r_i) - 1，其中 r_i 是每个子周期（两次资金流之间）的收益率
+  - MWRR = (final_equity - initial_equity - sum(cashflows)) / (initial_equity + sum(w_i * cf_i))
+  - 如果回测引擎支持 DCA 但只用简单收益率 → **严重 bug**，标记为 🔴
+- 实盘-回测对比时：实盘必须用 adjusted_equity，否则对比无意义
+
 ---
 
 ## 维度四：状态持久化完整性
@@ -1927,7 +2040,11 @@ P.2 部署就绪度（如适用）：
 - 通知机制：[Telegram(✅)/日志(🟡)/无(🔴)]
 
 ### 维度三：运维鲁棒性
-[逐项结果，含 3.6 MarginMonitor]
+[逐项结果，含 3.6 MarginMonitor + 3.7 资金流水过滤]
+- 3.7 Transfer Isolation：[已实现(✅)/部分(🟡)/未实现(🔴)]
+- adjusted_equity 使用：[全部下游(✅)/部分(🟡)/未使用(🔴)]
+- unexplained_delta 检测：[有(✅)/无(🔴)]
+- Exchange income API 集成：[有(✅)/无(🔴)]
 
 ### 维度四：状态持久化完整性
 | # | 检查项 | 状态 | 备注 |
@@ -2028,3 +2145,4 @@ P.2 部署就绪度（如适用）：
 43. **幽灵依赖是供应链投毒的典型手法** — axios 攻击中，恶意代码不在 axios 自身，而是通过新增一个"幽灵依赖"（`plain-crypto-js`）注入——该包在代码中从未被 import，唯一目的是触发 postinstall 脚本下载 RAT。审计时必须检查：manifest（package.json/requirements.txt）中的每个依赖是否真的被代码引用。用不到的依赖 = 潜在攻击面。
 44. **API Key 提现权限是量化系统最大的单点风险** — 如果 API Key 同时有 trade + withdraw 权限，一旦密钥泄露（通过供应链攻击、日志泄露、或 AI 对话上下文），攻击者可以直接提走全部资产。这比策略代码泄露严重得多——代码泄露只是知识产权损失，提现权限泄露是真金白银的损失。铁律：量化 bot 的 API Key 永远不开 withdraw 权限；如果交易所支持 IP 白名单，必须绑定。
 45. **AI Agent 自主修改代码时是供应链风险的放大器** — alpha-lab 等 AI 研究循环会自主修改策略代码并运行回测。如果 AI 被 prompt injection 或恶意上下文影响（如读取了含恶意指令的"研究论文"），可能引入隐蔽的后门（如在特定日期触发异常交易逻辑）。防御：(a) AI 修改的范围限定在约定文件内（alpha-lab 已有此规则）；(b) 每次里程碑必须经过 code review；(c) `git diff --stat` 验证只改了预期文件；(d) 不要让 AI agent 读取 .env 或密钥文件。
+46. **充值/提现会伪装成策略盈亏** — 如果实盘 bot 直接用 `new_equity - old_equity` 计算 PnL，任何充值都会被计为"盈利"，提现计为"亏损"。这不只是数字失真——它会导致仓位管理基于错误的 equity 做决策（如按 equity 百分比开仓时，充值后仓位会突然变大），回撤保护被错误重置（充值让 equity 创新高，drawdown 归零），实盘-回测对比完全失去意义（回测不存在充提）。防御：维护 `adjusted_equity = raw_equity - cumulative_transfers`，所有下游计算（PnL、drawdown、position sizing）必须基于 adjusted_equity。更隐蔽的资金流还包括：funding fee 结算、空投、跨账户划转、手动交易——这些需要通过交易所 income API 分类识别。
