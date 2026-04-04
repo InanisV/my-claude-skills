@@ -1745,6 +1745,111 @@ equity = df[df.event == "equity_snapshot"][["ts", "adjusted_equity"]]
   还是沿用旧结果（可能已经不是最优标的）
 ```
 
+### 4.5 监控数据导出协议（Monitor Protocol Compliance）
+
+**为什么重要**：当你有 3 个、5 个、10 个策略时，每个 bot 的 state 文件格式不同，
+监控中心必须为每个策略写独立的 collector — 这是不可持续的。一个统一的"监控导出
+协议"让每个 bot 旁路输出一个标准格式的 JSON 文件，监控中心只需读这一个文件。
+
+**经验教训来源**：Trading Monitor Center 项目开发过程中发现：
+- Alpha 的 equity_history 是 float deque，无时间戳，无法重建时间轴
+- Beta 的 equity_history 带时间戳 + transfers，是最完善的（应作为标杆）
+- Polymarket 只有风控短窗口，equity 数据无法用于趋势分析
+→ 监控中心不得不为三个策略各写一个 collector，新增策略成本高
+
+**标准：Monitor Protocol v1**
+
+每个 bot 必须在自己的目录下维护一个 `monitor_export.json` 文件，格式如下：
+
+```
+文件位置: {bot_dir}/monitor_export.json (与 state file 同级)
+更新频率: 每个交易周期结束时 (或最少每 5 分钟)
+写入方式: atomic write (tmp + os.replace)
+
+必须字段:
+{
+  "_protocol_version": 1,
+  "_updated_at": "ISO 8601 UTC",
+
+  "identity": {
+    "bot_name": "string — 唯一标识, 监控中心据此区分",
+    "strategy": "string — 策略类型描述",
+    "exchange": "string — 交易所名称"
+  },
+
+  "equity": {
+    "current": float,            # adjusted equity (扣除转入转出) ← 最核心
+    "raw_balance": float,        # 交易所原始余额
+    "cumulative_transfers": float,# 累计充提净额
+    "peak": float,               # adjusted equity 历史峰值
+    "drawdown_pct": float,       # 当前回撤 (负数)
+    "unrealized_pnl": float      # 未实现盈亏
+  },
+
+  "positions": {
+    "count": int,
+    "total_unrealized_pnl": float,
+    "details": [...]              # 可选: 逐仓明细
+  },
+
+  "health": {
+    "is_running": bool,
+    "last_heartbeat": "ISO 8601",
+    "uptime_seconds": int,
+    "last_trade_time": "ISO 8601 or null",
+    "last_error": "string or null",
+    "error_count_24h": int
+  },
+
+  "equity_history": [             # 带时间戳的滚动快照
+    {"t": "ISO 8601", "eq": float, "raw": float, "pnl": float, "pos": int},
+    ...  // 建议 >= 4320 条 (5min间隔 × 15天)
+  ]
+}
+```
+
+**审查清单**：
+
+```
+1. monitor_export.json 是否存在：
+   □ bot 目录下是否有 monitor_export.json 的写入逻辑
+   □ 如果不存在 → 🔴（新策略上线前必须实现）
+   □ 如果使用了 trading-monitor-center/monitor_protocol.py 的
+     MonitorExporter → 自动符合标准
+
+2. 必须字段完整性：
+   □ identity.bot_name 是否与 monitor center config 中 short_name 一致
+   □ equity.current 是否是 transfer-adjusted 的（不是 raw balance）
+     → 不做 transfer adjustment 会导致充值时 equity 曲线跳变，
+       误报"巨额盈利"，提现时误报"巨额亏损"
+   □ equity.cumulative_transfers 是否被追踪
+   □ equity_history 是否带时间戳（不能只是 float 数组！）
+   □ health.last_heartbeat 是否每周期更新
+
+3. equity_history 质量：
+   □ 是否带 ISO 8601 时间戳
+   □ 是否使用 adjusted equity（不是 raw balance）
+   □ 保留条数 >= 4320（5min × 15天）
+   □ 是否有裁剪逻辑防止无限增长
+   □ 重启后是否从 export 文件恢复（不从零开始）
+
+4. 写入安全：
+   □ 是否使用 atomic write（tmp + rename）
+   □ 写入失败是否不影响主策略逻辑
+   □ export 是旁路操作，不阻塞主交易循环
+
+5. 一致性：
+   □ export 的 equity.current 与 bot 内部 state 的 equity 一致
+   □ _updated_at 反映最后一次 export 时间
+```
+
+**Beta 作为标杆**：Beta 的 StateManager._append_equity_snapshot() 已实现大部分要求。
+
+**改造成本**：对已有策略，在主循环末尾加 3-5 行代码调用 MonitorExporter.export()。
+
+**与维度 3.8 的关系**：3.8 关注交易决策日志（事后分析），4.5 关注实时状态导出（监控消费）。
+两者互补但不重叠：3.8 记录"为什么做了这个决策"，4.5 导出"当前策略处于什么状态"。
+
 ---
 
 ## 维度五：代码性能
@@ -2295,6 +2400,7 @@ P.2 部署就绪度（如适用）：
 | 4.2 | 持久化频率 | ✅/❌ | 当前频率 + 风险窗口 |
 | 4.3 | 数据一致性 | ✅/❌ | 原子写/版本兼容/精度 |
 | 4.4 | 重启校验 | ✅/❌ | reconciliation 覆盖情况 |
+| 4.5 | 监控导出协议 | ✅/🟡/❌ | monitor_export.json 合规性 |
 
 ### 维度五：代码性能
 | # | 检查项 | 状态 | 备注 |
@@ -2389,3 +2495,4 @@ P.2 部署就绪度（如适用）：
 45. **AI Agent 自主修改代码时是供应链风险的放大器** — alpha-lab 等 AI 研究循环会自主修改策略代码并运行回测。如果 AI 被 prompt injection 或恶意上下文影响（如读取了含恶意指令的"研究论文"），可能引入隐蔽的后门（如在特定日期触发异常交易逻辑）。防御：(a) AI 修改的范围限定在约定文件内（alpha-lab 已有此规则）；(b) 每次里程碑必须经过 code review；(c) `git diff --stat` 验证只改了预期文件；(d) 不要让 AI agent 读取 .env 或密钥文件。
 46. **充值/提现会伪装成策略盈亏** — 如果实盘 bot 直接用 `new_equity - old_equity` 计算 PnL，任何充值都会被计为"盈利"，提现计为"亏损"。这不只是数字失真——它会导致仓位管理基于错误的 equity 做决策（如按 equity 百分比开仓时，充值后仓位会突然变大），回撤保护被错误重置（充值让 equity 创新高，drawdown 归零），实盘-回测对比完全失去意义（回测不存在充提）。防御：维护 `adjusted_equity = raw_equity - cumulative_transfers`，所有下游计算（PnL、drawdown、position sizing）必须基于 adjusted_equity。更隐蔽的资金流还包括：funding fee 结算、空投、跨账户划转、手动交易——这些需要通过交易所 income API 分类识别。
 47. **日志不隔离 = 版本对比是盲猜** — 实盘 bot 如果所有 session 写同一个 `bot.log`，你无法回答"v2.3 和 v2.4 哪个表现好"这种基本问题。更隐蔽的问题：只记录了交易但没记录"为什么没交易"（trade_skipped），导致"那段时间为什么没开仓"永远是个谜。同样危险的是不记录启动时的完整 config——两周后你想复现某次好的表现，却不知道当时用的什么参数。正确做法：每次启动创建独立的 `.jsonl` 文件，文件名含策略版本+时间戳+session_id；启动时 dump 完整 config 和 git hash；每个决策周期记录 trade_executed 和 trade_skipped；关机时记录原因和 session 汇总统计。这套日志不只是用来排错——它是策略迭代的数据基础。
+48. **每个策略的 state 格式不同 = 监控中心的噩梦** — 真实案例：三个策略（Alpha/Beta/Polymarket）的 equity_history 格式完全不同——Alpha 是无时间戳的 float deque，Beta 是带时间戳+transfers 的 dict 列表，Polymarket 只有短窗口 float 列表。监控中心不得不为每个策略写独立的 collector，新增策略的接入成本极高。解决方案：定义统一的 Monitor Protocol——每个 bot 旁路输出一个标准格式的 `monitor_export.json`（不改动 bot 内部的 state 文件），包含 identity、equity（必须是 transfer-adjusted）、positions、health、equity_history（必须带 ISO 8601 时间戳）。关键要求：(a) equity.current 必须是扣除充提后的 adjusted equity，不是 raw balance；(b) equity_history 必须带时间戳，否则无法重建时间轴；(c) 写入必须 atomic（tmp + os.replace），防止监控中心读到半截文件；(d) 旁路导出，export 失败不影响主策略逻辑。
