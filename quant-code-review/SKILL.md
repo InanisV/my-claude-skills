@@ -1778,6 +1778,20 @@ equity = df[df.event == "equity_snapshot"][["ts", "adjusted_equity"]]
 更新频率: 每个交易周期结束时 (或最少每 5 分钟)
 写入方式: atomic write (tmp + os.replace)
 
+🔴 心跳频率硬性要求:
+  _updated_at 必须按策略配置的 heartbeat_timeout 频率持续刷新，
+  即使没有交易发生！监控中心通过此字段判断进程存活。
+  - Alpha (heartbeat_timeout=300s):  每个 DCA 周期必须 export, 最大间隔 ≤ 4分钟
+  - Beta  (heartbeat_timeout=86400s): 即使只做日级再平衡, 至少每12小时刷新一次
+  - Polymarket (heartbeat_timeout=1800s): 每个结算周期必须 export, 最大间隔 ≤ 20分钟
+  - 通用规则: 最大 export 间隔 ≤ heartbeat_timeout × 0.8
+
+  对于循环间隔可能超过 heartbeat_timeout 的策略(如 Beta 日级再平衡),
+  必须实现"空闲心跳"机制 — 在 heartbeat_timeout/2 间隔内刷新 _updated_at。
+  示例: daemon thread 每12小时调用 exporter.export() 导出当前快照。
+
+  违反此要求会导致: HEARTBEAT_LOST 误告警 → 运维疲劳 → 真正告警被忽略
+
 必须字段:
 {
   "_protocol_version": 1,
@@ -1853,6 +1867,20 @@ equity = df[df.event == "equity_snapshot"][["ts", "adjusted_equity"]]
 5. 一致性：
    □ export 的 equity.current 与 bot 内部 state 的 equity 一致
    □ _updated_at 反映最后一次 export 时间
+
+6. 🔴 心跳频率合规（新增 — 必查！）：
+   □ 策略主循环是否在每个周期结束时调用 exporter.export()
+     → 即使本周期没有交易，也必须 export 以刷新 _updated_at
+   □ 策略的实际 export 最大间隔是否 ≤ heartbeat_timeout × 0.8
+     → 参考 monitor center config.py 中 BotConfig.heartbeat_timeout
+   □ 对于循环间隔可能超过 heartbeat_timeout 的策略:
+     是否有空闲心跳机制（daemon thread / timer / scheduler）
+     → 典型案例: Beta 策略日级再平衡, 但 heartbeat_timeout=86400s,
+       必须有线程在两次再平衡之间至少刷新一次（每12小时）
+   □ 如果不合规 → 🔴 关键问题:
+     "策略 X 的 export 间隔可能超过 heartbeat_timeout,
+      会导致 HEARTBEAT_LOST 误告警。需要在主循环每个周期末尾
+      无条件调用 exporter.export(), 或实现空闲心跳线程。"
 ```
 
 **Beta 作为标杆**：Beta 的 StateManager._append_equity_snapshot() 已实现大部分要求。
@@ -2422,6 +2450,12 @@ P.2 部署就绪度（如适用）：
 - equity.current 是否 transfer-adjusted：[是/否/不适用]
 - equity_history 是否带时间戳：[是/否]
 - 写入方式是否 atomic：[是/否]
+- 🔴 心跳频率合规：[是/否]
+  - 策略 heartbeat_timeout：[X 秒]
+  - 实际最大 export 间隔：[Y 秒]
+  - 是否 ≤ heartbeat_timeout × 0.8：[是/否]
+  - 空闲心跳机制（仅长周期策略需要）：[有/无/不适用]
+  - 如果否 → 🔴 关键问题: 会导致 HEARTBEAT_LOST 误告警
 - 修复建议：[具体代码位置和改动方案]
 ```
 
