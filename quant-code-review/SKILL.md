@@ -1751,23 +1751,70 @@ equity = df[df.event == "equity_snapshot"][["ts", "adjusted_equity"]]
 这是整个防御体系中投入产出比最高的一层。提前 7-30 天知道下架，
 意味着你可以在流动性完全正常的市场中从容退出，零额外成本。
 
-1. 公告数据源接入：
-   □ 是否有定期（推荐每 1-4 小时）抓取交易所公告的机制
+1. 公告数据源接入（每个在用的交易所都必须有）：
+   □ 是否有定期抓取交易所公告的机制
+   □ 每个交易所是否都有对应的公告源（不能只覆盖 Binance 而遗漏 Hyperliquid）
+
      数据源参考（按交易所）：
-     - Binance:
+
+     Binance（有结构化 API，最容易接入）：
        · 公告页 API: https://www.binance.com/bapi/composite/v1/public/cms/article/list/query
          参数: type=1, catalogId=48 (期货公告), pageSize=20
-       · RSS: https://www.binance.com/en/feed/news (需过滤)
-       · 也可直接抓 https://www.binance.com/en/support/announcement/delisting
-     - Hyperliquid:
-       · 无官方公告 API，主要通过 Discord/Twitter 发布
-       · 可用 Discord webhook 或 Twitter API 监听官方账号
-     - OKX: https://www.okx.com/api/v5/support/announcements (未来扩展)
-     - Bybit: https://api.bybit.com/v5/announcements (未来扩展)
+       · 下架专题页: https://www.binance.com/en/support/announcement/delisting
+       · 推荐频率: 每 6 小时（公告提前 7-30 天，6h 延迟完全可接受）
+
+     Hyperliquid（无公告 API，需监听社交渠道）：
+       · 官方 Discord: #announcements 频道
+         → 用 Discord Bot 监听，消息通过 webhook 推送到监控服务
+       · 官方 Twitter/X: @HyperliquidX
+         → 可用 Twitter API v2 filtered stream 或定时拉取
+       · 备选: 关注 Hyperliquid 的 Medium/Blog
+       · 推荐频率: Discord webhook 实时推送，Twitter 每 2 小时拉取
+       · ⚠️ Hyperliquid 下架较少但一旦发生没有结构化提前通知，
+         社交渠道是唯一来源，不可跳过
+
+     OKX（未来扩展）：
+       · API: https://www.okx.com/api/v5/support/announcements
+       · 推荐频率: 每 6 小时
+
+     Bybit（未来扩展）：
+       · API: https://api.bybit.com/v5/announcements
+       · 推荐频率: 每 6 小时
+
+     通用原则（新增交易所时的检查项）：
+       · 该交易所是否有结构化公告 API？→ 有则直接调用
+       · 如果没有 → 是否有 RSS / Discord / Twitter 可监听？
+       · 完全没有公告渠道 → 🔴 标记为高风险，需人工定期巡查
+
    □ 公告抓取是否独立于 bot 主循环（bot 挂了公告监控仍在运行）
    □ 抓取失败时是否有告警（不能静默失败，否则防线形同虚设）
 
-2. LLM 智能解析：
+2. 两步解析：关键词预过滤 + LLM 精析（成本控制的核心）：
+
+   交易所每天发 5-20 条公告，绝大多数与下架无关（活动、上新币、API 升级等）。
+   如果每条都调 LLM，既浪费钱也增加延迟。正确做法是两步：
+
+   Step A — 关键词预过滤（零成本，本地执行）：
+   □ 是否有关键词过滤层，只将"疑似相关"公告送进 LLM
+   □ 关键词列表是否覆盖中英文和各种表述：
+
+     DELIST_KEYWORDS = [
+         # 英文
+         "delist", "delisting", "remove", "removal",
+         "halt", "suspend", "cease trading",
+         "last day of trading", "settle", "settlement",
+         "contract migration", "contract swap",
+         "margin tier", "maintenance margin",
+         "monitoring tag",
+         # 中文
+         "下架", "摘牌", "停止交易", "暂停交易",
+         "合约迁移", "保证金调整",
+     ]
+
+   □ 过滤逻辑：title + body 中出现任一关键词 → 送 LLM
+     大约 95% 的公告会被过滤掉，每天实际调 LLM 0-2 次
+
+   Step B — LLM 结构化提取（仅对关键词命中的公告）：
    □ 抓取到的公告是否经过 LLM 分析，提取结构化信息
    □ LLM prompt 是否包含当前持仓标的列表（只关心影响我们的公告）
    □ LLM 需要提取的关键字段：
@@ -1777,19 +1824,71 @@ equity = df[df.event == "equity_snapshot"][["ts", "adjusted_equity"]]
      - action_required: str           — 需要用户做什么
      - urgency: high/medium/low       — 紧急程度
      - raw_summary: str               — 公告摘要
+   □ 是否要求 LLM 输出 JSON（方便程序直接解析）
    □ LLM 解析结果是否持久化（防止重复处理同一条公告）
    □ 是否有 fallback：LLM 不确定时标记为 "needs_human_review" 而非忽略
 
+   LLM 模型选择与成本分析：
+     这个任务本质是"短文本分类 + 实体提取"，不需要强推理能力。
+     推荐 OpenAI gpt-4.1-nano（截至 2025 年最便宜的可用模型）：
+       · 输入 $0.10 / 1M tokens，输出 $0.40 / 1M tokens
+       · 单次调用：~500 tokens 输入 + ~200 tokens 输出 ≈ $0.00013
+       · 月成本估算（有关键词预过滤的情况下）：
+         每天 0-2 次 LLM 调用 × 30 天 = 0-60 次/月
+         月成本 ≈ $0.008（不到 1 美分）
+       · 备选: gpt-4o-mini（$0.15/$0.60），能力更强但贵 50%
+       · 不推荐: gpt-4o / claude-sonnet 等大模型 — 大材小用，浪费成本
+
+     ⚠️ 如果没有关键词预过滤，直接每条公告调 LLM：
+       每天 10-20 条 × 30 天 = 300-600 次/月
+       月成本 ≈ $0.04-$0.08（仍然很便宜，但无谓浪费）
+
    LLM prompt 参考：
    ```
-   你是一个交易所公告分析助手。请分析以下公告，判断是否会影响这些交易对：
-   {current_holdings}
+   你是一个交易所公告分析助手。请分析以下公告，判断是否涉及交易对的
+   下架、暂停、迁移、或保证金调整。
 
-   如果有影响，提取：受影响标的、事件类型（下架/暂停/迁移/保证金调整）、
-   截止时间、需要的操作。如果不确定某个标的是否受影响，宁可误报也不要漏报。
+   我当前持有的交易对：{current_holdings}
+
+   请以 JSON 格式回答：
+   {{
+     "affects_holdings": true/false,
+     "affected_symbols": ["SYM1", "SYM2"],
+     "event_type": "delist/halt/migration/margin_change/other",
+     "deadline": "2026-05-01T00:00:00Z 或 null",
+     "urgency": "high/medium/low",
+     "summary": "一句话摘要"
+   }}
+
+   如果不确定某个标的是否受影响，宁可误报也不要漏报。
+   如果公告与交易对下架/暂停/迁移完全无关，直接返回 affects_holdings: false。
 
    公告内容：
    {announcement_text}
+   ```
+
+   监控频率汇总（平衡检测速度和资源消耗）：
+   ```
+   ┌───────────────────┬─────────────┬──────────────────┬────────────┐
+   │ 步骤              │ 频率        │ 成本             │ 原因       │
+   ├───────────────────┼─────────────┼──────────────────┼────────────┤
+   │ 抓取公告(有API)   │ 每 6 小时   │ 免费(HTTP GET)   │ 下架公告提前│
+   │ (Binance/OKX等)   │             │                  │ 7-30天，6h │
+   │                   │             │                  │ 延迟够了   │
+   ├───────────────────┼─────────────┼──────────────────┼────────────┤
+   │ 抓取公告(社交渠道)│ 实时推送    │ 免费(webhook)    │ HL 等无API │
+   │ (Discord/Twitter) │ 或每 2 小时 │ 或免费(API pull)  │ 的交易所   │
+   ├───────────────────┼─────────────┼──────────────────┼────────────┤
+   │ 关键词预过滤      │ 每条公告    │ 免费(本地)       │ 过滤95%    │
+   │                   │             │                  │ 无关公告   │
+   ├───────────────────┼─────────────┼──────────────────┼────────────┤
+   │ LLM 精析          │ 仅命中公告  │ ~$0.00013/次     │ 月均<$0.01 │
+   │                   │ (0-2次/天)  │ (gpt-4.1-nano)   │            │
+   ├───────────────────┼─────────────┼──────────────────┼────────────┤
+   │ API 状态检查      │ 每次rebalance│ 免费(交易所API)  │ 兜底第一层 │
+   │ (第二层)          │ + 每4小时   │                  │            │
+   └───────────────────┴─────────────┴──────────────────┴────────────┘
+   整体月成本：< $0.01（几乎免费）
    ```
 
 3. 检测到影响后的自动化响应：
@@ -1853,57 +1952,128 @@ equity = df[df.event == "equity_snapshot"][["ts", "adjusted_equity"]]
 **跨交易所适配建议**：
 
 ```python
-# 公告监控不需要复杂的抽象层——每个交易所的公告来源差异太大，
-# 用简单的插件模式即可：
+import hashlib, json, re, requests
+from datetime import datetime, timezone
+from openai import OpenAI
 
+# ── 关键词预过滤 ──────────────────────────────────────────────
+DELIST_KEYWORDS = re.compile(
+    r"delist|removal|remove trading|halt|suspend|cease trad|"
+    r"last day of trading|settl|migration|contract swap|"
+    r"margin tier|maintenance margin|monitoring tag|"
+    r"下架|摘牌|停止交易|暂停交易|合约迁移|保证金调整",
+    re.IGNORECASE,
+)
+
+def passes_keyword_filter(text: str) -> bool:
+    """零成本本地过滤，约 95% 的公告在这里被丢弃"""
+    return bool(DELIST_KEYWORDS.search(text))
+
+
+# ── 公告数据源（每个交易所一个插件）────────────────────────────
 class AnnouncementSource:
-    """每个交易所实现一个"""
-    def fetch_recent(self, since: datetime) -> list[str]:
-        """返回原始公告文本列表"""
+    """每个交易所实现一个，只需实现 fetch_recent"""
+    exchange: str
+    def fetch_recent(self, since: datetime) -> list[dict]:
+        """返回 [{"title": str, "body": str, "time": datetime}]"""
         ...
 
 class BinanceAnnouncements(AnnouncementSource):
+    exchange = "binance"
     def fetch_recent(self, since):
         resp = requests.get(
             "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query",
             params={"type": 1, "catalogId": 48, "pageSize": 20}
         )
-        return [a["title"] + "\n" + a["body"] for a in resp.json()["data"]["articles"]
+        return [{"title": a["title"], "body": a.get("body", ""),
+                 "time": parse_time(a["releaseDate"])}
+                for a in resp.json()["data"]["articles"]
                 if parse_time(a["releaseDate"]) > since]
 
+class HyperliquidAnnouncements(AnnouncementSource):
+    """Hyperliquid 无公告 API，通过 Discord webhook 接收推送。
+    Discord Bot 将 #announcements 频道的新消息写入本地 JSON 队列文件，
+    本类从该文件读取。如果没有 Discord Bot，fallback 到手动检查。"""
+    exchange = "hyperliquid"
+    def __init__(self, queue_file="./hl_announcements.json"):
+        self.queue_file = queue_file
+    def fetch_recent(self, since):
+        try:
+            with open(self.queue_file) as f:
+                msgs = json.load(f)
+            return [m for m in msgs if parse_time(m["time"]) > since]
+        except FileNotFoundError:
+            return []  # 没有 Discord Bot 时静默（第二层兜底）
+
+
+# ── LLM 解析（gpt-4.1-nano，单次 < $0.0002）────────────────────
+LLM_MODEL = "gpt-4.1-nano"  # 最便宜的可用模型，足够做分类+实体提取
+# 备选: "gpt-4o-mini" — 能力更强，贵 ~50%，复杂公告场景可升级
+
+DELIST_PROMPT = """你是一个交易所公告分析助手。请分析以下公告，判断是否涉及交易对的
+下架、暂停、迁移、或保证金调整。
+
+我当前持有的交易对：{held_symbols}
+
+请以 JSON 格式回答（不要包含其他内容）：
+{{"affects_holdings": true/false, "affected_symbols": ["SYM1"],
+  "event_type": "delist/halt/migration/margin_change/other",
+  "deadline": "ISO8601 或 null", "urgency": "high/medium/low",
+  "summary": "一句话摘要"}}
+
+宁可误报也不要漏报。如果与下架/暂停/迁移完全无关，返回 affects_holdings: false。
+
+公告标题：{title}
+公告内容：{body}"""
+
+
+# ── 主监控逻辑 ─────────────────────────────────────────────────
 class DelistingMonitor:
     def __init__(self, sources: list[AnnouncementSource],
-                 llm_client, held_symbols: list[str], notifier):
+                 held_symbols: list[str], notifier,
+                 openai_api_key: str):
         self.sources = sources
-        self.llm = llm_client
         self.held_symbols = held_symbols
         self.notifier = notifier
-        self.processed_hashes = set()  # 防止重复处理
+        self.client = OpenAI(api_key=openai_api_key)
+        self.processed = set()  # 已处理公告的 hash
 
     def check(self):
+        """定期调用（Binance 每 6h，HL Discord 实时推送后调用）"""
         for source in self.sources:
-            announcements = source.fetch_recent(since=self._last_check_time)
-            for text in announcements:
-                text_hash = hashlib.md5(text.encode()).hexdigest()
-                if text_hash in self.processed_hashes:
+            for ann in source.fetch_recent(since=self._last_check):
+                text = ann["title"] + "\n" + ann["body"]
+                h = hashlib.md5(text.encode()).hexdigest()
+                if h in self.processed:
                     continue
-                self.processed_hashes.add(text_hash)
+                self.processed.add(h)
 
-                # LLM 解析
-                result = self.llm.analyze(
-                    prompt=DELIST_ANALYSIS_PROMPT,
-                    context={"announcement": text,
-                             "held_symbols": self.held_symbols}
-                )
-                if result.affects_holdings:
+                # Step A: 关键词预过滤（免费，过滤 95% 无关公告）
+                if not passes_keyword_filter(text):
+                    continue
+
+                # Step B: LLM 精析（仅关键词命中的公告，每天 0-2 次）
+                result = self._llm_analyze(ann)
+                if result.get("affects_holdings"):
                     self.notifier.send_urgent(
-                        f"⚠️ 下架预警: {result.affected_symbols}\n"
-                        f"截止时间: {result.deadline}\n"
-                        f"建议操作: {result.action_required}"
+                        f"⚠️ [{source.exchange}] 下架预警\n"
+                        f"标的: {result['affected_symbols']}\n"
+                        f"类型: {result['event_type']}\n"
+                        f"截止: {result['deadline']}\n"
+                        f"摘要: {result['summary']}"
                     )
-                    # 将受影响标的加入 pending_delist
-                    for sym in result.affected_symbols:
-                        self._add_to_pending_delist(sym, result.deadline)
+
+    def _llm_analyze(self, ann: dict) -> dict:
+        resp = self.client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[{"role": "user", "content": DELIST_PROMPT.format(
+                held_symbols=", ".join(self.held_symbols),
+                title=ann["title"], body=ann["body"]
+            )}],
+            response_format={"type": "json_object"},
+            temperature=0,
+        )
+        return json.loads(resp.choices[0].message.content)
 ```
 
 **回测中的考量**：
