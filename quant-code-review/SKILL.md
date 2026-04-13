@@ -2,7 +2,7 @@
 name: quant-code-review
 description: |
   量化交易系统代码审计 — 在每次重大代码改动后自动执行全面审查。
-  覆盖十个维度：(P) 项目阶段与部署就绪度（前置，最先执行），(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐，(2) 回测引擎真实性（含 2.10 数据真实性审计 + 2.11 Margin-Ratio 自动减仓），(3) 实盘运维鲁棒性（含 3.6 MarginMonitor 实时保证金监控 + 3.7 账户资金流水过滤 + 3.8 实盘日志体系），(4) 状态持久化完整性（含 🔴4.5 Monitor Protocol 监控导出协议 — 高优先级必查），(5) 代码性能，(6) AI协作代码质量，(7) 供应链与运行时安全。
+  覆盖十个维度：(P) 项目阶段与部署就绪度（前置，最先执行），(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐（含 🔴1.4 策略部署缺口检测 — 高优先级），(2) 回测引擎真实性（含 2.10 数据真实性审计 + 2.11 Margin-Ratio 自动减仓），(3) 实盘运维鲁棒性（含 3.6 MarginMonitor 实时保证金监控 + 3.7 账户资金流水过滤 + 3.8 实盘日志体系 + 3.9 交易对下架防御），(4) 状态持久化完整性（含 🔴4.5 Monitor Protocol 监控导出协议 — 高优先级必查），(5) 代码性能，(6) AI协作代码质量，(7) 供应链与运行时安全。
 
   🔴 特别注意：维度 4.5（Monitor Protocol 监控导出协议）是高优先级必查项！
   每个实盘策略都必须实现 monitor_export.json 标准导出。审查时如果发现缺失，
@@ -307,6 +307,58 @@ description: |
 - 回测天然有完整历史数据，但实盘需要主动fetch足够多
 - 新增模块的 lookback 窗口未纳入 fetch 计算（被其他更大窗口隐式覆盖≠安全）
 ```
+
+### 1.4 策略部署缺口检测（Strategy Deployment Gap）🔴 高优先级
+
+**血的教训（2026-04-10 真实案例）：** R4 walk-forward LogReg 信号引擎在 Alpha Lab 中
+完成了 21 轮实验验证（WR 57.6%, CAGR >>1000%），代码已合并到仓库（r4_signal_engine.py、
+contrarian_filter.py 都在 src/factors/ 下），但 bot.py 的信号生成流程仍在调用旧的
+V20 generate_v20_signal()（CAGR 仅 217%）。结果：实盘持续亏损数周，所有人都在查
+执行层面的 bug（手续费、fill rate、滑点），没有人想过"我们根本没有在跑那个好策略"。
+
+**为什么这个问题极难发现：**
+- **锚定效应**：R4 代码已合并，心理上认为"已经部署了"
+- **沉没成本**：已经花大量时间在执行层面排查，不愿承认方向错了
+- **局部视角**：每次 review 只看本次改动的 diff，不会主动检查"仓库里有没有未上线的好策略"
+- **研发脱节**：Alpha Lab 的输出（config JSON + 独立模块）和实盘的输入（bot.py 信号流）之间没有自动化的桥接检查
+
+```
+自动化检测方法（5 步扫描）：
+
+Step 1 — 扫描部署清单中的未完成项：
+  grep -rn "TODO.*wire\|TODO.*deploy\|TODO.*switch\|TODO.*port\|TODO.*integrate" config/ docs/
+  → 如果 research config 的 deployment_checklist 有未勾选的 P0 项，立即标红
+
+Step 2 — 扫描仓库中"存在但未被调用"的信号引擎：
+  # 找到所有 *_signal_engine.py 或 *_engine.py
+  # 检查它们是否被 bot.py / main.py import 和实例化
+  grep -rn "import.*SignalEngine\|from.*signal_engine" src/bot.py
+  → 如果存在信号引擎模块但未被主流程 import，标红
+
+Step 3 — 对比 research config 与 live config 的策略类型：
+  # research config 中声明的 signal_engine.type
+  # vs bot.py 中实际实例化的信号引擎类
+  → 如果不一致，标红并报告差异
+
+Step 4 — 检查 _production_status 字段：
+  grep -rn "_production_status\|DEPLOYED\|NOT_DEPLOYED" config/
+  → 如果 research config 标记为 validated 但 production_status ≠ DEPLOYED，标红
+
+Step 5 — 实盘亏损时的系统性诊断：
+  当用户报告"实盘亏损"时，在检查执行层面（手续费、fill、滑点）之前，
+  必须先问：
+  (a) 实盘跑的是哪个信号引擎？
+  (b) 仓库里最好的信号引擎是哪个？
+  (c) 它们是同一个吗？
+  → 如果不是同一个，这就是根因，不需要继续查执行层面
+```
+
+**发现部署缺口后的行动优先级：**
+1. 🔴 立即停止在执行层面的排查（避免沉没成本陷阱）
+2. 🔴 评估部署缺口的影响：旧策略 CAGR vs 新策略 CAGR
+3. 🟡 制定部署计划：将研究策略接入实盘信号流
+4. 🟡 部署后端到端验证：确认实盘输出与研究输出一致
+5. 🟢 建立防复发机制：在 CI/CD 或 review 流程中加入 Step 1-4 的自动检查
 
 ---
 
@@ -1663,6 +1715,238 @@ equity = df[df.event == "equity_snapshot"][["ts", "adjusted_equity"]]
 - 这样同一套分析脚本可以同时分析回测和实盘结果
 - 如果回测日志和实盘日志格式不一致 → 标记为 🟡，建议统一
 
+### 3.9 交易对生命周期防御（Symbol Lifecycle Defense）
+
+**为什么重要**：交易所会下架交易对（delist）、暂停交易（halt）、迁移合约（migration）、
+调整保证金梯度（margin tier change）。如果 bot 正好持有受影响的仓位，且代码中没有
+防御机制，后果从"订单被拒"到"仓位被强制清算且无法恢复"不等。这是一个**低频但致命**的风险——
+平时从来不会触发，但触发一次就可能造成严重损失。
+
+**真实场景**：
+- 交易所宣布 7 天后下架某合约 → 最后 48 小时流动性枯竭，滑点暴增，bot 仍在正常交易
+- 某币种被标记为"监控中"（monitoring tag）→ 预示即将下架，但 bot 不感知
+- 永续合约迁移到新的合约地址 → 旧合约停止交易，bot 仍在向旧地址发单
+- 保证金梯度调整（提高 MMR）→ bot 的仓位突然不满足新的保证金要求，面临清算
+
+**涵盖的事件类型**（不只是下架）：
+
+```
+致命级（必须处理）：
+  - Delisting（下架）：交易对永久移除，到期后强制清算
+  - Trading halt（暂停交易）：临时停止，可能恢复也可能转为下架
+  - Contract migration（合约迁移）：旧合约失效，必须切换到新合约
+
+高风险级（应当处理）：
+  - Margin tier change（保证金梯度调整）：MMR 提高 → 相同仓位需要更多保证金
+  - Symbol rename / ticker change：代码中硬编码的 symbol 突然匹配不到
+  - Settlement rule change：结算时间、结算方式变更
+
+信息级（建议关注）：
+  - Monitoring tag（监控标记）：交易所对异常币种的预警，往往是下架前兆
+  - Liquidity warning：交易深度大幅下降
+  - Open interest 骤降：大量用户在平仓，通常意味着市场对该币种信心崩塌
+```
+
+**审查清单**：
+
+```
+1. 标的池健康检查（开仓前的防线）：
+   □ 每次选币/开仓前，是否调用交易所 API 检查 symbol 状态
+     - Binance: GET /fapi/v1/exchangeInfo → symbol.status == "TRADING"
+     - Hyperliquid: meta endpoint → 确认 symbol 在 active perps 列表中
+     - 通用模式：abstract 一个 is_symbol_tradeable(symbol) 方法
+   □ 是否检查了 symbol 的附加标签（如 Binance 的 "MONITORING" tag）
+   □ 标的池是否从交易所实时获取（而非硬编码列表）
+     → 硬编码列表中的 symbol 被下架后，bot 不会知道
+   □ 如果 symbol 不可交易，是否优雅地跳过而非崩溃
+
+2. 持仓健康巡检（定期的防线）：
+   □ 是否有定期（推荐每 1-4 小时）的持仓健康检查逻辑：
+     for symbol in current_positions:
+         if not is_symbol_tradeable(symbol):
+             trigger_emergency_exit(symbol)
+   □ 检查间隔是否与下架公告的典型提前期匹配
+     - 大多数交易所提前 7-30 天公告，但最后 48 小时才真正危险
+     - 推荐：每 4 小时全量检查一次 + 每次 rebalance 前检查持仓标的
+   □ 是否区分处理不同状态：
+     - TRADING → 正常
+     - PRE_DELIVERING / SETTLING → ⚠️ 即将下架，触发平仓计划
+     - HALT / BREAK → ⚠️ 暂停交易，发送告警，暂停该标的操作
+     - DELISTED / 不在列表中 → 🔴 紧急，检查是否还有残余仓位
+
+3. 紧急退出机制：
+   □ 检测到下架/暂停后，是否有自动平仓逻辑
+   □ 平仓策略是否考虑了流动性：
+     - 下架前最后几天流动性可能极差
+     - 不要用大额 market order（滑点可能巨大）
+     - 推荐：先尝试 limit order（略微让利），设超时（如 5 分钟），
+       超时未成交则转 market order
+     - 如果是多个仓位需要同时平，按流动性排序（先平流动性最差的）
+   □ 紧急退出后是否更新标的池（将该 symbol 加入黑名单/排除列表）
+   □ 平仓结果是否记录到日志和 state file
+
+4. 告警与通知：
+   □ 检测到以下事件时是否发送即时通知：
+     - 持仓标的状态变为非 TRADING
+     - 标的被加上 monitoring 标签
+     - 标的池中的可用标的数量低于阈值
+   □ 通知内容是否包含：受影响标的、当前仓位、建议操作、deadline
+   □ 是否有独立于 bot 的外部监控（bot 自身崩溃时仍能发现问题）
+
+5. 交易所 API 适配层（跨交易所通用性）：
+   □ symbol 状态查询是否抽象为统一接口：
+     class ExchangeAdapter:
+         def get_symbol_status(symbol) -> SymbolStatus  # 标准化枚举
+         def get_tradeable_symbols() -> list[str]        # 完整可交易列表
+         def get_symbol_info(symbol) -> SymbolInfo        # 保证金梯度等元数据
+   □ SymbolStatus 是否有标准化枚举（不依赖具体交易所的字符串）：
+     ACTIVE, PRE_DELIST, HALTED, DELISTED, UNKNOWN
+   □ 新增交易所时，是否只需实现 adapter 而无需改动策略逻辑
+```
+
+**各交易所 API 参考**：
+
+```
+Binance Futures:
+  - GET /fapi/v1/exchangeInfo → symbols[].status
+    状态值: TRADING, PRE_DELIVERING, DELIVERING, SETTLING
+  - 下架公告: 通常提前 7-30 天，最后 48h 进入 SETTLING
+  - 额外信号: symbol 被标记 "MONITORING" → 高概率即将下架
+
+Hyperliquid:
+  - POST /info (action: "meta") → universe[] 只包含活跃合约
+  - 如果 symbol 不在 universe 中 → 已下架或不存在
+  - Hyperliquid 目前无 monitoring 标签机制
+
+OKX (未来扩展):
+  - GET /api/v5/public/instruments?instType=SWAP → instId, state
+  - 状态值: live, suspend, preopen, settlement
+
+Bybit (未来扩展):
+  - GET /v5/market/instruments-info → symbol, status
+  - 状态值: Trading, Settling, Closed
+```
+
+**参考实现（SymbolHealthChecker 伪代码）**：
+
+```python
+from enum import Enum
+from dataclasses import dataclass
+
+class SymbolStatus(Enum):
+    ACTIVE = "active"           # 正常交易中
+    PRE_DELIST = "pre_delist"   # 即将下架（交易仍可用但应尽快平仓）
+    HALTED = "halted"           # 暂停交易（无法下单，等待恢复或下架）
+    DELISTED = "delisted"       # 已下架（完全不可用）
+    UNKNOWN = "unknown"         # 无法确定（API 异常等）
+
+@dataclass
+class SymbolAlert:
+    symbol: str
+    status: SymbolStatus
+    message: str
+    action_required: str        # "close_position" / "monitor" / "none"
+    deadline: str | None        # 下架截止时间（如有）
+
+class SymbolHealthChecker:
+    def __init__(self, exchange_adapter, positions_getter, notifier):
+        self.exchange = exchange_adapter
+        self.get_positions = positions_getter
+        self.notifier = notifier
+        self.blacklist: set[str] = set()         # 已知不可交易的标的
+        self._last_full_check = 0
+
+    def check_before_open(self, symbol: str) -> bool:
+        """开仓前检查 — 快速拒绝不可交易的标的"""
+        if symbol in self.blacklist:
+            return False
+        status = self.exchange.get_symbol_status(symbol)
+        if status != SymbolStatus.ACTIVE:
+            self.blacklist.add(symbol)
+            logger.warning(f"Symbol {symbol} is {status.value}, skipping")
+            return False
+        return True
+
+    def periodic_health_check(self) -> list[SymbolAlert]:
+        """定期巡检所有持仓标的的健康状态"""
+        alerts = []
+        positions = self.get_positions()
+        tradeable = set(self.exchange.get_tradeable_symbols())
+
+        for pos in positions:
+            symbol = pos.symbol
+
+            # 1. 最严重：持仓标的已不在可交易列表中
+            if symbol not in tradeable:
+                alert = SymbolAlert(
+                    symbol=symbol,
+                    status=SymbolStatus.DELISTED,
+                    message=f"{symbol} no longer in tradeable list!",
+                    action_required="close_position",
+                    deadline=None,
+                )
+                alerts.append(alert)
+                self.notifier.send_urgent(alert)
+                continue
+
+            # 2. 检查具体状态
+            status = self.exchange.get_symbol_status(symbol)
+            if status == SymbolStatus.PRE_DELIST:
+                alert = SymbolAlert(
+                    symbol=symbol,
+                    status=status,
+                    message=f"{symbol} entering pre-delist phase",
+                    action_required="close_position",
+                    deadline=self.exchange.get_delist_deadline(symbol),
+                )
+                alerts.append(alert)
+                self.notifier.send_urgent(alert)
+            elif status == SymbolStatus.HALTED:
+                alert = SymbolAlert(
+                    symbol=symbol,
+                    status=status,
+                    message=f"{symbol} trading halted",
+                    action_required="monitor",
+                    deadline=None,
+                )
+                alerts.append(alert)
+                self.notifier.send_warning(alert)
+
+        return alerts
+
+    def emergency_exit(self, symbol: str, position):
+        """紧急平仓流程 — 考虑流动性"""
+        # Step 1: 尝试 limit order（让利 0.5%）
+        side = "sell" if position.side == "long" else "buy"
+        limit_price = position.mark_price * (0.995 if side == "sell" else 1.005)
+        order = self.exchange.place_order(
+            symbol=symbol, side=side, qty=position.size,
+            price=limit_price, type="limit", reduce_only=True
+        )
+        # Step 2: 等待 5 分钟
+        if not self._wait_for_fill(order, timeout=300):
+            # Step 3: 超时转 market order
+            self.exchange.cancel_order(order.id)
+            self.exchange.place_order(
+                symbol=symbol, side=side, qty=position.size,
+                type="market", reduce_only=True
+            )
+        # Step 4: 更新黑名单和标的池
+        self.blacklist.add(symbol)
+        logger.critical(f"Emergency exit: {symbol} closed, added to blacklist")
+```
+
+**回测中的考量**：
+- **存活者偏差（Survivorship Bias）**：如果回测只使用当前仍在交易的标的，
+  会系统性地排除掉那些因表现差而被下架的币种，导致回测结果虚高
+  → 回测标的池应包含历史上存在但已下架的标的（需要历史数据支持）
+- **下架事件模拟**：回测中是否模拟了持仓标的下架的场景？
+  → 至少应检查：如果某个标的突然从回测标的池中消失，策略是否能正常处理
+  → 如果回测不处理，但实盘也不处理 → 🔴 双重盲区
+- **历史数据断裂**：已下架标的的历史数据可能在交易所 API 上不再可用
+  → 如果回测数据源依赖实时 API 获取历史数据，已下架标的会获取失败
+  → 需要本地缓存或使用第三方历史数据源
+
 ---
 
 ## 维度四：状态持久化完整性
@@ -2420,7 +2704,7 @@ P.2 部署就绪度（如适用）：
 - 通知机制：[Telegram(✅)/日志(🟡)/无(🔴)]
 
 ### 维度三：运维鲁棒性
-[逐项结果，含 3.6 MarginMonitor + 3.7 资金流水过滤 + 3.8 日志体系]
+[逐项结果，含 3.6 MarginMonitor + 3.7 资金流水过滤 + 3.8 日志体系 + 3.9 交易对生命周期]
 - 3.7 Transfer Isolation：[已实现(✅)/部分(🟡)/未实现(🔴)]
 - adjusted_equity 使用：[全部下游(✅)/部分(🟡)/未使用(🔴)]
 - unexplained_delta 检测：[有(✅)/无(🔴)]
@@ -2432,6 +2716,11 @@ P.2 部署就绪度（如适用）：
 - 决策日志（含 skip 原因）：[有(✅)/仅交易(🟡)/无(🔴)]
 - 定期 equity 快照：[有(✅)/无(🔴)]
 - 关机原因记录：[有(✅)/无(🔴)]
+- 3.9 交易对生命周期防御：[完备(✅)/部分(🟡)/未实现(🔴)]
+- 开仓前 symbol 状态检查：[有(✅)/无(🔴)]
+- 持仓定期健康巡检：[有(✅)/无(🔴)]
+- 紧急退出机制：[有(✅)/无(🔴)]
+- ExchangeAdapter 抽象层：[有(✅)/硬编码(🟡)/无(🔴)]
 
 ### 维度四：状态持久化完整性
 | # | 检查项 | 状态 | 备注 |
@@ -2553,3 +2842,7 @@ P.2 部署就绪度（如适用）：
 46. **充值/提现会伪装成策略盈亏** — 如果实盘 bot 直接用 `new_equity - old_equity` 计算 PnL，任何充值都会被计为"盈利"，提现计为"亏损"。这不只是数字失真——它会导致仓位管理基于错误的 equity 做决策（如按 equity 百分比开仓时，充值后仓位会突然变大），回撤保护被错误重置（充值让 equity 创新高，drawdown 归零），实盘-回测对比完全失去意义（回测不存在充提）。防御：维护 `adjusted_equity = raw_equity - cumulative_transfers`，所有下游计算（PnL、drawdown、position sizing）必须基于 adjusted_equity。更隐蔽的资金流还包括：funding fee 结算、空投、跨账户划转、手动交易——这些需要通过交易所 income API 分类识别。
 47. **日志不隔离 = 版本对比是盲猜** — 实盘 bot 如果所有 session 写同一个 `bot.log`，你无法回答"v2.3 和 v2.4 哪个表现好"这种基本问题。更隐蔽的问题：只记录了交易但没记录"为什么没交易"（trade_skipped），导致"那段时间为什么没开仓"永远是个谜。同样危险的是不记录启动时的完整 config——两周后你想复现某次好的表现，却不知道当时用的什么参数。正确做法：每次启动创建独立的 `.jsonl` 文件，文件名含策略版本+时间戳+session_id；启动时 dump 完整 config 和 git hash；每个决策周期记录 trade_executed 和 trade_skipped；关机时记录原因和 session 汇总统计。这套日志不只是用来排错——它是策略迭代的数据基础。
 48. **每个策略的 state 格式不同 = 监控中心的噩梦** — 真实案例：三个策略（Alpha/Beta/Polymarket）的 equity_history 格式完全不同——Alpha 是无时间戳的 float deque，Beta 是带时间戳+transfers 的 dict 列表，Polymarket 只有短窗口 float 列表。监控中心不得不为每个策略写独立的 collector，新增策略的接入成本极高。解决方案：定义统一的 Monitor Protocol——每个 bot 旁路输出一个标准格式的 `monitor_export.json`（不改动 bot 内部的 state 文件），包含 identity、equity（必须是 transfer-adjusted）、positions、health、equity_history（必须带 ISO 8601 时间戳）。关键要求：(a) equity.current 必须是扣除充提后的 adjusted equity，不是 raw balance；(b) equity_history 必须带时间戳，否则无法重建时间轴；(c) 写入必须 atomic（tmp + os.replace），防止监控中心读到半截文件；(d) 旁路导出，export 失败不影响主策略逻辑。
+49. **交易对下架是低频致命风险——平时不触发，触发一次就爆** — 交易所定期下架低流动性或有问题的交易对，通常提前 7-30 天公告。但如果 bot 不主动检查 symbol 状态，它会在流动性枯竭的最后 48 小时仍然正常交易（滑点暴增），甚至在交易对已经进入 SETTLING 状态后尝试开仓（订单被拒，但如果错误处理不好可能导致状态混乱）。更隐蔽的场景：Binance 的 "MONITORING" 标签是下架前兆，但 API 中不会改变 symbol.status，只在公告中提及。防御架构：(a) 开仓前检查 symbol 状态（快速拒绝）；(b) 每 1-4 小时巡检所有持仓标的是否仍可交易；(c) 检测到异常状态后触发紧急退出（先 limit 后 market，考虑流动性）；(d) 抽象 ExchangeAdapter 层，用标准化的 SymbolStatus 枚举屏蔽各交易所差异。同类事件还包括：交易暂停（halt）、合约迁移、保证金梯度调整、symbol 改名。回测中的存活者偏差也与此相关——只用当前仍在交易的标的做回测会系统性高估策略表现。
+50. **Strategy Deployment Gap：research 完成 ≠ 部署完成** — 2026-04-10 真实案例：R4 信号引擎在 Alpha Lab 完成 21 轮实验验证（WR 57.6%, CAGR >>1000%），代码已合并到仓库，但 bot.py 仍在调用旧的 V20 信号引擎（CAGR 仅 217%）。实盘持续亏损数周，所有排查都聚焦在执行层面（手续费、fill rate、滑点），没人想过"我们根本没有在跑那个好策略"。根因：Alpha Lab 的产出（独立模块 + config JSON）和实盘的接入（bot.py 信号流）之间没有任何自动化的桥接检查。代码合并 ≠ 信号流接入 ≠ 实盘生效。每次 Alpha Lab 产出新的 champion，必须有一个显式的"部署到实盘"步骤，并在部署后验证实盘确实在调用新引擎。
+50. **锚定效应会让你在错误的层面排查数周** — 当实盘亏损时，人的第一反应是"执行有问题"（手续费算错了、fill rate 太低、滑点太大）。如果第一次排查确实发现了一些执行层面的小问题（费率不精确、gas 成本被低估），锚定效应会加强——你会更加确信"就是执行的问题"，然后在这个方向上越走越深。但真正的根因可能完全在另一个层面：你跑的就不是那个好策略。教训：实盘亏损排查的第一步不应该是查执行，而应该是确认"我们在跑哪个策略，它是不是仓库里最好的那个"。
+51. **Research 到 Production 的"最后一公里"需要正式 checkpoint** — 量化系统的 R&D 流程（idea → 回测 → Alpha Lab 验证 → champion config）和部署流程（config → wire into bot → integration test → paper trading → live）之间存在天然断层。R&D 的交付物是"一个 JSON config + 一组独立模块"，但部署需要的是"bot.py 中的信号流改动 + 冷启动适配 + 风控集成"。这个 gap 不会自动弥合。必须有一个显式的 deployment checklist（就像 r4_champion_config.json 中的 deployment_checklist），且每次 review 时必须检查这个 checklist 的完成状态。
