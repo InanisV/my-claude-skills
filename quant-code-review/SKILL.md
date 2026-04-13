@@ -1755,36 +1755,45 @@ equity = df[df.event == "equity_snapshot"][["ts", "adjusted_equity"]]
    □ 是否有定期抓取交易所公告的机制
    □ 每个交易所是否都有对应的公告源（不能只覆盖 Binance 而遗漏 Hyperliquid）
 
-     数据源参考（按交易所）：
+     数据源优先级（适用于所有交易所）：
+       优先级 1：结构化公告 API（最稳定，返回 JSON，易解析）
+       优先级 2：RSS 订阅（结构化，标准格式，大多数交易所都有）
+       优先级 3：公告网页爬取（万能兜底——每个交易所都有公告页）
+       实现方式：requests + BeautifulSoup 提取文本即可，不需要 headless browser
 
-     Binance（有结构化 API，最容易接入）：
-       · 公告页 API: https://www.binance.com/bapi/composite/v1/public/cms/article/list/query
+     各交易所具体接入：
+
+     Binance：
+       · 公告 API: https://www.binance.com/bapi/composite/v1/public/cms/article/list/query
          参数: type=1, catalogId=48 (期货公告), pageSize=20
-       · 下架专题页: https://www.binance.com/en/support/announcement/delisting
-       · 推荐频率: 每 6 小时（公告提前 7-30 天，6h 延迟完全可接受）
+       · 下架专题页（备选）: https://www.binance.com/en/support/announcement/delisting
+       · 推荐频率: 每 6 小时
 
-     Hyperliquid（无公告 API，需监听社交渠道）：
-       · 官方 Discord: #announcements 频道
-         → 用 Discord Bot 监听，消息通过 webhook 推送到监控服务
-       · 官方 Twitter/X: @HyperliquidX
-         → 可用 Twitter API v2 filtered stream 或定时拉取
-       · 备选: 关注 Hyperliquid 的 Medium/Blog
-       · 推荐频率: Discord webhook 实时推送，Twitter 每 2 小时拉取
-       · ⚠️ Hyperliquid 下架较少但一旦发生没有结构化提前通知，
-         社交渠道是唯一来源，不可跳过
+     Hyperliquid：
+       · 无公告 API，但有公告网页:
+         https://hyperliquid.gitbook.io/hyperliquid-docs (文档+公告)
+         https://x.com/HyperliquidX (官方 Twitter，重大变更会发推)
+       · 接入方式: 定期爬取文档页 / 博客页，提取新内容
+         用 requests 拉 HTML → BeautifulSoup 提取文本 → 关键词过滤
+       · 推荐频率: 每 6 小时
+       · ⚠️ Hyperliquid 下架较少但没有结构化提前通知机制，
+         网页爬取是最实际的方案
 
      OKX（未来扩展）：
-       · API: https://www.okx.com/api/v5/support/announcements
+       · 公告 API: https://www.okx.com/api/v5/support/announcements
+       · 公告网页: https://www.okx.com/support/hc/en-us/sections/360000030652
        · 推荐频率: 每 6 小时
 
      Bybit（未来扩展）：
-       · API: https://api.bybit.com/v5/announcements
+       · 公告 API: https://api.bybit.com/v5/announcements
+       · 公告网页: https://announcements.bybit.com/
        · 推荐频率: 每 6 小时
 
-     通用原则（新增交易所时的检查项）：
-       · 该交易所是否有结构化公告 API？→ 有则直接调用
-       · 如果没有 → 是否有 RSS / Discord / Twitter 可监听？
-       · 完全没有公告渠道 → 🔴 标记为高风险，需人工定期巡查
+     新增交易所时的接入检查清单：
+       □ 是否有结构化公告 API？→ 有则直接调用（最优）
+       □ 是否有 RSS 订阅？→ 有则用 feedparser 解析（次优）
+       □ 公告网页 URL 是什么？→ requests + BeautifulSoup 爬取（万能兜底）
+       □ 以上都确认后，实现 AnnouncementSource 子类并注册到 DelistingMonitor
 
    □ 公告抓取是否独立于 bot 主循环（bot 挂了公告监控仍在运行）
    □ 抓取失败时是否有告警（不能静默失败，否则防线形同虚设）
@@ -1869,25 +1878,22 @@ equity = df[df.event == "equity_snapshot"][["ts", "adjusted_equity"]]
 
    监控频率汇总（平衡检测速度和资源消耗）：
    ```
-   ┌───────────────────┬─────────────┬──────────────────┬────────────┐
-   │ 步骤              │ 频率        │ 成本             │ 原因       │
-   ├───────────────────┼─────────────┼──────────────────┼────────────┤
-   │ 抓取公告(有API)   │ 每 6 小时   │ 免费(HTTP GET)   │ 下架公告提前│
-   │ (Binance/OKX等)   │             │                  │ 7-30天，6h │
-   │                   │             │                  │ 延迟够了   │
-   ├───────────────────┼─────────────┼──────────────────┼────────────┤
-   │ 抓取公告(社交渠道)│ 实时推送    │ 免费(webhook)    │ HL 等无API │
-   │ (Discord/Twitter) │ 或每 2 小时 │ 或免费(API pull)  │ 的交易所   │
-   ├───────────────────┼─────────────┼──────────────────┼────────────┤
-   │ 关键词预过滤      │ 每条公告    │ 免费(本地)       │ 过滤95%    │
-   │                   │             │                  │ 无关公告   │
-   ├───────────────────┼─────────────┼──────────────────┼────────────┤
-   │ LLM 精析          │ 仅命中公告  │ ~$0.00013/次     │ 月均<$0.01 │
-   │                   │ (0-2次/天)  │ (gpt-4.1-nano)   │            │
-   ├───────────────────┼─────────────┼──────────────────┼────────────┤
-   │ API 状态检查      │ 每次rebalance│ 免费(交易所API)  │ 兜底第一层 │
-   │ (第二层)          │ + 每4小时   │                  │            │
-   └───────────────────┴─────────────┴──────────────────┴────────────┘
+   ┌──────────────────────┬────────────┬──────────────────┬──────────────┐
+   │ 步骤                 │ 频率       │ 成本             │ 原因         │
+   ├──────────────────────┼────────────┼──────────────────┼──────────────┤
+   │ 抓取公告             │ 每 6 小时  │ 免费(HTTP GET)   │ 下架公告提前 │
+   │ (API 或网页爬取，    │            │                  │ 7-30天，6h   │
+   │  所有交易所统一频率) │            │                  │ 延迟完全够   │
+   ├──────────────────────┼────────────┼──────────────────┼──────────────┤
+   │ 关键词预过滤         │ 每条公告   │ 免费(本地正则)   │ 过滤~95%     │
+   │                      │            │                  │ 无关公告     │
+   ├──────────────────────┼────────────┼──────────────────┼──────────────┤
+   │ LLM 精析             │ 仅命中公告 │ ~$0.00013/次     │ 月均<$0.01   │
+   │                      │ (0-2次/天) │ (gpt-4.1-nano)   │              │
+   ├──────────────────────┼────────────┼──────────────────┼──────────────┤
+   │ API 状态检查(第二层) │ 每次       │ 免费(交易所API)  │ 兜底第一层   │
+   │                      │ rebalance  │                  │              │
+   └──────────────────────┴────────────┴──────────────────┴──────────────┘
    整体月成本：< $0.01（几乎免费）
    ```
 
@@ -1990,20 +1996,34 @@ class BinanceAnnouncements(AnnouncementSource):
                 for a in resp.json()["data"]["articles"]
                 if parse_time(a["releaseDate"]) > since]
 
-class HyperliquidAnnouncements(AnnouncementSource):
-    """Hyperliquid 无公告 API，通过 Discord webhook 接收推送。
-    Discord Bot 将 #announcements 频道的新消息写入本地 JSON 队列文件，
-    本类从该文件读取。如果没有 Discord Bot，fallback 到手动检查。"""
-    exchange = "hyperliquid"
-    def __init__(self, queue_file="./hl_announcements.json"):
-        self.queue_file = queue_file
+class WebScrapingAnnouncements(AnnouncementSource):
+    """通用网页爬取方案 — 适用于没有公告 API 的交易所（如 Hyperliquid）。
+    只需 requests + BeautifulSoup，不需要 headless browser。"""
+    def __init__(self, exchange_name: str, url: str,
+                 selector: str = "article, .content, main"):
+        self.exchange = exchange_name
+        self.url = url
+        self.selector = selector
     def fetch_recent(self, since):
-        try:
-            with open(self.queue_file) as f:
-                msgs = json.load(f)
-            return [m for m in msgs if parse_time(m["time"]) > since]
-        except FileNotFoundError:
-            return []  # 没有 Discord Bot 时静默（第二层兜底）
+        from bs4 import BeautifulSoup
+        resp = requests.get(self.url, timeout=30,
+                            headers={"User-Agent": "Mozilla/5.0"})
+        soup = BeautifulSoup(resp.text, "html.parser")
+        blocks = soup.select(self.selector)
+        # 将每个内容块作为一条"公告"返回，由关键词预过滤决定是否有价值
+        return [{"title": b.get_text()[:100], "body": b.get_text(),
+                 "time": datetime.now(timezone.utc)} for b in blocks]
+
+# 使用示例：
+# sources = [
+#     BinanceAnnouncements(),                          # API 方式
+#     WebScrapingAnnouncements("hyperliquid",           # 网页爬取
+#         url="https://hyperliquid.gitbook.io/...",
+#         selector="article"),
+#     WebScrapingAnnouncements("okx",                   # 也可以用网页爬取
+#         url="https://www.okx.com/support/hc/en-us/sections/360000030652",
+#         selector=".article-list-item"),
+# ]
 
 
 # ── LLM 解析（gpt-4.1-nano，单次 < $0.0002）────────────────────
