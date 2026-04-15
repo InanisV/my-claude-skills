@@ -1683,6 +1683,334 @@ Phase 1（实验 #1-#25）→ Phase 2（实验 #26-#40）→ ...
 
 ---
 
+### 案例 2：V37 "全局最优"过不了泛化关（2026-04-14）
+
+**一句话教训**：IS 全宇宙上表现惊艳的冠军，如果不经 TRAIN/TEST-fold 验证 +
+多 seed 宇宙子集压力测试，部署后可能比 baseline 更差。
+
+**症状**：
+- btcmg+adpn+pre 在 168-sym 全宇宙上 IS CAGR 4404%、wDD -41.7%、Calmar 119.4
+- 200+ 实验穷尽后宣布"全局最优"
+- 三层泛化测试（次日补做）全部失败：
+  - TRAIN gain +117% → TEST gain **-8%**（冠军在 held-out 币上不如 baseline）
+  - adaptive_n 在 seed=789 子集上 MaxDD -35% → **-65%**（20pp 灾难性退化）
+  - 时间衰减：冠军优势 2022 年 +1833%，2024 年 +333%，alpha 持续衰减
+
+**根因**：
+- `use_adaptive_n=True` 在信号强时集中到 1-2 个仓位。全宇宙够大时候选币多，
+  集中到的通常是好币。子集宇宙小时候选池浅，集中到的可能是同质化的差币 → 崩溃。
+- IS 指标一路向好蒙蔽了判断："IS CAGR 提升 31%"看起来很诱人，但 TEST fold 上完全
+  没迁移。典型的过拟合到了宇宙组成。
+
+**修正做法（V37 Gen-First Lab）**：
+- 每个实验同时跑三层评估：168-sym IS + 5-fold cross-coin TRAIN/TEST + **11-seed 随机子集**
+- keep/discard **只看 OOS/TEST 指标**，IS 仅用于诊断
+- 子集 seed 从 3 个扩到 11 个（3-seed 低估 worst-DD 达 20pp）
+- 最终冠军 `rs14_xp15` 的 IS CAGR 只有 3585%（比 btcmg 低），但 TEST 和子集全面占优
+
+**通用教训**：
+1. **IS 全宇宙指标只是参考，不是判据**。冠军判定必须在 held-out 数据上进行
+2. **任何依赖"宇宙够大"才成立的特性（如 adaptive_n）在实盘是定时炸弹**——
+   实盘宇宙组成随时因上架/退市/流动性变化而改变
+3. **子集 seed 数 ≥ 11 是刚性要求**。3-seed 是筛选器，不是终审
+4. **宣布全局最优前，必须先过泛化关**。先跑 Final Gate，再定结论
+
+---
+
+### 案例 3：Deselection Override 的发现之路（2026-04-13）
+
+**一句话教训**：当 200+ 参数调优和 20+ 结构创新都无法突破 Pareto 前沿时，
+问题可能不在信号层，而在**执行层的隐含假设**。
+
+**症状**：
+- V16-V36 共 1100+ 实验、20+ 架构创新（short hedging、adaptive leverage、
+  bear trimming、CPPI limiter……），Calmar 天花板卡在 26.76
+- 100-sym 宇宙 CAGR 2805% / MaxDD -36.4%（好），168-sym 宇宙 CAGR ~1000%（差 3x）
+
+**根因发现**：
+- 不是信号质量问题、不是杀手币问题、不是噪音问题
+- 是**执行层隐含假设**：168-sym 宇宙候选币更多 → reselection 时 top-N 频繁变化
+  → 旧持仓被强制平仓 → 亏损被锁定（loss crystallization）
+- 这个问题在所有"改信号"的创新中不可见，因为信号再好，只要 selection 变了就平仓
+
+**修正**：V37 Deselection Override — 解耦选币和平仓：
+- 新开仓仍要求进入 top-N
+- 已有仓位**不因 deselection 而平仓**，只按自身退出条件（loss_cap、trailing）退出
+- CAGR 从 1000% → **5459%**，MaxDD 持平
+
+**通用教训**：
+1. **当所有信号层创新都撞墙时，检查执行层假设**。"选了就进、没选就平"不是唯一设计
+2. **Diamond Hands 在 BEAR 市是神圣的**：15+ 实验证明，任何形式的 bear trimming
+   （selective close、losscap tighten、position reduce）都会把核心 alpha 杀死，
+   因为策略的 alpha 来源正是"扛住 BEAR 后的 V 型反弹"
+3. **DCA 层数和 deselection 有交互**：V37 最佳配置 DCA=1（不加层），因为
+   无 deselection 平仓 + 无 DCA 加仓 = 每个仓位干净进干净出
+
+---
+
+### 案例 4：Cross-Margin 清算级联 ≠ 杀手币（2026-04-13）
+
+**一句话教训**：在 cross-margin 合约策略中，168-sym 宇宙的 MaxDD 爆表
+不是因为多了"坏币"，而是因为仓位总 notional 超过了保证金的安全边界。
+添加 per-position hard stop 无法防御这种系统级风险。
+
+**症状**：
+- 冠军参数在 100-sym 上 MaxDD -36.4%，换到 168-sym 就变 -108.6%（被清算）
+- 直觉归因："168-sym 多了 69 个垃圾币拖累了"
+
+**真相**：
+- 那 69 个"额外币"全是成熟老币（>2.7 年，>983 天数据），seasoning gate 根本不会过滤
+- 清算发生在 bar 743（2022-01-31），机制是：更多币 → 更多持仓 → 总 notional 更大
+  → 累积未实现亏损 → 维持保证金率突破阈值 → **全账户一次性强平**
+- per-position hard stop 没用：清算是 account-level 事件，在个股 stop 触发之前就被
+  交易所一次性平掉了所有仓位
+- exposure_pct 从 2.0→2.5 有 MaxDD cliff（-36.9% → -75.9%），一个参数 +0.5 就跨了悬崖
+
+**通用教训**：
+1. **Cross-margin 策略的 MaxDD 不是线性可控的**，存在清算悬崖
+2. **"多加币 = 多风险"的归因要验证**：是那些币本身亏钱了，还是总仓位变大导致系统级崩溃？
+3. **永远不要相信"per-position stop 能兜底"**——cross-margin 清算是 portfolio-level 事件
+4. **Exposure cliff 要主动探测**：在 baseline 的 exposure 值上下 ±0.5 做 grid scan，
+   找到悬崖在哪里，然后退一步
+
+---
+
+## 🔴 回测数据真实性铁律（Data Authenticity）
+
+**回测引擎的一切假设都必须基于真实的历史数据，不能用合成数据、简化模型或
+"差不多"的近似替代。数据不真实 = 回测结论不可信 = 部署必出事。**
+
+这一铁律与"禁止投机取巧"互补：投机取巧是故意美化假设，数据不真实通常是
+无意的疏忽或工程偷懒——但后果一样严重。
+
+### 必须使用真实数据的六个维度
+
+```
+1. 价格数据（OHLCV）
+   ✅ 必须使用交易所真实历史 K 线（Binance API / 第三方数据供应商）
+   ❌ 不能用模拟生成的价格序列、随机游走、GBM 合成数据
+   ❌ 不能用日线数据做分钟级策略的回测（粒度必须匹配实盘执行周期）
+   → 验证方法：抽查回测数据中的极端事件（如 2022-05 LUNA 崩盘、
+     2024-08-05 日元套利清算），确认价格走势与真实历史一致
+
+2. 手续费 / 费率
+   ✅ 必须使用回测起点时刻的真实 fee schedule（如 Binance VIP0 taker 4.5bps）
+   ❌ 不能假设 0 fee 或 maker-only
+   ❌ 不能中途改 fee 来美化结果（详见"禁止费率投机"）
+   → 如果实盘账户有 BNB 抵扣或 VIP 折扣，回测仍用 worst-case 费率
+
+3. Funding Rate
+   ✅ 永续合约策略必须使用真实历史 funding rate 序列
+   ❌ 不能假设 funding = 0
+   ❌ 不能用固定值（如 0.01%/8h）近似——真实 funding 波动极大
+   → 数据来源：Binance /fapi/v1/fundingRate 历史端点
+   → 回测引擎按 8h 结算周期扣除 funding cost
+   → 实盘必须有等价的 funding 归因模型（live: exchange income API;
+     paper: 模拟 8h 结算扣费）
+
+4. 成交量 / 流动性
+   ✅ 因子计算用的成交量必须是真实历史量
+   ❌ 不能假设无限流动性（尤其小币种）
+   → 回测应模拟滑点（固定 slippage 是最低标准；基于成交量的动态滑点更好）
+
+5. 标的宇宙 / 上市时间
+   ✅ 必须使用交易所真实的上架/下架时间线
+   ❌ 不能让一个 2024 年上线的币参与 2022 年的回测（look-ahead bias）
+   ❌ 不能忽略已退市的币（survivorship bias）
+   → 动态宇宙策略用 onboardDate 元数据做入池时间控制
+   → 数据采集缺口 ≠ survivorship bias（详见案例库）
+
+6. Wick / Intrabar 价格
+   ✅ 止损 / trailing / 清算检查必须使用 bar 的 high/low（模拟 intrabar 极端价格）
+   ❌ 不能只用 close 做风控判断（实盘中间价可能已经触发了止损）
+   → 回测用 use_wick_check + bar_high/bar_low
+   → 实盘必须实现等价的 intrabar exit 逻辑（用 signal_bar OHLC）
+   → 如果实盘只能拿到 close，则回测也必须关闭 wick check 保持一致
+```
+
+### 数据真实性审计检查清单
+
+**在每次 alpha-lab 研究的 Setup 阶段，必须完成以下检查：**
+
+```
+□ OHLCV 来源：确认回测数据来自交易所真实 API，不是合成/插值
+□ 时间对齐：K 线时间戳用 UTC，和交易所 API 返回格式一致
+□ Funding rate：确认有真实历史序列，且引擎按正确的结算周期扣费
+□ Fee 设置：确认 commission 和 slippage 不低于实盘 worst-case
+□ Universe timeline：确认币的入池时间基于真实 onboardDate，不允许 look-ahead
+□ Wick 一致性：回测 use_wick_check 开关状态 = 实盘实际执行能力
+□ 数据完整性：抽检 3-5 个知名事件（LUNA 崩盘、FTX 暴雷、BTC 减半后行情）
+   在回测数据中的价格是否与公开记录一致
+```
+
+**如果任何一项不通过，研究不能启动。** 在假数据上跑出的冠军没有任何意义。
+
+---
+
+## 🔴 泛化优先评估框架（Generalization-First Evaluation）
+
+**这是从 V37 研究（2000+ 实验）中提炼出的完整评估协议。任何冠军候选的判定
+都必须走完这三层，缺一层都不算验证过。**
+
+### 三层泛化测试
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Layer 1：IS 全宇宙回测                                    │
+│ 目的：快速筛选，淘汰明显差的                               │
+│ 方法：在完整回测宇宙上跑一次                               │
+│ 判定：通过 IS 红线 → 进入 Layer 2                         │
+│ 注意：IS 指标是参考，不是判据！                            │
+└────────────────────────────────────┬────────────────────┘
+                                     ↓
+┌─────────────────────────────────────────────────────────┐
+│ Layer 2：Cross-Coin K-Fold（TRAIN / TEST）              │
+│ 目的：检验冠军参数是否对未见过的币有效                     │
+│ 方法：                                                   │
+│  1. 按 listing age stratified 分 k=5 folds              │
+│  2. 在 fold 0-3 上训练（跑回测），fold 4 上测试           │
+│  3. 轮换 5 次，每个 fold 都做一次 test                   │
+│ 判定指标：                                               │
+│  - worst_fold_cagr ≥ 0（不能有 fold 亏钱）               │
+│  - TEST median CAGR > baseline TEST median               │
+│  - TEST worst MaxDD < baseline worst MaxDD（或可接受范围）│
+│ 🔴 gen_ratio 判读注意：                                  │
+│  如果 TRAIN CAGR 极高（>5000%）但 gen_ratio < 0.3，       │
+│  不要自动 discard！检查 TEST folds 的绝对值：             │
+│  - 每个 TEST fold CAGR > 0 → gen_ratio 红线是假阳性     │
+│  - 任一 TEST fold CAGR < 0 → gen_ratio 红线是真的        │
+│  原则：绝对安全（每个 fold 都盈利）> 比例安全（ratio 高）  │
+└────────────────────────────────────┬────────────────────┘
+                                     ↓
+┌─────────────────────────────────────────────────────────┐
+│ Layer 3：多 Seed 宇宙子集压力测试                         │
+│ 目的：检验冠军参数在宇宙随机子集上是否稳定                 │
+│ 方法：                                                   │
+│  1. 使用 ≥ 11 个随机 seed，每次随机抽取 ~60% 的宇宙       │
+│  2. 在每个子集上跑完整回测                                │
+│  3. 统计子集 CAGR 分布和 worst-case MaxDD                │
+│ 判定指标：                                               │
+│  - subset_worst_maxdd < 目标 MaxDD × 1.3                 │
+│  - subset_mean_cagr > baseline_is_cagr × 0.5             │
+│  - 没有任何一个 seed 出现清算或极端负收益                  │
+│ 🔴 seed 数量铁律：                                       │
+│  ❌ 3 个 seed 不够（实测低估 worst-DD 达 20pp）           │
+│  ✅ 至少 11 个 seed                                      │
+│  ✅ 如果 worst-DD 方差大，加到 21 个                      │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 评估结果记录格式
+
+每个实验的 results.tsv 应扩展为：
+
+```
+commit | is_cagr | is_maxdd | test_median_cagr | test_worst_cagr | test_worst_maxdd | gen_ratio | sub11_mean_cagr | sub11_worst_maxdd | status | hypothesis
+```
+
+keep/discard **只看** test_* 和 sub11_* 列。is_* 列仅供诊断。
+
+---
+
+## 🔴 实盘-回测对齐铁律（Live-Backtest Parity）
+
+**冠军参数在回测中表现好只是第一步。如果实盘代码和回测代码在任何维度上有偏差，
+那回测结果就不代表实盘预期。这个偏差是最隐蔽的风险——测试可能全绿，
+但生产路径和测试路径走的不是同一条路。**
+
+### 必须对齐的八个维度
+
+```
+1. 参数值
+   → profile 中的每一个 key 必须在 live BotConfig 上有对应的字段
+   → 🔴 unknown key 必须 hard fail，不能 warning 后忽略
+   → 测试：对 V15_PROD 的每个 key 断言 live 值 == profile 值
+
+2. 决策路径
+   → 回测用 bar_high/bar_low 做 wick exit → 实盘必须也拿 OHLC signal bar
+   → 回测用 funding rate 扣费 → 实盘/paper 必须有等价归因
+   → 回测按 score threshold 拒绝所有差币 → 实盘空 selection 必须清空，
+     不能因为"保守"而保留上一轮选币
+
+3. 数据窗口
+   → f_maturity 需要 2880 bar 历史 → 实盘 coin_selection_lookback 必须 ≥ 2880
+   → 如果实盘 lookback < 回测窗口，因子计算结果可能方向相反
+     （实测：同一个成熟币，720-bar f_maturity = -0.36，2880-bar = +0.99）
+   → 测试必须用生产级 lookback 值，不能用"方便测试"的长窗口掩盖问题
+
+4. 执行模型
+   → 回测用固定 slippage/commission → 实盘用 BBO limit-first + fallback market
+   → 这个偏差目前无法消除，但方向已知（实盘 fee 通常 ≤ 回测假设）
+   → 可接受，但需在研究报告中注明
+
+5. 风控路径
+   → 杠杆设置失败 → 实盘必须 fail-fast（拒绝下单 + 写 trade_skipped log）
+   → MarginMonitor 减仓 → 必须先 cancel open orders 再 reduce
+   → 回测启用的模块（wick, funding, leverage_sizing）→ 实盘不能静默忽略
+
+6. 选币语义
+   → "所有币低于阈值"在回测中 = 空仓（不开新仓）
+   → 实盘必须区分"合法空选"（set selected=[]）和"计算失败"（保留旧选币）
+   → 混淆两者会导致 H2 confidence-weighting 失效
+
+7. Raw vs Shrunk Score 使用范围
+   → 回测的 _cached_scores = raw（用于 exit、losscap、DCA gating）
+   → H2 shrunk scores 只用于 top-N 选择
+   → 实盘的 _factor_scores 必须 = raw，selection_scores = shrunk
+   → 如果实盘 exit 路径误用了 shrunk scores，会和回测行为偏离
+
+8. 状态恢复
+   → 实盘重启后从 state.json 恢复 → 确认所有新增字段有 fallback 默认值
+   → funding 累计、announcement hash、selection 缓存都要持久化
+```
+
+### 对齐审计时机
+
+```
+- 每次向 live profile 添加新 key 后 → 必须审计 live 是否实现了对应逻辑
+- 每次修改回测引擎的 exit/entry 路径后 → 必须检查 live 是否有等价路径
+- 每次 code review 时，"对齐"是独立于"正确性"的审计维度
+- 🔴 unknown key 允许列表必须为空集。有例外 → 必须在代码和测试中注释为什么
+```
+
+---
+
+## 🔴 事故调查方法论（Incident Forensics Protocol）
+
+**实盘出事后，AI 最容易犯的错是"先构造叙事，再找支撑证据"。
+正确的顺序是反的：先穷尽证据，再允许叙事浮现。**
+
+### 铁律
+
+```
+1. 先读文档再说话
+   → 第一个 tool call 必须是 Glob/Read 找项目中的 audit/incident/postmortem 文件
+   → 通读完毕之前，不允许说任何带百分号的归因
+
+2. 数据 → 执行 → 算法（诊断顺序）
+   → 数据层：回测和实盘用的数据一样吗？universe、价格源、费率、funding
+   → 执行层：下单、杠杆、wick check、滑点有偏差吗？
+   → 算法层：因子计算、选币逻辑、仓位管理有 bug 吗？
+   → 上游没修之前，不要推进下游的 A/B 实验
+
+3. 区分根因和放大器
+   → 测试方法：假设只修这一层，其他层不动，问题是否消失？
+   → 只有回答"会"的那一层才是根因
+   → AI 天然偏好修"cool bug"（算法层），回避修"boring root cause"（数据/工程层）
+
+4. 区分数据采集缺口和 survivorship bias
+   → set(live) - set(bt) 里的亏损币，先查 onboardDate
+   → age > 1 year 的币缺失 = 数据采集缺口（修数据管道）
+   → age < listing_date_of_data_snapshot 的币缺失 = 真 survivorship（修采集逻辑）
+   → 两种病理的修复方案完全不同
+
+5. 不要编造精确数字
+   → "主犯 70% / 从犯 20% / 帮凶 10%" — 除非有 groupby 可以复算，否则禁止
+   → 算不出来用模糊词："大部分"、"一部分"、"少量"
+```
+
+---
+
 ## Reference
 
 研究模板见 `references/research-template.md`。
