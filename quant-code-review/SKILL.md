@@ -2,7 +2,7 @@
 name: quant-code-review
 description: |
   量化交易系统代码审计 — 在每次重大代码改动后自动执行全面审查。
-  覆盖十个维度：(P) 项目阶段与部署就绪度（前置，最先执行），(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐（含 🔴1.4 策略部署缺口检测 — 高优先级），(2) 回测引擎真实性（含 2.10 数据真实性审计 + 2.11 Margin-Ratio 自动减仓），(3) 实盘运维鲁棒性（含 3.6 MarginMonitor 实时保证金监控 + 3.7 账户资金流水过滤 + 3.8 实盘日志体系 + 3.9 交易对下架防御），(4) 状态持久化完整性（含 🔴4.5 Monitor Protocol 监控导出协议 — 高优先级必查），(5) 代码性能，(6) AI协作代码质量，(7) 供应链与运行时安全。
+  覆盖十个维度：(P) 项目阶段与部署就绪度（前置，最先执行），(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐（含 🔴1.4 策略部署缺口检测 — 高优先级），(2) 回测引擎真实性（含 2.2.1 Next-Bar Entry 敏感度 + 2.10 数据真实性审计 + 2.11 Margin-Ratio 自动减仓 + 2.12 动态宇宙覆盖审计），(3) 实盘运维鲁棒性（含 3.6 MarginMonitor 实时保证金监控 + 3.7 账户资金流水过滤 + 3.8 实盘日志体系 + 3.9 交易对下架防御），(4) 状态持久化完整性（含 🔴4.5 Monitor Protocol 监控导出协议 — 高优先级必查），(5) 代码性能，(6) AI协作代码质量，(7) 供应链与运行时安全。
 
   🔴 特别注意：维度 4.5（Monitor Protocol 监控导出协议）是高优先级必查项！
   每个实盘策略都必须实现 monitor_export.json 标准导出。审查时如果发现缺失，
@@ -388,6 +388,60 @@ Step 5 — 实盘亏损时的系统性诊断：
 - 是否假设了无限流动性（大单是否会impact market）
 - 限价单是否假设了100%成交
 ```
+
+#### 2.2.1 Next-Bar Entry 敏感度测试（可操作化协议）
+
+**为什么必须测**：回测默认在 bar-T close 成交，但实盘信号形成于 bar-T 收盘，
+真实成交最早只能发生在 bar-T+1 open。这一个 bar 的时间差在高波动加密市场里
+可能是 ±2-5% 的价格漂移。如果策略的 alpha 完全来自"bar-T close 买入 →
+bar-T close 平仓"这种 same-bar look-ahead 假象，它在实盘中会立即蒸发 —
+所有执行链路修得再好都救不回来。
+
+**实装范式（5 处改动即可覆盖多数 DCA / 趋势策略）**：
+
+```python
+# 1. Config 里加 flag（默认 False，保持向后兼容）
+@dataclass
+class BacktestConfig:
+    ...
+    next_bar_entry: bool = False
+
+# 2. 在 backtest engine 内部定义 helper（与 get_val 并列）
+def fill_base_price(sym, bar, fallback_close):
+    """Return raw fill price (pre-slippage) honoring cfg.next_bar_entry.
+    When True → bar+1 open; falls back to current-bar close on last bar
+    / data gap.  When False → current-bar close (legacy)."""
+    if getattr(cfg, 'next_bar_entry', False):
+        nxt = get_val(sym, 'open', bar + 1)
+        if not np.isnan(nxt):
+            return nxt
+    return fallback_close
+
+# 3. 所有 entry site 替换成（保留原有 slippage 和 NaN 守卫）
+# 原：entry_price = current_price * (1 + cfg.slippage)
+# 新：entry_price = fill_base_price(sym, bar, current_price) * (1 + cfg.slippage)
+```
+
+典型需要替换的 entry sites：新开仓、DCA 加仓、BEAR DCA、plateau/overlay entry。
+**信号决策价格不要改**，只替换成交价。
+
+**敏感度判读阈值**：
+
+| Δ CAGR（相对） | 判定 | 说明 |
+|---:|---|---|
+| < 5% | 🟢 PASS | 策略 alpha 与成交时点几乎无关，结构性稳健 |
+| 5% – 20% | 🟡 YELLOW | 存在中度 entry-timing 敏感度，可以部署但要在实盘加仓/减仓策略中留出保守 buffer |
+| 20% – 50% | 🟠 ORANGE | alpha 显著依赖 bar 内 timing，建议重新设计信号形成窗口 |
+| > 50% | 🔴 FAIL | alpha 几乎全部来自 same-bar look-ahead — 实盘会立即崩溃，不要上线 |
+
+**回归安全铁律**：next_bar_entry=False 必须与 patch 前的缓存结果 bit-identical。
+如果 legacy mode 结果漂移了哪怕 0.01%，说明 helper 实装有 bug。务必对一次 baseline
+确认 CAGR / MDD / Trades 三个数字都完全一致再继续。
+
+**真实案例参考（crypto-factor-mining-alpha, 2026-04-17）**：
+- 207-sym 扩展宇宙，V15_PROD champion（含 H1+H2）
+- Legacy CAGR 10865.2% → next_bar CAGR 10797.9%
+- Δ = -0.6% 相对 → 🟢 PASS，alpha 不是 same-bar lookahead
 
 ### 2.3 数据偏差
 
@@ -1265,6 +1319,85 @@ Profit Factor (PF) 解读：
   → equity <= 0（已被交易所清算）时是否有保护？（应 log + notify + stop）
   → 所有减仓订单都失败（交易所拒绝）时是否有告警？
 ```
+
+### 2.12 动态宇宙覆盖审计（Dynamic Universe Coverage Gap）
+
+**问题陈述**：回测的 symbol universe 通常由一次性抓取脚本产出（如
+`fetch_universe_full.py` 抓 2 年以上的所有永续合约），而实盘的 universe
+每次选股时实时从交易所 API 读取。两边天然不同步：
+- 回测 universe：数据抓取日前已上架且满足 seasoning 的标的（静态快照）
+- 实盘 universe：当下交易所所有 trading 状态的永续合约（动态）
+
+典型 gap 表现：live factor_scores 打分了 497 个标的，但 data/historical
+目录下只有 180 个能跑回测 → **回测验证的 alpha 只是在潜在选股池 36% 的
+子集里验证过**。H1+H2 / 新币鲁棒性 / 成熟度因子 这类"针对新老币区别"
+的机制尤其危险 — 小池子里验过的结论不保证在大池子里成立。
+
+**⚠ 这不是幸存者偏差**。幸存者偏差是"用当前存在标的 = 忽略已退市"，
+是 TRUE NEGATIVE（把真实发生过的坏结果从样本里移除）。动态宇宙 gap 是
+"回测看到的选股池比实盘小" — 是 COVERAGE SHORTFALL（没见过实盘会看到
+的标的）。两者根因不同，验证方法也不同，必须作为独立审计项。
+
+**自动化检测方法**：
+
+```bash
+# Step 1 — 量化 gap 比值
+# 从 live state file 或最近一次实盘 log 中抽取 live_scored_symbols
+LIVE_N=$(jq '.factor_scores | length' live_state.json 2>/dev/null || echo "?")
+# 数 data/historical 目录下回测可用的唯一 1h symbol 数
+BT_N=$(ls data/historical/*.parquet | grep -E '_1h' | sort -u | wc -l)
+GAP_RATIO=$(python -c "print(round($LIVE_N / max($BT_N, 1), 2))")
+echo "live=$LIVE_N  backtest=$BT_N  ratio=$GAP_RATIO"
+
+# Step 2 — 找出实盘有但回测没有的 symbols
+comm -23 <(jq -r '.factor_scores | keys[]' live_state.json | sort) \
+         <(ls data/historical/*_1h*.parquet | sed 's#.*/##; s/_1h.*//' | sort -u) \
+         > missing_symbols.txt
+```
+
+**判读标准**：
+
+| gap ratio (live / backtest) | 判定 | 说明 |
+|---:|---|---|
+| ≤ 1.1 | 🟢 PASS | 覆盖几乎完整 |
+| 1.1 – 1.5 | 🟡 YELLOW | 存在适度 gap，多数情况下是近期上架的新币还未回填；列出缺失清单 |
+| 1.5 – 2.0 | 🟠 ORANGE | 显著 gap，必须在部署前补齐并重跑 k-fold |
+| > 2.0 | 🔴 FAIL | 严重 gap — 回测验证的只是选股池的少数子集，alpha 可能不具代表性 |
+
+**gap 闭合流程**：
+
+1. 用 `fetch_universe_full.py --min-days N`（或等价工具）补齐 missing_symbols.txt
+   中的所有 seasoning 通过的标的 → 预期 backtest_n 显著上升
+2. **重跑 k-fold 验证**：champion 配置与 baseline 配置在扩展 universe 上
+   各自跑一轮（最好按 listing age 做 time-stratified 5-fold）
+3. **严格优势 criterion**：champion 必须在每一折 test 上同时满足：
+   - ΔCAGR > 0（vs baseline）
+   - ΔMDD ≥ 0（less negative is better, or equal）
+4. 如果任何一折违反严格优势 → 原 champion 是 small-universe 过拟合产物，
+   必须重新搜索 / 降参数 / 引入更鲁棒的因子
+
+**baseline 配置**：必须显式构造，不能继承 live profile。因为 live profile
+可能已经含有 champion 的改动（H1/H2/maturity factor 等）。正确做法：从
+research starting point（pre-improvement baseline）出发，只保留要比较的
+基础配置，**显式禁用**新加的特性。
+
+典型错误：`baseline_expanded = {}` （空 overrides 继承 V15_PROD canonical） →
+baseline 与 champion 结果完全相同 → 看不到 alpha 贡献。
+
+**残留 gap 的处理**：部分 missing symbols 可能因为 seasoning 不够
+（listing < min_listing_hours）或上币太晚（< min_days）注定无法纳入回测。
+这些残留在报告里标注清楚即可，不影响判决 — 实盘 min_listing_hours 门控
+会自然过滤掉它们。
+
+**真实案例参考（crypto-factor-mining-alpha, 2026-04-17）**：
+- Live 打分 universe: 497 symbols
+- 回测 universe (pre-fix): 180 symbols
+- Gap ratio = 2.76 → 🔴 FAIL
+- 运行 `fetch_universe_full.py --min-days 730` 补齐 39 个缺失币种
+- 回测 universe (post-fix): 207 symbols → gap 2.40（仍 ORANGE，剩余 290
+  为近期上市 < 730 天新币，自然被 seasoning 门控过滤）
+- H1+H2 champion 在 207-sym 5-fold 上每一折严格优势 baseline：
+  ΔCAGR +694 ~ +2216 pp, MDD 每折都改善 → 通过扩展宇宙再验证
 
 ---
 
