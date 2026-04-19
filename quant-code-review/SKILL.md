@@ -2,7 +2,7 @@
 name: quant-code-review
 description: |
   量化交易系统代码审计 — 在每次重大代码改动后自动执行全面审查。
-  覆盖十个维度：(P) 项目阶段与部署就绪度（前置，最先执行），(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐（含 🔴1.4 策略部署缺口检测 — 高优先级），(2) 回测引擎真实性（含 2.2.1 Next-Bar Entry 敏感度 + 2.10 数据真实性审计 + 2.11 Margin-Ratio 自动减仓 + 2.12 动态宇宙覆盖审计），(3) 实盘运维鲁棒性（含 3.6 MarginMonitor 实时保证金监控 + 3.7 账户资金流水过滤 + 3.8 实盘日志体系 + 3.9 交易对下架防御），(4) 状态持久化完整性（含 🔴4.5 Monitor Protocol 监控导出协议 — 高优先级必查），(5) 代码性能，(6) AI协作代码质量，(7) 供应链与运行时安全。
+  覆盖十个维度：(P) 项目阶段与部署就绪度（前置，最先执行），(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐（含 🔴1.4 策略部署缺口检测 — 高优先级），(2) 回测引擎真实性（含 2.2.1 Next-Bar Entry 敏感度 + 2.10 数据真实性审计 + 2.11 Margin-Ratio 自动减仓 + 2.12 动态宇宙覆盖审计），(3) 实盘运维鲁棒性（含 3.6 MarginMonitor 实时保证金监控 + 3.7 账户资金流水过滤 + 3.8 实盘日志体系【含 3.8.1 Per-run 目录隔离】 + 3.9 交易对下架防御 + 3.10 告警与心跳协议），(4) 状态持久化完整性（含 🔴4.5 Monitor Protocol 监控导出协议 — 高优先级必查），(5) 代码性能，(6) AI协作代码质量，(7) 供应链与运行时安全（含 7.8 API 版本与认证方案兼容性）。
 
   🔴 特别注意：维度 4.5（Monitor Protocol 监控导出协议）是高优先级必查项！
   每个实盘策略都必须实现 monitor_export.json 标准导出。审查时如果发现缺失，
@@ -1848,6 +1848,210 @@ equity = df[df.event == "equity_snapshot"][["ts", "adjusted_equity"]]
 - 这样同一套分析脚本可以同时分析回测和实盘结果
 - 如果回测日志和实盘日志格式不一致 → 标记为 🟡，建议统一
 
+### 3.8.1 Per-run 目录隔离与跨日轮换（Per-run Folder Layout & UTC Daily Rotation）
+
+**为什么必须单起一个子章节**：3.8 只要求"每次启动一个独立 session 文件"，
+但实盘长时间运行时会出现两类混乱：
+1. **同一次启动跨多天** — 一次 run 持续 7 天，如果全部写入一个大文件，
+   按日期切分分析时要先做 `jq '.ts | startswith(...)'` 过滤，量大时极慢。
+2. **多次重启混在同一目录** — 短期内重启 5 次，目录里出现
+   `bot_20260401.log`、`bot_20260402.log`、... 完全无法区分哪两个文件属于
+   同一次启动。对事故复盘尤其致命："上次 panic 时到底生成了哪几个日志文件？"
+
+**解法**：引入 **"文件夹 = run，文件 = UTC 日期"** 的二维布局：
+
+```
+{state_dir}/logs/
+├── bot_20260401_143022_a1b2c3d4/          ← run_1（4月1日启动）
+│   ├── 2026-04-01.log                     （人眼可读）
+│   ├── 2026-04-01.jsonl                   （结构化）
+│   ├── 2026-04-02.log                     （run_1 跨到 4月2日）
+│   └── 2026-04-02.jsonl
+├── bot_20260402_091544_9f8e7d6c/          ← run_2（4月2日重启）
+│   ├── 2026-04-02.log
+│   └── 2026-04-02.jsonl
+└── bot_20260405_160012_55aabbcc/          ← run_3（运行到现在）
+    ├── 2026-04-05.log
+    ├── 2026-04-05.jsonl
+    ├── 2026-04-06.log
+    └── 2026-04-06.jsonl
+```
+
+**审查清单**：
+
+```
+1. run_id 命名规范：
+   □ 每次进程启动生成唯一 run_id
+     推荐格式：{UTC启动时间YYYYMMDD_HHMMSS}_{8位随机hex}
+     示例：20260401_143022_a1b2c3d4
+   □ run_id 带时间前缀 → 目录按字典序排序即按启动时间排序
+   □ 带随机后缀防止同秒重启时的目录名碰撞
+     （SIGTERM 后 supervisor 立即拉起，2 个 run 启动时间戳可能完全相同）
+
+2. 目录结构：
+   □ 每个 run 独占一个文件夹，不和其他 run 共享文件
+   □ 文件夹名 = bot_{run_id}（前缀让多策略共存时一眼区分）
+   □ 整个 run 的所有输出（log/.jsonl/也许还有 reconciliation diff/
+     事后手工 dump 的 state 快照）都写入这个文件夹内
+   □ 文件夹是"run 的自包含容器"——把它打包发出去，收方能完整复现分析
+
+3. 文件按 UTC 日期切分：
+   □ 同一个 run 内，按 UTC 日期切分日志文件
+     （不是启动日，不是服务器本地日——必须 UTC）
+   □ 文件名：{YYYY-MM-DD}.log 和 {YYYY-MM-DD}.jsonl 各一份
+     （.log 给人眼读，.jsonl 给脚本分析）
+   □ 跨日时自动创建次日文件，不需要重启进程
+
+4. 懒切换（Lazy-on-emit）不要用线程：
+   □ 跨日切换必须在"写入日志"这一瞬间惰性触发，而不是起一个单独的
+     timer 线程在午夜 0 点自动滚动
+   □ 原因：timer 线程 = 多一个需要关心的并发点、多一个可能的卡死源头、
+     多一个 unit test 难写的路径
+   □ 正确实现：每次 emit 前检查 current_utc_date != file_utc_date，
+     如果是就关闭旧 handle、打开新 handle（见下方参考实现）
+
+5. 重试与关闭语义：
+   □ 每次 emit 都 flush（延续 3.8 #7 的要求）
+   □ 进程收到 SIGTERM/SIGINT 时 close 所有打开的 file handle，
+     而不是依赖 GC——防止 OS-buffer 里最后几行日志丢失
+   □ 如果写日志失败（磁盘满、权限错），降级为 stderr，不要 raise
+     拖垮主循环（这是 3.10 "zero-fail posture" 的前哨）
+
+6. 清理策略：
+   □ 有明确的保留期（推荐 30-90 天）
+   □ 清理按 run 目录为单位：
+     find {state_dir}/logs/ -maxdepth 1 -type d -name 'bot_*' -mtime +90 \
+       -exec rm -rf {} \;
+   □ 不要按文件粒度清理——按文件删会破坏 run 的自包含性
+     （上面删了 2026-04-01.log，下面还留着 2026-04-02.log，
+     事故复盘时一脸懵）
+   □ 清理任务写在 cron 或 systemd timer 里，不要写在 bot 主进程里
+     （主进程 crash 时不清理 ≠ 灾难；但主进程因为清理 bug crash ＝ 灾难）
+
+7. symlink 指向最新 run：
+   □ {state_dir}/logs/latest → bot_20260405_160012_55aabbcc/
+     （方便 `tail -f logs/latest/$(date -u +%F).log` 实时查看）
+   □ symlink 在启动时原子更新（先写 tmp symlink 再 rename）
+```
+
+**参考实现（懒切换 Daily UTC File Handler）**：
+
+```python
+import logging
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+
+class _DailyUtcFileHandler(logging.Handler):
+    """日志按 UTC 日期切分文件，不使用定时线程。
+
+    切换时机：每次 emit 前对比记录时间和当前打开文件的日期，
+    不一致就关旧打开新。纯 lazy、无并发复杂度。
+
+    与 TimedRotatingFileHandler 的区别：
+    - TimedRotatingFileHandler 默认用本地时间（实盘常跨时区踩坑）
+    - TimedRotatingFileHandler 在 rollover 时会改动既有文件名
+      （把 app.log 重命名为 app.log.2026-04-01），破坏"文件名 = UTC 日期"的
+      简单语义
+    - 本实现直接按目标日期命名：2026-04-01.log / 2026-04-02.log，
+      文件名本身就是最终形态
+    """
+    def __init__(self, log_dir: str, suffix: str = ".log", formatter=None):
+        super().__init__()
+        self.log_dir = Path(log_dir)
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.suffix = suffix
+        if formatter is not None:
+            self.setFormatter(formatter)
+        self._current_date: str | None = None
+        self._stream = None
+
+    def _date_for(self, record) -> str:
+        # record.created 是 UTC epoch float
+        return datetime.fromtimestamp(
+            record.created, tz=timezone.utc
+        ).strftime("%Y-%m-%d")
+
+    def _switch(self, date_str: str):
+        if self._stream is not None:
+            try:
+                self._stream.close()
+            except Exception:
+                pass
+        path = self.log_dir / f"{date_str}{self.suffix}"
+        self._stream = open(path, "a", encoding="utf-8")
+        self._current_date = date_str
+
+    def emit(self, record):
+        try:
+            date_str = self._date_for(record)
+            if date_str != self._current_date:
+                self._switch(date_str)
+            msg = self.format(record)
+            self._stream.write(msg + "\n")
+            self._stream.flush()
+        except Exception:
+            self.handleError(record)
+
+    def close(self):
+        try:
+            if self._stream is not None:
+                self._stream.close()
+                self._stream = None
+        finally:
+            super().close()
+
+
+def setup_logging(state_dir: str, run_id: str):
+    """在进程启动时调用一次。"""
+    log_dir = Path(state_dir) / "logs" / f"bot_{run_id}"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    plain_fmt = logging.Formatter(
+        "%(asctime)s.%(msecs)03d [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
+    )
+    jsonl_fmt = JsonFormatter()  # 自定义 JSON formatter，ts 用 UTC iso8601
+
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(_DailyUtcFileHandler(str(log_dir), ".log", plain_fmt))
+    root.addHandler(_DailyUtcFileHandler(str(log_dir), ".jsonl", jsonl_fmt))
+
+    # 控制台同步输出（方便 docker logs / journalctl）
+    console = logging.StreamHandler()
+    console.setFormatter(plain_fmt)
+    root.addHandler(console)
+
+    # 更新 latest symlink（原子）
+    latest = Path(state_dir) / "logs" / "latest"
+    tmp = Path(state_dir) / "logs" / f".latest.{run_id}"
+    if tmp.exists() or tmp.is_symlink():
+        tmp.unlink()
+    os.symlink(log_dir.name, tmp)
+    os.replace(tmp, latest)
+
+
+def new_run_id() -> str:
+    """在 config.py 的 from_env() 或 main 入口早期调用。"""
+    import secrets
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    return f"{ts}_{secrets.token_hex(4)}"
+```
+
+**常见反模式**：
+
+| 反模式 | 后果 | 正确做法 |
+|--------|------|----------|
+| `TimedRotatingFileHandler` + 本地时间 | 跨时区服务器日志在"非半夜"滚动，和 K 线 UTC 时间对不上 | 自己实现，显式 `tz=timezone.utc` |
+| 用 `threading.Timer` 在午夜切换 | 多一个并发点，stack-trace 里看到不该有的 timer 线程 | Lazy-on-emit，无线程 |
+| 所有 run 写入同一个 `bot_{date}.log` | 事故时分不清哪几行是哪次启动 | 按 run_id 分文件夹 |
+| run_id 里只有时间没有随机后缀 | 秒级重启时目录名碰撞 | 加 `secrets.token_hex(4)` |
+| 按文件清理旧日志（`find ... *.log -mtime +90`） | 同一个 run 的文件被部分删除，剩下的成孤儿 | 按 run 目录整体删除 |
+| 清理任务写在 bot 主进程里 | 清理 bug → 主进程 crash → 没人交易 | 独立 cron / systemd timer |
+| latest symlink 用 `os.unlink + symlink` 两步 | 两步之间若 crash，latest 指向空 | 先 symlink 到 tmp 名再 `os.replace` |
+| 不 flush，关闭也不 close | crash 时丢失 OS buffer 里的最后几百行 | 每条 flush + SIGTERM 时显式 close |
+
 ### 3.9 交易对下架防御（Delisting Defense）
 
 **问题的本质**：交易所下架交易对时，通常的时间线是：
@@ -2238,6 +2442,308 @@ class DelistingMonitor:
   → 如果回测不处理，但实盘也不处理 → 🔴 双重盲区
 - **历史数据断裂**：已下架标的的历史数据可能在交易所 API 上不再可用
   → 需要本地缓存或使用第三方历史数据源
+
+### 3.10 告警与心跳协议（Alerting & Heartbeat Protocol）
+
+**为什么重要**：实盘 bot 在服务器上"无人值守"地运行，当它真正需要人类介入的时候
+（保证金爆仓边缘、IP 被交易所封、未处理异常导致主循环停摆），服务器上的日志再
+漂亮也没人会去看。告警是把 "日志里一条 ERROR" 推到人类眼前的最后一米。
+
+**但告警系统本身必须是"只增价值、不引入风险"的**。一个典型的失败模式：告警代码
+本身 crash 了导致整个 bot 停转——3.10 的审查目标就是保证这种事不会发生。
+
+**核心设计原则**：
+
+1. **告警是日志的补充，不是替代**。所有发告警的事件必须同时进日志（3.8）。
+   告警是"推送"，日志是"留痕"——推送失败时留痕不能跟着丢。
+2. **零失败姿态（Zero-fail posture）**。所有告警 I/O 必须 `try/except Exception`
+   包裹 + 超时保护。发送失败降级为 WARNING 级日志，永不抛出到上层。
+3. **未配置时静默 no-op**。部署模板里没填 token/chat_id 时，告警模块应该静默关闭，
+   不是报错也不是警告——有些用户就是不想用 Telegram。
+4. **按 key 限频**。同一类事件短时间内（如 10 分钟）只推一次，防止 bug 导致告警
+   风暴（把用户 Telegram 刷爆 + 触发交易所 rate limit）。
+5. **心跳有"当日去重"语义**。每天固定 UTC 小时推一次"我还活着 + 今日 equity"，
+   哪怕 bot 在那个小时里被调了 100 次 `maybe_send_heartbeat()` 也只发一条。
+
+**审查清单**：
+
+```
+1. 通道选择与配置：
+   □ 至少有一个"推送到人"的通道（Telegram / Discord / 钉钉 / 企业微信 /
+     PagerDuty / 邮件）
+   □ 通道凭据通过 env 注入，不 hardcode
+     (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID 或等价环境变量)
+   □ env 缺失时代码走 no-op 路径（见下方参考实现的 enabled 判定）
+   □ .env.example 里写了配置方法和获取 token 的步骤链接
+
+2. 心跳（daily heartbeat）：
+   □ 每天固定 UTC 小时推送一次当日 equity + 关键指标
+   □ 含当日变化（PnL、% change vs 昨日 / vs 启动日）
+   □ 含当前持仓数、margin_ratio、累计 drawdown
+   □ 用 state 文件或内存变量做"当日去重"：
+     last_heartbeat_date == today_utc → skip
+   □ 心跳也要符合"零失败姿态"（参考实现里 try/except 包裹）
+   □ 服务器时区不影响心跳时间（始终用 UTC 判断）
+
+3. 关键事件告警（immediate alert）：
+   必须告警的事件（缺少任何一项 = 🔴）：
+   □ 进程启动（notify_startup） — 确认 bot 起来了
+   □ 进程优雅关闭（notify_shutdown，含原因） — 区分手动停 vs crash
+   □ MarginMonitor 触发减仓（3.6 联动） — 离爆仓最近的预警
+   □ 交易所封禁/IP 被 ban — 继续 retry 只会加深封禁
+   □ Kill switch 触发（连续减仓超过阈值） — 可能需要人肉介入
+   □ 未捕获异常冒泡到主循环 — 代表 bot 已经不能正常工作了
+   □ 账户 equity 单日跌幅超过阈值（如 >10%） — 异常风险事件
+
+4. 限频（rate limiting）：
+   □ 按告警 key 限频（例如 "margin_trip_SOL"、"ip_ban"、"tick_exception"）
+   □ cooldown 默认 600 秒（10 分钟），可配
+   □ 限频状态持久化到 state 文件 or 跨重启的 json
+     （不持久化 = 重启后第一次事件必发，容易在 restart loop 时洪水）
+   □ 限频被命中时，本地日志里要打一条 WARNING 说明"告警被限频"
+     （不然用户会以为 bot 静默了）
+
+5. 零失败姿态（最重要）：
+   □ 所有 HTTP 调用有显式 timeout（推荐 5 秒）
+   □ 所有 HTTP 调用外层 try/except Exception（不是 try/except HTTPError）
+   □ 捕获到异常时，降级为 logging.warning(...)，不 raise
+   □ 告警模块自身的 import 失败也要被主程序 try/except 兜住
+     （requests 没装？直接让告警模块 import 成 None）
+   □ 告警相关逻辑不放在 hot path（主循环 tick() 的性能敏感位置）
+     → 实际的 HTTP 请求是阻塞的，如果放主循环会影响交易时效性
+     → 推荐：在主循环里只写一个状态变量，由独立的告警线程/协程异步发送
+     （或者对"极小频率"的事件直接阻塞 5 秒也可以接受 — 视频率而定）
+
+6. 消息内容格式：
+   □ 启动消息：bot 名称、版本/git_hash、配置摘要、启动 UTC 时间
+   □ 关机消息：原因分类（GRACEFUL/CRASH/KILL_SWITCH/SIGNAL）、运行时长、
+     最终 equity、session 内总交易次数
+   □ 事件消息：事件类型（emoji 前缀更醒目）、时间（UTC）、
+     关键数值（MR、equity、涉及标的、阈值）、是否需要人工介入
+   □ 避免把完整 traceback 贴到 Telegram（容易超 4096 字符限制），
+     改为发"traceback 的第一行 + 日志文件路径"
+   □ 避免在消息里泄露 API key / 账户 ID
+
+7. 命令控制（可选但需 7.7 联动）：
+   □ 如果 bot 支持通过 Telegram 命令控制（如 /stop、/close_all），
+     必须做 chat_id 白名单鉴权（见 7.7 "Telegram / 通知渠道安全"）
+   □ 默认关闭命令控制（降低攻击面），手动配置白名单才启用
+```
+
+**参考实现（TelegramNotifier 伪代码）**：
+
+```python
+import json
+import logging
+import os
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+log = logging.getLogger(__name__)
+
+class TelegramNotifier:
+    """Zero-fail Telegram 告警器。所有 IO 失败都降级为 log.warning()。
+    未配置 token/chat_id 时静默 no-op。
+    """
+    API_BASE = "https://api.telegram.org"
+    DEFAULT_TIMEOUT = 5.0
+    DEFAULT_COOLDOWN = 600  # 10 分钟
+
+    def __init__(
+        self,
+        bot_token: Optional[str],
+        chat_id: Optional[str],
+        state_path: Optional[str] = None,
+        heartbeat_utc_hour: int = 0,  # 0-23, 每日 UTC 0 点推心跳
+        cooldown_seconds: int = DEFAULT_COOLDOWN,
+    ):
+        self.enabled = bool(bot_token and chat_id)
+        self.bot_token = bot_token
+        self.chat_id = chat_id
+        self.heartbeat_utc_hour = heartbeat_utc_hour
+        self.cooldown = cooldown_seconds
+        self.state_path = Path(state_path) if state_path else None
+        self._state = self._load_state()
+
+    def _load_state(self) -> dict:
+        if not self.state_path or not self.state_path.exists():
+            return {"last_heartbeat_date": None, "last_alert_ts": {}}
+        try:
+            return json.loads(self.state_path.read_text())
+        except Exception as e:
+            log.warning("tg state load failed, starting fresh: %s", e)
+            return {"last_heartbeat_date": None, "last_alert_ts": {}}
+
+    def _save_state(self):
+        if not self.state_path:
+            return
+        try:
+            tmp = self.state_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(self._state))
+            os.replace(tmp, self.state_path)
+        except Exception as e:
+            log.warning("tg state save failed: %s", e)
+
+    def _post(self, text: str) -> bool:
+        """发送一条消息。永不抛异常，失败返回 False。"""
+        if not self.enabled:
+            return False
+        try:
+            import requests  # 局部 import，避免硬依赖
+            url = f"{self.API_BASE}/bot{self.bot_token}/sendMessage"
+            resp = requests.post(
+                url,
+                json={"chat_id": self.chat_id, "text": text,
+                      "parse_mode": "Markdown"},
+                timeout=self.DEFAULT_TIMEOUT,
+            )
+            if resp.status_code != 200:
+                log.warning("tg send non-200: %s %s",
+                            resp.status_code, resp.text[:200])
+                return False
+            return True
+        except Exception as e:
+            # 网络超时、DNS fail、证书错误、requests 没装——全部吃掉
+            log.warning("tg send failed: %s", e)
+            return False
+
+    def notify_startup(self, bot_name: str, version: str,
+                       config_summary: str):
+        self._post(
+            f"🟢 *{bot_name} started*\n"
+            f"version: `{version}`\n"
+            f"utc: `{datetime.now(timezone.utc).isoformat()}`\n"
+            f"config: {config_summary}"
+        )
+
+    def notify_shutdown(self, reason: str, final_equity: float,
+                        duration_s: float, n_trades: int):
+        icon = "🔴" if reason in ("CRASH", "KILL_SWITCH") else "⚫"
+        self._post(
+            f"{icon} *bot stopped* ({reason})\n"
+            f"runtime: `{duration_s/3600:.1f}h`\n"
+            f"final equity: `${final_equity:.2f}`\n"
+            f"trades this session: `{n_trades}`"
+        )
+
+    def maybe_send_heartbeat(self, equity: float, pnl_pct: float,
+                              n_positions: int, margin_ratio: float):
+        """每日 UTC {heartbeat_utc_hour} 点发心跳。同一天多次调用只发一次。"""
+        if not self.enabled:
+            return
+        now = datetime.now(timezone.utc)
+        if now.hour != self.heartbeat_utc_hour:
+            return
+        today = now.strftime("%Y-%m-%d")
+        if self._state.get("last_heartbeat_date") == today:
+            return
+        # 先把"今天发过"持久化，再发消息。这样即使发失败，今天也不会洪水
+        # （下一次 maybe_send_heartbeat 会被去重跳过）。
+        self._state["last_heartbeat_date"] = today
+        self._save_state()
+        self._post(
+            f"💓 *daily heartbeat* `{today}`\n"
+            f"equity: `${equity:.2f}` ({pnl_pct:+.2f}%)\n"
+            f"positions: `{n_positions}`  MR: `{margin_ratio*100:.1f}%`"
+        )
+
+    def alert(self, key: str, text: str, *, force: bool = False):
+        """按 key 限频的告警。同一个 key 在 cooldown 内只发一次。"""
+        if not self.enabled:
+            return
+        last = self._state.get("last_alert_ts", {}).get(key, 0)
+        now_ts = time.time()
+        if not force and (now_ts - last) < self.cooldown:
+            log.warning("alert suppressed by cooldown: %s", key)
+            return
+        if self._post(text):
+            self._state.setdefault("last_alert_ts", {})[key] = now_ts
+            self._save_state()
+```
+
+**集成模式**（bot 主类中的"插桩点"）：
+
+```python
+# 启动时
+self.tg = TelegramNotifier(
+    bot_token=cfg.telegram_bot_token,
+    chat_id=cfg.telegram_chat_id,
+    state_path=f"{cfg.state_dir}/telegram_state.json",
+    heartbeat_utc_hour=cfg.telegram_heartbeat_utc_hour,
+)
+
+def prepare(self):
+    # ...现有逻辑...
+    try:
+        self.tg.notify_startup(
+            bot_name="momentum-live",
+            version=self.cfg.git_hash,
+            config_summary=f"lev={self.cfg.leverage}x top_n={self.cfg.top_n}"
+        )
+    except Exception as e:  # 双保险：notifier 内已 try/except，外层再兜一层
+        log.warning("tg notify_startup outer guard: %s", e)
+
+def tick(self):
+    try:
+        # ...主循环逻辑...
+        self._maybe_margin_check()  # 内部触发 self.tg.alert("margin_trip_XXX", ...)
+        try:
+            self.tg.maybe_send_heartbeat(
+                equity=self.equity,
+                pnl_pct=self.today_pnl_pct,
+                n_positions=len(self.positions),
+                margin_ratio=self.margin_ratio,
+            )
+        except Exception as e:
+            log.warning("tg heartbeat outer guard: %s", e)
+    except AsterBanned as e:
+        self.tg.alert("ip_ban", f"🚨 IP banned: {e}")
+        raise  # ban 必须冒泡让主循环停
+    except Exception as e:
+        self.tg.alert("tick_exception",
+                      f"⚠️ unhandled tick exception: {type(e).__name__}: {e}")
+        # 不要 raise——一次 tick 失败不应该拖垮整个 bot
+        log.exception("tick failed")
+
+def shutdown(self, reason: str):
+    # ...现有逻辑...
+    try:
+        self.tg.notify_shutdown(
+            reason=reason,
+            final_equity=self.equity,
+            duration_s=(time.time() - self.start_ts),
+            n_trades=self.session_trade_count,
+        )
+    except Exception as e:
+        log.warning("tg notify_shutdown outer guard: %s", e)
+```
+
+**常见反模式**：
+
+| 反模式 | 后果 | 正确做法 |
+|--------|------|----------|
+| `requests.post(...)` 无 timeout | 网络抖动时主循环卡死 | 显式 timeout=5 |
+| `try/except HTTPError` | 超时、DNS fail 等 socket 异常漏网 | `except Exception` |
+| HTTP 失败时 raise | 告警故障拖垮 bot | log.warning + 返回 False |
+| 没有 rate limiting | 一个 bug 触发 1000 条告警，用户屏蔽 bot，交易所限流 | 按 key 限频 |
+| rate limit 状态只在内存 | 重启后首事件必发，restart loop 时洪水 | 持久化到 json |
+| 心跳不做当日去重 | `maybe_send_heartbeat()` 每分钟调一次 → 60 条心跳 | 用 last_heartbeat_date 比对 |
+| 心跳用服务器本地时间 | 跨时区部署时人类看到的心跳时间和预期不符 | 统一用 UTC |
+| 启动时没告警 | 用户不知道 bot 起来了没，得登录服务器查 | notify_startup 必发 |
+| 关机不发告警 | crash 发生在凌晨，用户早上看价格才发现 | notify_shutdown 含 reason |
+| 把完整 traceback 贴 Telegram | 超 4096 字符，消息被截断看不全 | 发首行 + 日志文件路径 |
+| Telegram 命令控制无鉴权 | token 泄露 = 账户被控制 | 白名单 chat_id，见 7.7 |
+| 未配置 token 时 raise | 不想用告警的用户被强制配置 | `enabled = bool(token and chat_id)`，no-op |
+
+**与日志体系（3.8）的关系**：
+- 告警和日志**不是二选一**，而是同一个事件的两种去向
+- 所有 `self.tg.alert(...)` 的调用点，同一逻辑位置也应该有
+  `log.warning(...)` 或 `log.error(...)`
+- 告警消息倾向于"精简 + 人眼可读"，日志记录倾向于"完整 + 机器可解析"
+- 事后复盘时，**日志永远是真相**——告警只是"那个时刻我们 push 出去过"的
+  弱证据（可能发失败了）
 
 ---
 
@@ -2912,6 +3418,188 @@ AI 生成的测试代码有三种常见的"永远通过"模式，在量化系统
   → 检查：服务器是否配置了多个 NTP 源？是否有时间偏差告警？
 ```
 
+### 7.8 API 版本与认证方案兼容性（API Version & Auth Scheme Compatibility）
+
+**为什么这是"安全+运维"交叉的必查项**：交易所会同时维护多套 API（V1/V2/V3、
+REST/WS、HMAC-SHA256/Web3-ECDSA/Ed25519 等），并在升级过程中废弃旧版本。
+常见踩坑：
+- 用户从文档 copy 了 V3 的 Web3 签名示例，但 bot 代码用的是 V1 HMAC-SHA256
+- 用户的 API key 是 V1 key，但 bot 代码发的是 V3 请求 → 所有请求返回
+  `401 Unauthorized`，用户以为 key 没激活，跑去重新申请，被告知"V1 停止新建"
+- 交易所悄悄废弃 V1，给一个 cutoff 日期，用户的老 bot 在那天之后直接失联
+- bot 在多交易所/多市场并存时，每个交易所的 auth 方案不同，代码混用
+
+**这种 bug 的特点是"登录层就挂"，根本走不到策略逻辑**——所以必须在审计的"入场"
+环节就卡住，不要让它混进生产。
+
+**审查清单**：
+
+```
+1. API 版本显式声明：
+   □ 代码中实例化 exchange client 时是否显式指定 API 版本
+     反例：client = ExchangeClient(key, secret)  # 不知道调的是哪版
+     正例：client = ExchangeClientV1(key, secret)  # 或 api_version="v1"
+   □ .env.example 的 API key 字段旁边是否注明版本
+     示例：
+     # ASTER_API_KEY - V1 HMAC-SHA256 key（非 V3 Web3 key）
+     #   注意：官方已于 2026-03-25 停止新建 V1 key，老 key 仍可用
+     #   新建步骤：https://docs.asterdex.com/api/v1/rest-api#authentication
+     ASTER_API_KEY=
+     ASTER_API_SECRET=
+   □ DEPLOY_RUNBOOK / README 里有"本 bot 使用的 API 版本"章节
+   □ requirements.txt 里 pin 的 SDK 版本和 bot 代码调用的 API 版本匹配
+     （SDK 升大版本可能默认切换到新 API）
+
+2. 认证方案一致性：
+   □ bot 的签名逻辑和 API key 类型匹配：
+     - V1 HMAC 类：key + secret 对，用 HMAC-SHA256 签 query string，
+       header 是 `X-MBX-APIKEY` / `API-KEY` 等
+     - V3 Web3 类：EOA 私钥，用 ECDSA 签 typed data，header 是
+       `X-Signature-Address` 等
+     - Ed25519 类（部分新交易所）：独立公私钥对
+   □ 用错方案的典型症状：401 Unauthorized / "Invalid signature"
+     而不是 403 Forbidden
+   □ 签名和请求 body 的对齐：body 里的 timestamp 必须和签名里的 timestamp
+     一致（用不同 time.time() 调用会差几毫秒，某些 window 严格的交易所会拒签）
+
+3. 官方文档链接与 cutoff 日期：
+   □ .env.example / README 里带上"API key 怎么申请"的官方链接
+     （用户很容易点进一个看起来像官网的钓鱼站）
+   □ 如果交易所公告了"V1 废弃日期"，在 DEPLOY_RUNBOOK 的"已知限制"
+     章节明确记录：
+     - 老 key 何时会停用
+     - 到期前需要完成的迁移步骤
+     - 迁移后 bot 代码的变动点
+   □ 如果交易所没公告废弃日期，至少记录"本 bot 使用 V1 API，未来升级
+     到 V3 需要重写 live/exchange_client.py 的 _sign() 方法"
+
+4. 权限最小化（和 7.3 联动）：
+   □ 申请 API key 时是否启用了最小必要权限：
+     - READ（必需）
+     - FUTURES_TRADE 或对应的 "trade" 权限（必需）
+     - WITHDRAW（默认关闭！除非 bot 真的要提币）
+     - TRANSFER / SUB_ACCOUNT / MARGIN_BORROW 等高风险权限（默认关闭）
+   □ 是否配置了 IP 白名单（绑定部署服务器的 IP）
+     - 配置后，即使 key 泄露，攻击者在非白名单 IP 上也无法使用
+     - 代价：服务器 IP 变更时要同步更新白名单
+   □ 审查时用 bot 账号登录交易所后台对着核对，不是看 .env 猜
+   □ 不要使用"主账号"的 API key，应该用子账号 / 独立账号隔离资金
+
+5. 多交易所共存时的隔离：
+   □ 如果 bot 同时连接多个交易所（套利 / 多品种 / 主备）：
+     - 每个交易所的 API key/secret 用不同的 env 变量名
+       反例：API_KEY / API_SECRET（不知道是哪家的）
+       正例：ASTER_API_KEY / BINANCE_API_KEY / HYPERLIQUID_PRIVATE_KEY
+     - 每个交易所用独立的 client class，不共享签名逻辑
+     - 密钥泄露影响范围被限制在单一交易所
+
+6. 升级流程：
+   □ 从旧 API 版本迁移到新 API 版本的流程是否写在 DEPLOY_RUNBOOK 里：
+     1. 在 testnet / 沙盒环境上用新 key 跑新代码一段时间
+     2. 对比新旧 API 返回的关键字段（持仓、余额、订单状态）是否一致
+     3. 逐步切换（先读后写、先小金额后全量）
+     4. 保留回滚点（旧代码 + 旧 key 配置）
+   □ 迁移期间老代码不能被删——保留至少一个 release cycle
+```
+
+**参考模式（.env.example 片段）**：
+
+```bash
+# ============================================================
+# AsterDEX Futures (perpetual contracts)
+# ============================================================
+# API version:  V1 (HMAC-SHA256)   ← 本 bot 使用
+# Auth scheme:  api_key + api_secret (header: X-MBX-APIKEY)
+# Docs:         https://docs.asterdex.com/api/v1/rest-api
+#
+# ⚠️  重要：AsterDEX 已于 2026-03-25 停止创建新的 V1 API key。
+#     如果你没有 V1 key，必须迁移到 V3（Web3 签名方案），届时
+#     需要重写 live/exchange_client.py 的 _sign() 方法。
+#     老 V1 key 仍可继续使用，具体停用时间看官方公告。
+# ============================================================
+ASTER_API_KEY=
+ASTER_API_SECRET=
+
+# API key 权限最小化检查：
+# - [x] READ
+# - [x] FUTURES_TRADE
+# - [ ] WITHDRAW   ← 必须关闭
+# - [ ] TRANSFER   ← 必须关闭
+# IP 白名单：已绑定部署服务器 IP（可选但强烈推荐）
+```
+
+**参考模式（DEPLOY_RUNBOOK 章节片段）**：
+
+```markdown
+## 3. API Keys
+
+本 bot 连接 AsterDEX Futures，使用 **V1 API + HMAC-SHA256** 签名方案。
+
+### 3.1 申请步骤
+1. 访问 https://asterdex.com/account/api-management
+2. 选择 "Create V1 Key"（如果找不到此选项见 §3.2）
+3. 勾选权限：READ + FUTURES_TRADE，不要勾 WITHDRAW 和 TRANSFER
+4. 绑定服务器 IP 到白名单
+5. 保存 key 和 secret 到部署机的 .env 文件
+
+### 3.2 V1 key 创建受限的情况
+AsterDEX 于 2026-03-25 默认隐藏 "Create V1 Key" 按钮。
+如果你的账户是 2026-03-25 之后注册的，需要：
+- 选项 A（推荐）：联系客服申请开放 V1 权限，明确告知是用于做市/量化
+- 选项 B：使用 V3（Web3 签名）key，但本 bot 代码不支持，需要额外开发
+  （预估工作量：重写 exchange_client.py 约 300 行，1-2 天）
+
+### 3.3 API 版本停用时间表（已知）
+- V1 新建：2026-03-25 停止
+- V1 使用：目前无公告停用日期，我们会持续监控官方公告
+- 建议：至少每季度检查一次 https://asterdex.com/announcements
+```
+
+**常见反模式**：
+
+| 反模式 | 后果 | 正确做法 |
+|--------|------|----------|
+| .env.example 里只写 `API_KEY=` 没说版本 | 用户申请错版本 key，签名 401 | 注明版本 + 签名方案 + 文档链接 |
+| SDK 版本未 pin（`pip install exchange-sdk`） | SDK 升级默认换 API 版本 → 某天 bot 静默切到新 API | pin 到 `==x.y.z`，升级前审 changelog |
+| bot 的签名逻辑混用多套方案（if exchange == "A" elif ...） | 新增交易所要改核心 auth 路径，容易回归 bug | 每个交易所独立 client class |
+| 所有交易所共用一套 `API_KEY` / `API_SECRET` env | 泄露时影响面大 | 每家独立 env 变量名 |
+| 申请 key 时"一键开启所有权限" | 泄露后攻击者可以提币、转账 | READ + 对应 trade 权限即可 |
+| 没配 IP 白名单 | key 泄露后立刻能用 | 绑定服务器 IP |
+| 用主账号 key | 主账号资金全暴露 | 独立子账号 |
+| DEPLOY_RUNBOOK 不记录 cutoff 日期 | 某天醒来 bot 失联，查了 2 小时才发现是 API 废弃 | "已知限制" 章节明写 |
+| V1 与 V3 混搭（V1 key 配 V3 签名代码） | 所有请求 401，用户以为是 key 坏了 | 启动时先调一个无害 endpoint 校验 auth |
+
+**启动时的自检**：
+
+bot 在 `prepare()` 阶段应该调用一个"无副作用"的 endpoint（如 `GET /fapi/v1/account`
+或 `GET /v3/user/positions`）来验证签名正确。**不要等第一次下单时才发现签名错**——
+下单失败的原因有十种，很难第一时间归因到"auth 方案选错了"；但启动自检一旦失败，
+报错信息可以非常明确：
+
+```python
+def verify_auth(self):
+    """启动时调用一次，确保签名方案和 key 匹配。"""
+    try:
+        account = self.client.get_account()
+    except AuthError as e:
+        # 尽量给出排障提示
+        raise SystemExit(
+            f"❌ Auth self-check failed: {e}\n"
+            f"   Used API version: {self.client.api_version}\n"
+            f"   Used auth scheme: {self.client.auth_scheme}\n"
+            f"   请核对 .env 中的 ASTER_API_KEY 是否是 {self.client.api_version} "
+            f"版本的 key。V1 key 和 V3 key 的签名方案不同。\n"
+            f"   文档：{self.client.DOCS_URL}"
+        )
+    log.info("auth self-check OK: api=%s, account_id=%s",
+             self.client.api_version, account["accountId"])
+```
+
+**与维度 7.3 "密钥与敏感信息管理" 的关系**：
+- 7.3 关注的是 "密钥不要泄露"（存储、传输、日志脱敏）
+- 7.8 关注的是 "密钥和代码匹配"（版本、签名方案、权限范围）
+- 两个维度都是 API key 生命周期管理的一部分，可以在同一次审计中一起过
+
 ---
 
 ## 输出格式
@@ -2996,7 +3684,7 @@ P.2 部署就绪度（如适用）：
 - 通知机制：[Telegram(✅)/日志(🟡)/无(🔴)]
 
 ### 维度三：运维鲁棒性
-[逐项结果，含 3.6 MarginMonitor + 3.7 资金流水过滤 + 3.8 日志体系 + 3.9 交易对生命周期]
+[逐项结果，含 3.6 MarginMonitor + 3.7 资金流水过滤 + 3.8 日志体系 + 3.8.1 Per-run 目录 + 3.9 交易对生命周期 + 3.10 告警与心跳]
 - 3.7 Transfer Isolation：[已实现(✅)/部分(🟡)/未实现(🔴)]
 - adjusted_equity 使用：[全部下游(✅)/部分(🟡)/未使用(🔴)]
 - unexplained_delta 检测：[有(✅)/无(🔴)]
@@ -3008,11 +3696,27 @@ P.2 部署就绪度（如适用）：
 - 决策日志（含 skip 原因）：[有(✅)/仅交易(🟡)/无(🔴)]
 - 定期 equity 快照：[有(✅)/无(🔴)]
 - 关机原因记录：[有(✅)/无(🔴)]
+- 3.8.1 Per-run 目录隔离：[有(✅)/无(🔴)]
+- run_id 带时间+随机后缀：[是(✅)/仅时间(🟡)/无(🔴)]
+- 按 UTC 日期切分文件：[是(✅)/本地时间(🟡)/不切分(🔴)]
+- 懒切换（无 timer 线程）：[是(✅)/用 timer(🟡)]
+- latest symlink 原子更新：[有(✅)/无(🟢)]
+- 按 run 目录整体清理：[是(✅)/按文件清理(🔴)]
 - 3.9 交易对下架防御：[完备(✅)/部分(🟡)/未实现(🔴)]
 - 第一层 公告监控+LLM 解析：[已实现(✅)/计划中(🟡)/无(🔴)]
 - 第二层 API 状态定期检查：[有(✅)/无(🔴)]
 - 第三层 订单被拒容错处理：[有(✅)/无(🔴)]
 - 受影响标的自动禁止开仓：[有(✅)/无(🔴)]
+- 3.10 告警与心跳协议：[完备(✅)/部分(🟡)/无(🔴)]
+- 至少一个推送通道：[有(✅)/无(🔴)]
+- 未配置时 no-op：[是(✅)/报错(🔴)]
+- 零失败姿态（try/except + timeout）：[是(✅)/部分(🟡)/无(🔴)]
+- 按 key 限频：[有(✅)/无(🟡)]
+- 限频状态持久化：[是(✅)/仅内存(🟡)]
+- 每日心跳（UTC + 当日去重）：[有(✅)/无(🟡)]
+- 启动/关机告警：[有(✅)/无(🔴)]
+- MarginMonitor/IP 封禁/Kill switch 告警：[有(✅)/无(🔴)]
+- 消息不含敏感信息：[是(✅)/否(🔴)]
 
 ### 维度四：状态持久化完整性
 | # | 检查项 | 状态 | 备注 |
@@ -3066,12 +3770,21 @@ P.2 部署就绪度（如适用）：
 | 7.5 | 运行时隔离 | ✅/🟡/🔴 | 用户权限/API权限/文件系统 |
 | 7.6 | 代码完整性 | ✅/🟡/🔴 | 部署验证/AI变更审计/依赖diff |
 | 7.7 | 量化特有攻击面 | ✅/🟡/🔴 | 数据源/策略外泄/通知渠道/NTP |
+| 7.8 | API 版本与认证方案 | ✅/🟡/🔴 | V1/V3 匹配/签名方案/cutoff 日期 |
 
 7.3 关键子项：
 - API Key 提现权限：[未开启(✅)/已开启(🔴)]
 - API Key IP白名单：[已绑定(✅)/未绑定(🟡)]
 - .env 在 .gitignore：[是(✅)/否(🔴)]
 - Git 历史密钥泄露：[未发现(✅)/发现N处(🔴)]
+
+7.8 关键子项：
+- API 版本显式声明：[是(✅)/否(🔴)]
+- 签名方案与 key 类型匹配：[是(✅)/否(🔴)]
+- .env.example 注明版本+文档链接：[有(✅)/无(🟡)]
+- DEPLOY_RUNBOOK 含 cutoff 日期：[有(✅)/无(🟡)]
+- 启动自检调用无副作用 endpoint：[有(✅)/无(🟡)]
+- 多交易所独立 env 变量名：[是(✅)/共用(🔴)/不适用]
 
 ### 发现的问题
 [按严重程度排列：🔴 Critical / 🟡 Warning / 🟢 Info]
