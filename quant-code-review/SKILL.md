@@ -2,7 +2,7 @@
 name: quant-code-review
 description: |
   量化交易系统代码审计 — 在每次重大代码改动后自动执行全面审查。
-  覆盖十个维度：(P) 项目阶段与部署就绪度（前置，最先执行），(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐（含 🔴1.4 策略部署缺口检测 — 高优先级），(2) 回测引擎真实性（含 2.2.1 Next-Bar Entry 敏感度 + 2.10 数据真实性审计 + 2.11 Margin-Ratio 自动减仓 + 2.12 动态宇宙覆盖审计），(3) 实盘运维鲁棒性（含 3.6 MarginMonitor 实时保证金监控 + 3.7 账户资金流水过滤 + 3.8 实盘日志体系【含 3.8.1 Per-run 目录隔离】 + 3.9 交易对下架防御 + 3.10 告警与心跳协议），(4) 状态持久化完整性（含 🔴4.5 Monitor Protocol 监控导出协议 — 高优先级必查），(5) 代码性能，(6) AI协作代码质量，(7) 供应链与运行时安全（含 7.8 API 版本与认证方案兼容性）。
+  覆盖十个维度：(P) 项目阶段与部署就绪度（前置，最先执行），(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐（含 🔴1.4 策略部署缺口检测 — 高优先级），(2) 回测引擎真实性（含 2.2.1 Next-Bar Entry 敏感度 + 2.10 数据真实性审计 + 2.11 Margin-Ratio 自动减仓 + 2.12 动态宇宙覆盖审计），(3) 实盘运维鲁棒性（含 3.6 MarginMonitor 实时保证金监控 + 3.7 账户资金流水过滤 + 3.8 实盘日志体系【含 3.8.1 Per-run 目录隔离】 + 3.9 交易对下架防御 + 3.10 告警与心跳协议 + 🔴3.11 Maker-First 执行协议 — 强烈推荐），(4) 状态持久化完整性（含 🔴4.5 Monitor Protocol 监控导出协议 — 高优先级必查），(5) 代码性能，(6) AI协作代码质量，(7) 供应链与运行时安全（含 7.8 API 版本与认证方案兼容性）。
 
   🔴 特别注意：维度 4.5（Monitor Protocol 监控导出协议）是高优先级必查项！
   每个实盘策略都必须实现 monitor_export.json 标准导出。审查时如果发现缺失，
@@ -2745,6 +2745,292 @@ def shutdown(self, reason: str):
 - 事后复盘时，**日志永远是真相**——告警只是"那个时刻我们 push 出去过"的
   弱证据（可能发失败了）
 
+### 3.11 Maker-First 执行协议（Maker-First Order Protocol）🔴 强烈推荐
+
+**为什么是独立子维度**：Maker/Taker 费差在主流永续合约上通常是 3–4 倍
+（Hyperliquid: 1.5bps vs 4.5bps；Binance VIP0: 2bps vs 5bps）。对一个
+年换手率 5000%+ 的高频策略，这 3bps 差值一年就是 150% 的收益差距——
+"entry 全部走 taker" 和 "entry 60% maker / 40% taker" 的复利效应，在长回测里
+足以把一个 profit factor 1.05 的边缘策略变成 PF 0.95 的亏损策略。
+但这个维度在 Skill 原有结构中散落在 2.1（成本模型）、2.6（费率敏感度）、3.2
+（订单执行异常）中，缺少"一整套 Maker-First 下单协议"的系统化审计视角——
+本节补齐这个空白。
+
+**Maker-First 的核心设计理念**（来自 crypto-factor-mining-beta 真实实现）：
+
+```
+Entry（增加敞口）：
+  1. 以 mid_price 下 GTC Limit 单（如果不穿价差则为 maker）
+  2. 等待 LIMIT_TIMEOUT 秒（推荐 10–15s）
+  3. 若完全成交 → execution_style = "limit_only"（全部 maker 费率）
+  4. 若部分/未成交 → cancel，remainder 走 IOC 市价单
+     → execution_style = "limit_then_market" 或 "market_ioc"（mixed 或 taker 费率）
+
+Exit（减少/关闭敞口）：
+  直接 IOC 市价单（reduce_only=True）→ 100% taker
+  理由：出场时确定性 > 成本。等 maker 可能错过止损/再平衡窗口。
+
+回测对齐：
+  entry_maker_pct × maker_fee + entry_taker_pct × taker_fee  # 加权 entry 费率
+  exit_taker_pct × taker_fee                                 # 出场费率（= taker_fee）
+  其中 entry_maker_pct / entry_taker_pct 必须与实盘实测的 fill 分布匹配
+```
+
+**为什么这个设计好**（审计时必须理解的第一性原理）：
+
+1. **Entry 有时间冗余，Exit 没有**：入场信号在 bar-T close 成形，下一次 rebalance
+   是 bar-T+1 close — 有 24 小时的窗口。花 15s 等 maker 成本极低。
+   而 exit/risk-off 可能是因为 regime 切换或止损触发，等待 = 在错误方向敞口加剧。
+2. **费率省下 60% 以上**：entry 60% maker（1.5bps） + 40% taker（4.5bps）
+   = 2.7bps，对比纯 taker 4.5bps，省 40%；若静态看 entry 一侧，maker 部分省
+   67%。换手率越高，复利越大。
+3. **回测-实盘可对齐**：假设"100% maker"会在实盘不可复制；假设"100% taker"
+   会把 alpha 都吃掉导致没策略可跑。60/40 split 是可校准、可验证的现实假设。
+
+#### 3.11.1 Entry 下单链路审计
+
+```
+□ 是否使用 limit → market 两阶段下单（而非纯 market 或纯 limit）？
+□ Limit 价格取什么？
+  - 推荐：mid_price（不穿价差 → 成为 maker，等 taker 来吃单）
+  - 可选：贴近对手方 1 tick（跨越价差 → 立即成交但变 taker，失去 maker 意义）
+  - 警告：如果 limit_px 总是跨越价差，那就是假 maker-first，实际 100% taker
+  - 验证：grep 下单逻辑，确认 limit_px 计算没有加 spread_buffer（若有应该是负的，朝对手方反向靠近）
+
+□ TIF（Time-In-Force）选择：
+  - 第一阶段 Limit：应为 GTC（Good-Til-Cancel），否则无法等待 maker fill
+  - 第二阶段 Market：应为 IOC（Immediate-Or-Cancel，带宽松价格 buffer 模拟 market）
+  - 警告：若第一阶段用 IOC/FOK，limit 永远无法 rest，退化为穿价单 = 100% taker
+  - 可选改进：使用 ALO（Add-Liquidity-Only，Hyperliquid post-only）确保 100% maker，
+    但要处理"价格穿越时被拒"的错误路径
+
+□ LIMIT_TIMEOUT 参数化：
+  - 必须可配置（代码 default + env override）
+  - 推荐默认：10–15s（太短 → maker fill 率低；太长 → 信号已"过期"）
+  - env override（如 EXEC_LIMIT_TIMEOUT_SECONDS）应触发 startup warning，
+    提醒确认回测 entry_maker_pct/entry_taker_pct 仍然匹配新 timeout
+  - 反例：如果从 5s 改到 30s 但 backtest 还用 entry_maker_pct=0.50，
+    实盘实际 maker fill 率 > 0.75，回测低估了收益（浪费 alpha）；反之亦然
+
+□ Cancel-then-market 的正确顺序：
+  - 超时后必须先 cancel 再 market，否则可能双重成交（残留 limit 和新 market 都成交）
+  - Cancel 必须确认成功（cancel 返回 + _wait_for_order_closed 轮询）
+  - Cancel 失败时不能继续下 market 单，必须 bubble up 为错误
+  - 反例：fire-and-forget cancel，随后立即 market，可能导致 2×sz 敞口
+
+□ 部分成交的处理：
+  - 必须准确测量 limit 阶段成交了多少（filled_at_limit）
+  - Remainder = target_sz - filled_at_limit，然后 market 单只下 remainder
+  - remainder × ref_px 若 < min_trade_notional，应跳过 market 单（避免触发交易所 $10 min）
+  - 反例：不检查 limit 阶段成交，market 单总是下完整 sz → 超额建仓
+```
+
+#### 3.11.2 Fill Detection 可靠性（最易出 bug 的地方）
+
+```
+问题：SDK 的 limit order response 可能返回"status=resting"，但实际在 sleep 期间
+被对手方成交。如果只依赖 order response 的 filled_sz，会严重漏计 maker fills。
+
+正确做法（pre-post position delta）：
+  pre_pos = get_positions_as_dict()[coin]
+  place_limit_order(...)
+  sleep(LIMIT_TIMEOUT)
+  cancel_order(...)  # 包含 _wait_for_order_closed
+  post_pos = get_positions_as_dict()[coin]
+  filled_at_limit = abs(post_pos - pre_pos)  # 这才是真正的 limit 成交
+
+□ 是否使用 pre/post position delta 测量 limit 阶段 fill？
+□ 是否在 cancel 完成 → position query 之间有 guard 防止 race（等待所有 pending fill settle）？
+□ 是否处理 coin 不在 positions dict 的情况（新开仓的 coin）？
+□ Fee type 标记逻辑：
+  - filled_at_limit == target_sz   → fee_type = "maker"
+  - filled_at_limit > 0 but < target → fee_type = "mixed"
+  - filled_at_limit == 0             → fee_type = "taker"
+  - 每笔 trade 必须有明确 fee_type，不能默认 "unknown"
+
+□ execution_style 分类（用于事后校准 entry_maker_pct）：
+  - "limit_only"         — full maker fill
+  - "limit_then_market"  — partial maker + partial taker
+  - "market_ioc"         — 0 maker, all taker
+  - "market_reduce_only" — exit，100% taker
+  - 每笔 trade 必须记录 execution_style，否则无法反推实盘真实 maker pct
+```
+
+#### 3.11.3 Exit 走 Taker 的正当性（不要偷懒在 Exit 也用 maker-first）
+
+```
+□ Exit/reduce-only/stop-loss 是否统一走 market IOC（而非 limit→market）？
+□ 对应回测的 exit_taker_pct 是否 = 1.00？
+□ 常见错误：
+  - "为了省费用，exit 也用 maker-first"
+    → exit 慢一步 = 错过 rebalance 窗口 = 持仓偏离 target
+    → 回测假设 exit 即时成交，实盘慢半拍 = alpha 蒸发
+  - "stop-loss 用 limit 以避免滑点"
+    → 止损最怕的就是不成交；limit 止损在极端行情中必然不成交
+    → 必须 market 或用 stop-market order
+
+□ Exit 的 reduce_only 标志：
+  - 必须为 True，防止 flip（exit 超量反向开仓）
+  - 全仓模式下 reduce_only 可以避免"本想平仓 100 但实际建了 50 空单"的错误
+```
+
+#### 3.11.4 费率闭环校准（Fee-Split Calibration Loop）
+
+```
+部署后 7-14 天，必须用实盘 trade logs 反推真实 maker/taker split，再回馈到回测 config。
+这个循环是 Maker-First 设计能否兑现"既省费又对齐回测"的关键——没有校准闭环，
+回测和实盘永远是两个平行宇宙。
+
+Step 1 — 从实盘日志统计 fill 分布：
+  jq -c 'select(.event=="trade_executed" and .direction=="entry")' live_logs/*.jsonl \
+    | jq -s '
+        group_by(.execution_style)
+        | map({style: .[0].execution_style, count: length, sum_filled: (map(.filled_sz * .avg_px) | add)})
+      '
+
+Step 2 — 计算 notional-weighted maker pct：
+  total_entry_notional = Σ filled_notional (direction=="entry")
+  maker_notional = Σ filled_notional where execution_style=="limit_only"
+                  + Σ (limit_filled × limit_px) where execution_style=="limit_then_market"
+  realized_maker_pct = maker_notional / total_entry_notional
+
+Step 3 — 对比回测假设：
+  backtest.entry_maker_pct (当前 config) vs realized_maker_pct (实测)
+  diff = |backtest - realized| / backtest
+  - diff < 10% → ✅ 对齐良好
+  - diff 10-25% → 🟡 轻微偏离，建议下个版本校准
+  - diff > 25% → 🔴 严重偏离，必须立即更新回测 config 并重跑 sensitivity
+
+Step 4 — 更新回测 config：
+  将 realized_maker_pct 写回 strategy config（entry_maker_pct / entry_taker_pct）
+  同时在 git commit message 中注明校准来源（"calibrated from 2026-04-10~04-24 live
+  fill data, N=437 entries"）。这保留审计链。
+
+Step 5 — 重跑 sensitivity check：
+  以新 entry_maker_pct ± 10pp 跑一组回测（如 realized=0.62 时，跑 0.52/0.62/0.72）
+  → 如果 CAGR 变化 < 5%，策略对 maker pct 假设不敏感（好）
+  → 如果 CAGR 变化 > 20%，策略严重依赖 maker 假设（红旗，需加 fee robust 化）
+
+□ 是否有自动化脚本跑这个校准流程？（推荐放在 scripts/calibrate_fee_split.py）
+□ 是否有周期性校准规则？（推荐：每次部署新版本 + 每 4 周例行一次）
+□ 校准结果是否写入 review 报告？（不能只改 config 不留记录）
+```
+
+#### 3.11.5 环境变量与回测 config 的联动警告
+
+```
+□ 与 execution 行为相关的 env vars 是否在 startup 时检查并警告？
+  必查项：
+  - EXEC_LIMIT_TIMEOUT_SECONDS — 影响 maker fill 率
+  - EXEC_MIN_TRADE_NOTIONAL    — 影响 small trade skip 率
+  - EXEC_IOC_PRICE_BUFFER_PCT  — 影响 IOC market 的最终成交价
+
+□ 覆盖代码 default 时，是否提示"请重新校准回测假设"？
+  推荐 log 模板：
+    WARNING: EXEC_LIMIT_TIMEOUT_SECONDS overrides code default: effective=30s,
+             code_default=15s. Confirm backtest entry_maker_pct/entry_taker_pct
+             still match live execution.
+
+□ 是否有机制防止 env override 悄悄漂移回测-实盘对齐？
+  - 推荐：将 effective execution config 写入 per-run 日志 + monitor_export.json
+  - 审计方法：启动日志中搜索"execution_config_override"事件
+```
+
+#### 3.11.6 极端场景防御
+
+```
+□ Mid-price 不可用时的降级：
+  - 若 get_mid_price 失败（订单簿空、WS 断连），降级到 ref_px（上一个 known price）
+  - 禁止 fallback 到 0 或 None（会导致 limit 价格异常）
+  - 日志必须记录"mid price unavailable"事件
+
+□ Limit 单 Rejection 的处理：
+  - 可能原因：价格越界（HL 有 50% 价差限制）、notional < $10、reduce-only 不匹配
+  - 被拒时必须立即降级到 market 单（不能 retry limit，浪费 timeout）
+  - 每个 rejection reason 应分别 log，便于诊断
+
+□ 并发 entries 的 race condition：
+  - 如果 rebalance 同时对 20 个 coin 下 entry，每个都 sleep(LIMIT_TIMEOUT) 不能串行
+  - 必须用 ThreadPoolExecutor 并发，每个 entry 独立计时
+  - 审计：确认 concurrent entries 的 pre/post position snapshot 是每 coin 独立获取
+
+□ Kill switch 触发时：
+  - Maker-First 逻辑必须被 bypass，所有 open 仓位立即 market close
+  - 审计：kill switch path 是否调用 _execute_exit（market）而非 _execute_entry（limit-first）
+```
+
+#### 3.11.7 回测侧的 Maker-First 费率建模检查清单
+
+```
+与 3.11.1-3.11.6 实盘侧审计对偶，回测侧必须实现以下模型：
+
+□ BacktestConfig 必须暴露以下字段（使用 dataclass default 作为单一真相源）：
+  - maker_fee / taker_fee (来自交易所实际费率)
+  - entry_maker_pct / entry_taker_pct (sum = 1.0)
+  - exit_taker_pct (通常 = 1.0)
+
+□ 加权费率计算（用于每笔 entry）：
+  entry_fee_rate = entry_maker_pct × maker_fee + entry_taker_pct × taker_fee
+  exit_fee_rate  = exit_taker_pct × taker_fee
+
+□ Fee 计算必须 based on turnover（而非单纯 trade count）：
+  fee_cost_per_bar = turnover_i × entry_fee_rate  (for entries)
+                   + turnover_i × exit_fee_rate    (for exits)
+  反例：fee = n_trades × flat_fee — 完全错误，忽略了 position size
+
+□ 滑点必须独立于 maker/taker 费率建模：
+  - slippage_pct 代表 "IOC 市价单相对 mid 的价差成本"
+  - 不能把 slippage 和 taker_fee 合并成"effective taker cost"，因为两者的物理含义不同
+  - Maker 成交没有 slippage（你就是价差的一部分），所以 maker 部分只扣 maker_fee
+
+□ Sensitivity check（必跑）：
+  - entry_maker_pct 从 0.0 到 1.0 以 0.1 步长 sweep，观察 CAGR 曲线
+  - 如果 maker_pct = 0.0 时策略亏损 → 警告：alpha 严重依赖 maker fill
+  - 如果曲线变化 < 10pp → 策略对 fee split 假设不敏感（健康）
+  - 如果曲线变化 > 50pp → 策略不稳健，必须先降低换手率再谈部署
+
+□ Stop-loss / forced-close 必须用 exit_taker_pct 而非 entry 费率：
+  grep "stop_loss\|forced_close\|margin_liquidation" 确认 fee 计算用的是 exit 费率
+  反例：用 entry_maker_pct × maker_fee 计算止损费用 — 低估真实成本
+```
+
+#### 3.11.8 Maker-First 审计报告模板
+
+```
+每次审计输出以下表格：
+
+| 检查项 | 实盘实现 | 回测对齐 | 风险等级 |
+|--------|---------|---------|---------|
+| Entry 两阶段（limit→market） | ✅/❌ | entry_maker_pct ≈ realized? | ... |
+| Exit 单阶段（market IOC）    | ✅/❌ | exit_taker_pct = 1.00?       | ... |
+| LIMIT_TIMEOUT 可配置         | ✅/❌ | env override 有警告?         | ... |
+| Limit 价格 = mid             | ✅/❌ | 不穿价差                      | ... |
+| TIF = GTC (limit) / IOC (market) | ✅/❌ | —                       | ... |
+| Pre-post position 测 fill    | ✅/❌ | —                             | ... |
+| Cancel 确认成功              | ✅/❌ | —                             | ... |
+| execution_style 记录         | ✅/❌ | —                             | ... |
+| fee_type 分类                | ✅/❌ | —                             | ... |
+| min_trade_notional 检查      | ✅/❌ | 回测 config 同步?              | ... |
+| Reduce-only exit             | ✅/❌ | —                             | ... |
+| Fee-Split 校准流程           | ✅/❌ | realized vs config diff < 10%? | ... |
+| Mid-price 降级处理           | ✅/❌ | —                             | ... |
+| Kill switch bypass maker     | ✅/❌ | —                             | ... |
+| Sensitivity on entry_maker_pct | — | CAGR 变化 < 20pp?              | ... |
+
+风险等级：
+- 🔴 Critical：实盘跑纯 taker 但回测假设 maker-first（或反过来）→ 立即修复
+- 🟠 High：Fill detection 不可靠（用 order response 而非 position delta）
+- 🟡 Medium：没有 fee-split 校准流程 / env override 无警告
+- 🟢 Low：所有项实现合理，仅轻微改进空间
+```
+
+**与 2.1 / 2.6 / 3.2 的协同**：
+- **2.1 成本模型**：回测的 maker/taker 拆分只是费率输入；本节定义如何产出这些拆分
+- **2.6 费率复利效应**：回测的 commission sensitivity 依赖 entry_maker_pct
+  假设的真实性；本节负责定期校准这个假设
+- **3.2 订单执行异常**：处理订单 level 的 retry/partial fill；本节处理"协议级"
+  的 limit→market 时序和 fee 语义
+
 ---
 
 ## 维度四：状态持久化完整性
@@ -3851,3 +4137,4 @@ P.2 部署就绪度（如适用）：
 50. **Strategy Deployment Gap：research 完成 ≠ 部署完成** — 2026-04-10 真实案例：R4 信号引擎在 Alpha Lab 完成 21 轮实验验证（WR 57.6%, CAGR >>1000%），代码已合并到仓库，但 bot.py 仍在调用旧的 V20 信号引擎（CAGR 仅 217%）。实盘持续亏损数周，所有排查都聚焦在执行层面（手续费、fill rate、滑点），没人想过"我们根本没有在跑那个好策略"。根因：Alpha Lab 的产出（独立模块 + config JSON）和实盘的接入（bot.py 信号流）之间没有任何自动化的桥接检查。代码合并 ≠ 信号流接入 ≠ 实盘生效。每次 Alpha Lab 产出新的 champion，必须有一个显式的"部署到实盘"步骤，并在部署后验证实盘确实在调用新引擎。
 50. **锚定效应会让你在错误的层面排查数周** — 当实盘亏损时，人的第一反应是"执行有问题"（手续费算错了、fill rate 太低、滑点太大）。如果第一次排查确实发现了一些执行层面的小问题（费率不精确、gas 成本被低估），锚定效应会加强——你会更加确信"就是执行的问题"，然后在这个方向上越走越深。但真正的根因可能完全在另一个层面：你跑的就不是那个好策略。教训：实盘亏损排查的第一步不应该是查执行，而应该是确认"我们在跑哪个策略，它是不是仓库里最好的那个"。
 51. **Research 到 Production 的"最后一公里"需要正式 checkpoint** — 量化系统的 R&D 流程（idea → 回测 → Alpha Lab 验证 → champion config）和部署流程（config → wire into bot → integration test → paper trading → live）之间存在天然断层。R&D 的交付物是"一个 JSON config + 一组独立模块"，但部署需要的是"bot.py 中的信号流改动 + 冷启动适配 + 风控集成"。这个 gap 不会自动弥合。必须有一个显式的 deployment checklist（就像 r4_champion_config.json 中的 deployment_checklist），且每次 review 时必须检查这个 checklist 的完成状态。
+52. **Maker-First 不是"在 entry 用 limit 单"那么简单，它是一整套协议** — 真实项目 crypto-factor-mining-beta 的实现展示了完整形态：(a) Entry 用 GTC limit @ mid，等 LIMIT_TIMEOUT 秒，超时 cancel 再 IOC market；(b) Exit 直接 IOC market（确定性 > 省费）；(c) 用 pre/post position delta 测量 limit 阶段真实 fill（而非依赖 order response）；(d) 每笔 trade 记录 execution_style（limit_only / limit_then_market / market_ioc）；(e) 回测用 entry_maker_pct × maker_fee + entry_taker_pct × taker_fee 的加权模型；(f) 关键联动：LIMIT_TIMEOUT 参数的 env override 必须触发 startup warning，提醒重新校准 backtest 的 entry_maker_pct（5s→15s 会把 realized maker pct 从 0.50 推到 0.60+）；(g) 部署 7-14 天后用 live fill logs 反推 realized_maker_pct，回灌到 backtest config —— 没有这个校准闭环，回测和实盘就永远是两个平行宇宙。常见踩坑：exit 也用 maker-first（错过止损窗口）、limit_px 跨越价差（实际 100% taker，假 maker-first）、用 order response 的 filled_sz 测量（低估 maker fill 率）、fire-and-forget cancel 后立即下 market（双重成交风险）。**Maker-First 的本质是把交易所的 "快 vs 省" 权衡显式化，然后按 entry/exit 的业务语义做不同选择——入场不急，走 maker 省费；出场急，走 taker 求确定。**
