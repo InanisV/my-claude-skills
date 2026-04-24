@@ -2,7 +2,7 @@
 name: quant-code-review
 description: |
   量化交易系统代码审计 — 在每次重大代码改动后自动执行全面审查。
-  覆盖十个维度：(P) 项目阶段与部署就绪度（前置，最先执行），(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐（含 🔴1.4 策略部署缺口检测 — 高优先级），(2) 回测引擎真实性（含 2.2.1 Next-Bar Entry 敏感度 + 2.10 数据真实性审计 + 2.11 Margin-Ratio 自动减仓 + 2.12 动态宇宙覆盖审计），(3) 实盘运维鲁棒性（含 3.6 MarginMonitor 实时保证金监控 + 3.7 账户资金流水过滤 + 3.8 实盘日志体系【含 3.8.1 Per-run 目录隔离】 + 3.9 交易对下架防御 + 3.10 告警与心跳协议 + 🔴3.11 Maker-First 执行协议 — 强烈推荐），(4) 状态持久化完整性（含 🔴4.5 Monitor Protocol 监控导出协议 — 高优先级必查），(5) 代码性能，(6) AI协作代码质量，(7) 供应链与运行时安全（含 7.8 API 版本与认证方案兼容性）。
+  覆盖十个维度：(P) 项目阶段与部署就绪度（前置，最先执行），(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐（含 🔴1.4 策略部署缺口检测 — 高优先级），(2) 回测引擎真实性（含 2.2.1 Next-Bar Entry 敏感度 + 2.10 数据真实性审计 + 2.11 Margin-Ratio 自动减仓 + 2.12 动态宇宙覆盖审计），(3) 实盘运维鲁棒性（含 3.6 MarginMonitor 实时保证金监控 + 3.7 账户资金流水过滤 + 3.8 实盘日志体系【含 3.8.1 Per-run 目录隔离】 + 3.9 交易对下架防御【含 3.9.1 LLM 公告分类器反噪声与成本控制】 + 3.10 告警与心跳协议 + 🔴3.11 Maker-First 执行协议 — 强烈推荐【含 3.11.9 Unknown-State Settlement 保守策略】），(4) 状态持久化完整性（含 🔴4.5 Monitor Protocol 监控导出协议 — 高优先级必查【含 4.5.1 Heartbeat 与 Full Snapshot 分层新鲜度】），(5) 代码性能，(6) AI协作代码质量，(7) 供应链与运行时安全（含 7.8 API 版本与认证方案兼容性）。
 
   🔴 特别注意：维度 4.5（Monitor Protocol 监控导出协议）是高优先级必查项！
   每个实盘策略都必须实现 monitor_export.json 标准导出。审查时如果发现缺失，
@@ -2443,6 +2443,168 @@ class DelistingMonitor:
 - **历史数据断裂**：已下架标的的历史数据可能在交易所 API 上不再可用
   → 需要本地缓存或使用第三方历史数据源
 
+#### 3.9.1 LLM 公告分类器的反噪声与成本控制（Aster 2026-04 血泪教训）
+
+**为什么要单独列出这个子节**：原 3.9 已经给了一个"keyword + LLM"的基础框架，
+但一次真实部署暴露了一整组"看起来合理但会让你亏钱或漏判"的陷阱。这些经验
+来自 2026-04-24 Aster 实盘部署后的紧急修复 — 把它们系统化地沉淀下来，
+免得下次在另一个交易所/另一个模型上重新踩一遍。
+
+**核心原则（比工具重要）**：
+
+```
+1. False positive > False negative 的成本不对称：
+   公告监控错判一次 = 平掉一个真仓（可能是正 PnL 的仓位） = 实际亏钱
+   公告监控漏判一次 = 交易所 API 层兜底（PRE_DELIVERING / SETTLING 会拦截）
+   → Prompt / 代码默认都必须是"when in doubt, return false"。
+   → 合约决策依据永远优先选 deterministic（关键词 + 交易对精确匹配）而非 LLM。
+
+2. LLM 是"噪声过滤兜底"，不是"事实来源"：
+   当网页是 JS app shell / category 索引 / 符号目录时，交易所没有提供
+   actionable 公告 — 此时 LLM 的任务是说"这不是公告"，而不是硬从噪声里
+   挖出一个受影响符号。
+   → 宁可让 LLM 经常 false（拒绝候选），也不要给模型"必须给出答案"的压力。
+
+3. LLM 成本的指数放大来源不是单次调用，而是重复处理同一条公告：
+   单次调用 $0.0002。但如果每 6h 轮询一次 × 每轮 50 条历史 rows × 每条都打
+   LLM = 200 次/天 = $0.04/天 = $14.4/年。修复：持久化 rejection cache。
+```
+
+**审查清单（在原 3.9 基础上新增）**：
+
+```
+A. 数据源优先级 — 结构化 API > RSS > 纯文本 HTML
+   □ 当交易所同时提供 list 网页（e.g. /announcement?category=DELISTING）
+     和结构化 API（e.g. /bapi/.../announcement/search）时，必须 sniff URL
+     并直接打 API，不要抓 HTML：
+       - HTML 可能是 SPA app shell（只有 <div id="root">）→ 内容全为空
+       - HTML 里的导航栏 / 侧栏 / "热门交易对" 区块包含全部 symbol
+         → keyword 预过滤无法过滤掉这些 HTML，会 100% 命中并送进 LLM
+         → LLM 看到"这页提到了 BTCUSDT / ETHUSDT / SOLUSDT..."可能被骗
+   □ 对于 Aster 这类 SPA 交易所，实现一个 URL → structured-endpoint 的
+     翻译层（见 Codex 的 _fetch_aster_announcement_items 示例）
+
+B. 不要把 HTML app-shell 当成一条公告
+   □ _parse_feed 必须识别 `<!doctype html`、`<html`、`<body` 前缀
+     → 默认 return []，而不是"把整页 HTML 作为 body 单条 item"
+   □ 只有启用 LLM 且显式 allow_unstructured_html=True 时才解析 HTML，
+     而且要额外做 mini-parse（去掉 script/style/nav/aside）减少噪声
+   □ 反例：把 app shell 当成一条 `AnnouncementItem(title=url, body=<整页>)`
+     → LLM 看到全部 symbol，在保守模式下会"宁可多判"，触发错误 block
+
+C. 轮询频率 — 对下架时间线做"够用即可"的选择
+   □ 下架公告通常提前 7-30 天，6h 和 12h 的延迟对 actionability 毫无差别
+   □ 默认 12h 而非 6h：成本降一半，同时日均真正触发 LLM 的次数降到 0-1 次
+   □ 只有当交易所有"24h 紧急下架"史实时，才下探到 6h 或更密
+
+D. LLM Rejection Cache — 单次判定永久生效
+   □ 对每条 candidate item 计算 digest = sha256(title + body)
+   □ 同时计算 universe_digest = sha256(sorted(requested_symbols))
+   □ key = f"{item_digest}:{universe_digest}"
+   □ 第一次 LLM 返回"affects_holdings=false" → 把 key 加入 rejected cache
+   □ 下次轮询再看到同一 item（archive 不会变）→ 直接跳过 LLM 调用
+   □ 失效策略：当 requested symbols 变化（universe_digest 变）→ cache miss
+     → 重新评估（因为新增的标的可能真的被下架了）
+
+E. Stale Row 过滤 — List 端点会返回 archive
+   □ 交易所的 list API 每次都返回历史全量（最近 50-100 条），不是 delta
+   □ 如果只靠 "seen_hashes" 去重，首次轮询时所有历史 archive rows 都是新的
+     → 一次 burst 的 LLM 调用，并可能把 "XYZ delisted on 2025-03-15" 
+        当成 actionable → 错误 block 一个早已不在 universe 的 symbol
+   □ 规则：
+     - 已解析出 deadline 且 deadline < now - 24h grace → stale，skip
+     - 无 deadline 但 published_at < now - 14d → stale，skip（仅对已知
+       list 端点生效，RSS / 明文 feed 不适用）
+   □ Grace window 必须有（不是直接 deadline < now）— 处理时区边界 & 撤回
+
+F. Spot / Contract 的消费侧过滤
+   □ 合约 bot 的 universe 是 "XXXUSDT" 永续合约，但公告经常掺杂 spot
+     下架（同一 ticker 但产品线完全不同）
+   □ 在 keyword 命中后、调 LLM 前，先做 spot-only 检测：
+     "Spot Trading / 现货" 且 不含 "Perpetual / Futures / Contract"
+     → skip（哪怕 symbol 名称命中）
+   □ 对偶规则 — 明确 contract 公告则本地直接 authoritative：
+     "Perpetuals Delisted / Perpetual Contract Delist" + symbol 命中
+     → 不必调 LLM，直接视为确认（避免 LLM 把合约下架 false-negative
+       回去，从而让一个真的下架溜过去）
+
+G. Prompt Engineering 的三条铁律
+   □ 提供 alias hints — 让模型建立 canonical ↔ 别名映射
+     例：`- 1000SHIBUSDT: 1000SHIBUSDT, 1000SHIB, SHIB, SHIBUSDT`
+     否则公告说"SHIB delist"、universe 是 1000SHIBUSDT 时会漏判
+   □ 显式列出"safe path"：遇到 category / app-shell / 符号目录直接
+     return affects_holdings=false。这是一句 prompt 但挡掉 ~95% 的假阳
+   □ 白名单裁剪 — 模型返回的 affected_symbols 必须与当前 universe 精确
+     交集（代码层 set(requested) ∩ set(model_output)），防止模型幻觉
+     出 universe 之外的 symbol，然后代码老老实实 block 了它
+
+H. OpenAI API 客户端的坑
+   □ 不同模型对参数的容忍度不同：
+     - gpt-4.1-nano / gpt-4o-mini: 接受 temperature=0
+     - gpt-5 / gpt-5-nano: **omit temperature**（发送会 400）
+   □ HTTP 错误处理不要用 raise_for_status()：response body 里有真正有用
+     的错误信息（如 "model does not support temperature"），直接 raise
+     丢掉了 body。改成：
+       ```python
+       if resp.status_code >= 400:
+           raise RuntimeError(f"LLM HTTP {resp.status_code}: "
+                              f"{_truncate_text(resp.text, 500)}")
+       ```
+   □ response_format={"type": "json_object"} 是必须的（避免 markdown 代码
+     块包裹的 JSON，parse 失败概率大幅降低）
+   □ LLM 失败 → set() + log.warning，**绝不 block symbols**
+     （安全故障模式：LLM 挂掉不能扩散成"自动平仓全部持仓"）
+
+I. 默认模型选择（2026-04 准）
+   □ 推荐：gpt-5-nano（OpenAI 最便宜的 flagship-mini，支持 JSON mode）
+   □ 单次调用成本：~$0.0001（12k chars truncation 下）
+   □ 备选：gpt-4.1-nano（略便宜，但分类能力略弱，prompt 要更显式）
+   □ 不推荐：gpt-4 / claude-sonnet — 严重过量，浪费成本
+
+J. 输入裁剪
+   □ 单次调用必须 truncate 公告正文到 ~12000 chars（8-10k tokens）
+   □ 裁剪策略：取前 N 字符 + "
+...[truncated]" 标记
+   □ 理由：
+     a. 控制成本（输入 tokens 直接决定账单）
+     b. 控制合规（避免把完整网页 dump 给外部 API）
+     c. 长 HTML 的真实签名通常出现在开头 1-2 屏，后面都是噪声
+```
+
+**最终总结 — LLM 公告监控的"极简骨架"**：
+
+```python
+# 每次轮询
+for item in fetch_items(url):                    # ← 优先结构化 API
+    if is_html_appshell(item):                   # ← 反 SPA 污染
+        continue
+    if is_stale(item, now):                      # ← archive 过滤
+        continue
+    if not any(kw in item for kw in KEYWORDS):   # ← 本地关键词
+        continue
+    if is_spot_only_notice(item):                # ← 合约 bot 不关心
+        continue
+    local_hits = match_universe_symbols(item)    # ← 精确匹配
+    if local_hits and is_contract_delist(item):
+        affected = local_hits                    # ← authoritative
+    else:
+        cache_key = (item_digest, universe_digest)
+        if cache_key in rejected_cache:          # ← 单次判定永久生效
+            continue
+        decision = call_llm(item)                # ← 只有这一步花钱
+        if not decision.affects_holdings:
+            rejected_cache.add(cache_key)
+            continue
+        affected = decision.affected_symbols & universe  # ← 白名单裁剪
+    trigger_block(affected)
+```
+
+这个骨架背后的成本 — 每月约 0-5 次真实 LLM 调用（$0.0005-$0.01），
+对比"抓取 HTML app shell + 每条都打 LLM" 的失败模式（$5-$50/月 + 
+频繁错误 block），差距是 1000 倍。
+
+---
+
 ### 3.10 告警与心跳协议（Alerting & Heartbeat Protocol）
 
 **为什么重要**：实盘 bot 在服务器上"无人值守"地运行，当它真正需要人类介入的时候
@@ -3024,6 +3186,106 @@ Step 5 — 重跑 sensitivity check：
 - 🟢 Low：所有项实现合理，仅轻微改进空间
 ```
 
+#### 3.11.9 Unknown-State Settlement 的保守策略（Maker Overfill 防御）
+
+**问题场景**：Maker-first 两阶段执行中的关键一步是 cancel_and_settle —
+它负责取消挂在交易所的 limit leg，并同步返回 limit 已成交的数量。但这一步
+**可能失败**（网络抖动、交易所 rate limit、API 版本兼容问题、-2011 Unknown
+Order 等）。此时代码只知道"我不知道 limit 到底成交了多少"，既可能全成交
+可能全未成交，也可能部分成交。
+
+**朴素但错误的做法**（Maker-First 第一版常见陷阱）：
+
+```python
+except CancelSettleError:
+    maker_qty = Decimal(0)          # ❌ 假设没成交
+    # 然后补一个全量 IOC market remainder
+    self.market_ioc(order.symbol, side, order.qty)
+```
+
+这个假设的**灾难性后果**：如果 limit 其实已经成交（哪怕是部分），IOC 又下了
+全量 → **overfill**。你的账户持仓会超出 target，直到下一个 tick 的 reconcile
+才被发现 — 在此期间你扛着不受控的额外敞口，而且 reconcile 修复 overfill 只能
+反向平仓（双份手续费 + 滑点 + 可能的 PnL 损失）。
+
+**正确的对偶策略**：
+
+```python
+except CancelSettleError as e:
+    maker_assumed_unknown = True
+    maker_qty = order.qty               # ✅ 假设已全部成交
+    maker_price = limit_price
+    maker_raw = {
+        "status": "UNKNOWN_CANCEL_SETTLE_FAILED",
+        "assumed_full_maker": True,
+        "executedQty": str(order.qty),
+        "avgPrice": str(limit_price),
+        "clientOrderId": cid,
+        "error_code": str(e.code),
+        "error_msg": e.msg,
+    }
+    # ⚠️ 不下 remainder IOC — 让下一 tick 的 reconcile 修复 underfill
+```
+
+**为什么"假设全成交"是更安全的默认**（第一性原理）：
+
+```
+│ 假设类型    │ Limit 真实状态 │ 系统行为        │ 结果         │
+│────────────│───────────────│────────────────│─────────────│
+│ 假设 0 成交 │ 实际 0 成交    │ IOC full qty   │ 正确         │
+│ 假设 0 成交 │ 实际部分成交    │ IOC full qty   │ 🔴 OVERFILL │
+│ 假设 0 成交 │ 实际全成交     │ IOC full qty   │ 🔴 2× OVERFILL │
+│ 假设全成交  │ 实际 0 成交    │ 不下 remainder │ 🟡 UNDERFILL │
+│ 假设全成交  │ 实际部分成交    │ 不下 remainder │ 🟡 UNDERFILL │
+│ 假设全成交  │ 实际全成交     │ 不下 remainder │ 正确         │
+
+OVERFILL 代价：立即扛超量敞口 + 下 tick 必须反向市价平（2× 手续费 + 滑点）
+UNDERFILL 代价：等 1 tick reconcile 补单（1× 延迟，0 额外手续费）
+→ Underfill 是严格更便宜的错误模式。
+```
+
+**审查清单**：
+
+```
+□ executor 中 cancel_and_settle 的所有异常分支是否采用"假设全成交"策略
+  - 搜索 `except.*CancelSettle\|except AsterError.*settle` 找到所有 catch 点
+  - 确认每个 catch 分支内 maker_qty = order.qty 而非 Decimal(0)
+  - 确认没有在异常分支里下 remainder / fallback market
+
+□ 是否引入独立的 execution_style 标记这种状态
+  - 推荐：STYLE_LIMIT_UNKNOWN
+  - 区别于 STYLE_LIMIT_ONLY（已确认全成交）和 STYLE_LIMIT_THEN_MARKET
+    （已确认部分+补 market）
+  - 作用：让 monitor / fee-split calibration 能识别出"本 tick 的 maker
+    ratio 不可知"，不把这类 fill 算进 realized_maker_pct 分母
+
+□ maker_raw 中是否保留原始 error_code / error_msg
+  - 用于事后从 trade log 反查异常频率 — 如果 UNKNOWN 比例高，说明
+    cancel_and_settle 的 API 层不稳定，需要定位根因
+  - 推荐字段：{status, assumed_full_maker: True, error_code, error_msg,
+    clientOrderId, executedQty, avgPrice}
+
+□ Reconcile 的可靠性是这个策略的唯一后盾
+  - 每个 tick 开始必须对 local position 与 exchange position 做 diff
+  - 发现 local < exchange（underfill 等待补）→ 下一次 rebalance 自然补齐
+  - 发现 local > exchange（异常，不应该发生）→ 对齐为 exchange，log WARN
+  - 如果 reconcile 本身不可靠或缺失 → 🔴 这个"假设全成交"策略也不能用，
+    退回到"只做 maker、拒绝 cancel-and-settle 失败" 的更保守路径
+
+□ 对应的 fill detection 测量方式
+  - 如果 executor 既支持 pre/post position delta 测 maker fill（见 3.11.2）
+    又遇到 cancel_and_settle 失败 → 先看 position delta，能得到 ground truth
+    的就用 ground truth，得不到才退到"假设全成交"
+  - 顺序：position delta > assumed_full_maker > assumed_no_maker（绝不用）
+```
+
+**配套监控**：在 monitor_export.json 的 health 段内增加 `execution_unknown_count_24h`
+计数器，让监控中心能在 UNKNOWN 占比异常时触发告警。如果 24h 内 UNKNOWN >
+total_entries × 20% → 说明 API 层不稳定，需要人工介入；长期在低位（< 2%）
+→ 属于正常的网络抖动，当前策略可以继续运行。
+
+---
+
 **与 2.1 / 2.6 / 3.2 的协同**：
 - **2.1 成本模型**：回测的 maker/taker 拆分只是费率输入；本节定义如何产出这些拆分
 - **2.6 费率复利效应**：回测的 commission sensitivity 依赖 entry_maker_pct
@@ -3250,6 +3512,118 @@ Step 5 — 重跑 sensitivity check：
       会导致 HEARTBEAT_LOST 误告警。需要在主循环每个周期末尾
       无条件调用 exporter.export(), 或实现空闲心跳线程。"
 ```
+
+### 4.5.1 Heartbeat 与 Full Snapshot 的分层新鲜度（Two-Tier Freshness）
+
+**背景故事**：4.5 里默认每个 bot 只有一个 `heartbeat_timeout` 阈值，监控中心
+据此判断"STALE / OK"。这在 tick cadence ≤ heartbeat_timeout 的快策略上没问题，
+但对于 tick cadence = 1h、daemon heartbeat = 5min 的 bar-close 类策略（典型如
+E444、DCA、任何按小时 rebalance 的策略）会触发一个隐蔽的 false-STALE 陷阱：
+
+```
+T+0s        tick 执行 export() → _last_full_export_at = now
+T+300s      daemon heartbeat → 刷新 _updated_at（但不刷 _last_full_export_at）
+T+385s      heartbeat_timeout 到 → bot 其实没问题，但监控 STALE ✗
+T+600s      heartbeat 又刷 _updated_at → 监控 OK/STALE 抖动
+...
+T+3600s     下一次 tick → 再次 export() → snapshot age 归零
+
+结果：每个 tick 周期里有 ~54 分钟 bot 被错误地标记为 STALE。
+运维端每小时被误告警一次 → 告警疲劳 → 真正 STALE 事件被忽略。
+```
+
+**根因**：_last_full_export_at（最后一次完整 tick 写入）和 last_heartbeat
+（daemon 最后一次轻量刷新）是**两个不同时间概念**，但代码里被用同一个
+heartbeat_timeout 做判断。
+
+**修复设计 — 两个独立的 freshness 阈值**：
+
+```
+heartbeat_timeout_seconds        默认 385s（300s heartbeat × 1.28）
+  └─ 判断 daemon thread 是否还在刷 _updated_at
+  └─ 如果 now - _updated_at > heartbeat_timeout → HEARTBEAT_LOST
+
+full_snapshot_timeout_seconds    默认 max(heartbeat_timeout × 2, 5400s)
+                                 即 1.5 × 典型 1h tick cadence
+  └─ 判断 tick 本身是否停转（最后一次完整 export 是多久之前）
+  └─ 如果 now - _last_full_export_at > full_snapshot_timeout → TICK_STUCK
+```
+
+这两个阈值分别对应两类完全不同的故障：
+- HEARTBEAT_LOST = 进程死了 / daemon 线程卡住（必须立即介入）
+- TICK_STUCK = 进程还在但策略循环跑不动（可能是 API 限速、K 线拉不到、
+  宇宙计算卡死 — 一样必须介入，但性质不同）
+
+**审查清单（在原 4.5 基础上新增）**：
+
+```
+□ MonitorExporter 构造函数是否暴露两个独立参数：
+  - heartbeat_timeout_seconds（已有）
+  - full_snapshot_timeout_seconds（新增）
+
+□ 两个阈值的默认值关系
+  - heartbeat_timeout >= heartbeat_interval / 0.8
+    （守住"daemon 每 5min 刷一次" 的契约）
+  - full_snapshot_timeout >= tick_cadence × 1.5
+    （策略允许单个 tick 比正常慢 50% — 常见是 fetch K 线超时）
+  - full_snapshot_timeout >= heartbeat_timeout × 2
+    （哪怕 tick_cadence 很短，也不能混淆两个概念）
+
+□ monitor_export.json health 段是否同时暴露两个字段：
+  health.heartbeat_timeout_seconds
+  health.full_snapshot_timeout_seconds
+  → 监控中心按各自阈值独立判断
+
+□ _health_status 判定逻辑
+  错误示例（真实 bug）：
+    if age > heartbeat_timeout: return "STALE"   # 🔴 把 tick-cadence 年龄和
+                                                 #    heartbeat 年龄混为一谈
+  正确示例：
+    if now - updated_at > heartbeat_timeout: return "STALE:heartbeat_lost"
+    if now - full_export_at > full_snapshot_timeout: return "STALE:tick_stuck"
+    return "OK"
+
+□ Bootstrap from state file 时是否同时恢复两个阈值
+  如果只读 heartbeat_timeout 不读 full_snapshot_timeout → 重启后降级回旧行为
+  推荐：
+    if v := health.get("heartbeat_timeout_seconds"):         self.heartbeat_timeout_seconds = float(v)
+    if v := health.get("full_snapshot_timeout_seconds"):     self.full_snapshot_timeout_seconds = float(v)
+
+□ Env override 必须支持两个阈值（否则没法在部署时单独调整）
+  - <BOT>_MONITOR_HEARTBEAT_TIMEOUT_SECONDS
+  - <BOT>_MONITOR_FULL_SNAPSHOT_TIMEOUT_SECONDS
+  - 以 config.py 中的 default 作为 single source of truth；env 只做 override
+  - 读取时必须 validate（max(1, int(v))）防止 0/负数 导致永远 STALE
+
+□ STOPPED 状态下两个字段都要被写入 export
+  - is_running=False 时仍然需要暴露两个 timeout，让监控中心的 schema
+    检查不会因为缺字段而报错
+  - last_heartbeat 可以用"shutdown 时刻"兜底；full_snapshot_age 用
+    _last_full_export_at 正常计算（不要 reset 为 0）
+```
+
+**操作层建议**：
+
+- 对于**已部署**的策略，补丁时要考虑向后兼容：旧版本的 monitor_export.json
+  没有 full_snapshot_timeout_seconds 字段 → bootstrap 时走默认值（隐式迁移）
+  → 监控中心对缺字段的消费也要有 fallback（`health.get("full_snapshot_timeout_seconds", health["heartbeat_timeout_seconds"] * 2)`）。
+  不要写成"没字段就报错"。
+
+- DEPLOY_RUNBOOK 中的 env-var 表格必须同时列出两个 timeout，并在注释里
+  明确"heartbeat 是 daemon 线程级新鲜度，full_snapshot 是 tick-cadence 级
+  新鲜度"，运维才知道该调哪个。
+
+- 回归测试必须覆盖三种场景：
+  a. tick 正常、heartbeat 正常 → OK
+  b. tick 卡死、heartbeat 继续 → STALE (full_snapshot_timed_out)
+  c. heartbeat 停止（进程死） → STALE (heartbeat_lost)
+  任何一种被错判为"OK"或另一种 reason → 立即红
+
+**与原 4.5 的关系**：4.5 定义了"什么字段必须存在"的 schema；4.5.1 定义了
+"这些字段的时间语义如何分层"。两者叠加后，一个合格的 Monitor Protocol v1.1
+实现需要同时满足：schema 完整 + 双阈值 freshness 判定。
+
+---
 
 **Beta 作为标杆**：Beta 的 StateManager._append_equity_snapshot() 已实现大部分要求。
 
