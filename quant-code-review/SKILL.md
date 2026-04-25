@@ -1,23 +1,27 @@
 ---
 name: quant-code-review
 description: |
-  量化交易系统代码审计 — 在每次重大代码改动后自动执行全面审查。
-  覆盖十个维度：(P) 项目阶段与部署就绪度（前置，最先执行），(0) 模块清单盘点，(1) 实盘/回测策略逻辑对齐（含 🔴1.4 策略部署缺口检测 — 高优先级），(2) 回测引擎真实性（含 2.2.1 Next-Bar Entry 敏感度 + 2.10 数据真实性审计 + 2.11 Margin-Ratio 自动减仓 + 2.12 动态宇宙覆盖审计），(3) 实盘运维鲁棒性（含 3.6 MarginMonitor 实时保证金监控 + 3.7 账户资金流水过滤 + 3.8 实盘日志体系【含 3.8.1 Per-run 目录隔离】 + 3.9 交易对下架防御【含 3.9.1 LLM 公告分类器反噪声与成本控制】 + 3.10 告警与心跳协议 + 🔴3.11 Maker-First 执行协议 — 强烈推荐【含 3.11.9 Unknown-State Settlement 保守策略】），(4) 状态持久化完整性（含 🔴4.5 Monitor Protocol 监控导出协议 — 高优先级必查【含 4.5.1 Heartbeat 与 Full Snapshot 分层新鲜度】），(5) 代码性能，(6) AI协作代码质量，(7) 供应链与运行时安全（含 7.8 API 版本与认证方案兼容性）。
+  量化交易系统代码审计 — 在每次重大代码改动后自动执行全面审查。覆盖维度
+  P (项目阶段+P.4 Profile 风险开关清单)、0 (模块盘点)、1 (实盘/回测对齐+1.4)、
+  2 (回测真实性 +2.10/2.11/2.12/2.13 Backtest Realism Flag)、3 (运维鲁棒性
+  +3.6/3.7/3.8/3.9/3.10/3.11)、4 (状态持久化 +4.5 Monitor Protocol +4.5.2
+  Identity 反硬编码)、5 (代码性能)、6 (AI 协作)、7 (供应链安全 +7.8)。
 
-  🔴 特别注意：维度 4.5（Monitor Protocol 监控导出协议）是高优先级必查项！
-  每个实盘策略都必须实现 monitor_export.json 标准导出。审查时如果发现缺失，
-  必须作为 🔴 关键问题上报，不能降级为建议或跳过。改造成本仅 3-5 行代码。
+  🔴 高优先级必查项：4.5 Monitor Protocol、P.4 + 2.13 + 4.5.2 ("4/19 Cascade
+  三件套")。后三者源自 2026-04-19 V15_PROD 实盘 cross-margin cascade -73.8%
+  事故 — 当时 use_liquidation_check 被设为 False 作为"safety mechanism"导致
+  H1+H2 真实 fDD -79.1% 显示为 -37.7%，monitor identity 硬编码 "MEGA V2"
+  误导事故调查。任一维度发现问题必须作为 🔴 关键问题上报。
 
   触发时机（非常重要）：
-  - 完成策略逻辑修改后（参数、信号、仓位管理、PnL模型等）
-  - 完成实盘bot代码改动后
+  - 完成策略逻辑修改后（参数、信号、仓位管理、PnL 模型等）
+  - 完成实盘 bot 代码改动后
   - 完成回测引擎改动后
-  - 用户说"review"、"审查"、"检查一下"、"code review"
-  - 用户说"改完了"、"提交了"、"commit了"之后
-  - Claude自己完成了一组代码改动准备commit之前
-
-  即使改动看起来很小也要触发。经验表明：一个参数的微调、一个fetch数量的变化、
-  一个fee从hardcoded改成config读取，都可能带来策略行为的重大偏离。
+  - 用户说 "review"、"审查"、"检查一下"、"code review"
+  - 用户说 "改完了"、"提交了"、"commit 了" 之后
+  - Claude 自己完成代码改动准备 commit 之前
+  - 即使改动很小也要触发：一个参数微调、一个 fee 改成 config 读取，都可能
+    带来策略行为重大偏离。
 
   适用于所有量化交易项目（现货/合约/期权、CTA/套利/做市/DCA/网格等）。
 ---
@@ -178,7 +182,162 @@ description: |
 项目阶段 C/D（可部署/已上线）：
   全部维度全量检查（维度 7 全量，含运行时隔离和网络出站控制）
   🔴 维度 4.5（监控导出协议）— 必查！缺失 = 策略处于监控盲区，必须立即修复
+  🔴 维度 P.4（Profile 风险开关清单）— 必查！4/19 cascade 教训
 ```
+
+### P.4 Profile 风险开关清单审计（Profile Risk-Switch Inventory）🔴 高优先级
+
+> **背景故事**：2026-04-19 V15_PROD 实盘从 $3505 → $918 (-73.8%)。事后定位发现：
+> profile 里 `dd_tier_1: 0.99 / dd_scale_1: 1.0 / dd_kill_pct: 0.99 / use_liquidation_check: False`
+> —— 几乎所有"风控开关"都被设为 effectively-off 值。这些值不是 bug，是过去半年里
+> 为了拉 CAGR 一个一个手动调高的，每次调整都觉得"这次没事"，累积起来造成系统性失稳。
+> profile 文件 200+ 行，没有任何机制强迫你把所有风控开关一起看。
+>
+> 教训：**production profile 必须有强制 inventory，把所有 risk-related flag 显性枚举，
+> 对每一个 effectively-off 值要求技术理由 + 至少一个对照实验 commit**。
+
+**为什么必须做**：
+- profile 文件长，分散在十几个章节，看局部参数无法发现"整体风控被关空"
+- 单个参数调整看起来都"合理"（"DD kill 0.99 是因为 0.35 太敏感"），但累加起来等于无防御
+- 实盘亏损发生时，看到的是"all my flags say protected"，但实际全是 off
+
+**审查清单**：
+
+```
+□ P.4.1 自动化清单生成
+   □ 每个 production profile 必须配套生成一份"风险开关清单"
+     （格式：表格，列出每个 risk-related flag 的当前值 + 默认值 + effectively-off 判定）
+   □ 推荐用脚本自动生成：scan profile dict 找所有匹配以下模式的 key：
+     - use_*_check / use_*_simulation / use_*_defense / use_*_hibernation
+     - *_kill_* / *_kill_pct / *_kill_threshold
+     - dd_tier_* / dd_scale_* / dd_score_*
+     - max_exposure_pct / max_concurrent_positions / max_dca_layers
+     - regime_scale_* / regime_threshold_* / regime_lc_*
+     - hysteresis_* / cooldown_*
+     - *_per_position_cap_* / *_position_cap_*
+   □ 自动化脚本示例参见 audit_risk_flags.py（skill 内置）
+
+□ P.4.2 Effectively-Off 值识别
+   对每个 risk flag 判定是否 effectively-off：
+   □ Boolean flag = False → 标记 ⚠️
+   □ DD/threshold flag ≥ 0.95 → 标记 ⚠️（等于"几乎不会触发"）
+   □ Scale flag = 1.0（应当 < 1.0 才有效）→ 标记 ⚠️
+   □ Cap/limit flag = inf 或 None → 标记 ⚠️
+   □ Score boost flag = 0.0（应当 > 0 才有效）→ 标记 ⚠️
+   □ 任何"effectively-off"值必须在审计报告中显性列出
+
+□ P.4.3 技术理由 + 对照实验要求
+   每一个被标为 ⚠️ 的 flag，必须：
+   □ profile 文件内有 inline 注释，引用一个 commit hash 或文档说明为什么调成这个值
+   □ 该 commit 必须包含一组 A/B 对照实验数据（开/关该 flag 的回测结果）
+   □ 对照实验必须用 use_liquidation_check=True 的真实回测（参见 2.13）
+   □ 缺乏注释 + 对照 → 🔴 关键问题（这是 4/19 cascade 的直接成因）
+
+□ P.4.4 累积效应警报
+   □ 计算"effectively-off flag 占总 risk flag 的比例"
+   □ 如果 > 30%，🔴 必须警报："profile 累积关闭过多风控开关，CAGR 突破可能建立在
+     虚假地基上"
+   □ 如果 > 50%，🔴🔴 拒绝部署：必须重新评估每个 effectively-off 的累积影响
+
+□ P.4.5 Profile diff 审计
+   □ 任何 profile 修改 PR 必须显示"风险开关清单 diff"
+     （不是普通的 git diff，而是聚焦在 risk flag 上）
+   □ 修改 PR 描述必须回答：本次修改是否关闭/松动了任何 risk flag？为什么？
+```
+
+**自动化脚本** (`audit_risk_flags.py`，skill 应内置)：
+
+```python
+"""
+Scan a Python profile file for risk-related flags and report effectively-off values.
+"""
+import ast, re, sys, json
+from pathlib import Path
+
+RISK_PATTERNS = [
+    re.compile(r'^use_.*_check$'),       # use_liquidation_check, use_wick_check
+    re.compile(r'^use_.*_simulation$'),
+    re.compile(r'^use_.*_defense$'),
+    re.compile(r'^use_.*_hibernation$'),
+    re.compile(r'^use_.*_brake$'),
+    re.compile(r'^.*_kill_.*$'),         # dd_kill_pct, *_kill_threshold
+    re.compile(r'^dd_tier_\d+$'),
+    re.compile(r'^dd_scale_\d+$'),
+    re.compile(r'^dd_score_\d+$'),
+    re.compile(r'^max_exposure_.*$'),
+    re.compile(r'^max_concurrent_.*$'),
+    re.compile(r'^max_dca_layers$'),
+    re.compile(r'^regime_scale_.*$'),
+    re.compile(r'^regime_threshold_.*$'),
+    re.compile(r'^.*_per_position_cap_.*$'),
+    re.compile(r'^.*_position_cap_.*$'),
+    re.compile(r'^hysteresis_.*$'),
+    re.compile(r'^cooldown_.*$'),
+]
+
+def is_risk_key(key: str) -> bool:
+    return any(p.match(key) for p in RISK_PATTERNS)
+
+def is_effectively_off(key: str, value) -> tuple[bool, str]:
+    if isinstance(value, bool):
+        if not value and key.startswith('use_'):
+            return True, f"{key}=False (feature disabled)"
+    if isinstance(value, (int, float)):
+        if 'tier' in key and value >= 0.95:
+            return True, f"{key}={value} (threshold near-100%, never triggers)"
+        if 'scale' in key and value >= 1.0:
+            return True, f"{key}={value} (scale=1.0 means no reduction)"
+        if 'kill' in key and value >= 0.95:
+            return True, f"{key}={value} (kill threshold near-100%, never triggers)"
+        if 'score' in key and value == 0.0:
+            return True, f"{key}={value} (score adjustment is zero)"
+    if value is None and ('cap' in key or 'limit' in key):
+        return True, f"{key}=None (no cap)"
+    return False, ""
+
+def scan_profile(profile_dict: dict, profile_name: str) -> dict:
+    risk_flags = {}
+    effectively_off = []
+    for key, value in profile_dict.items():
+        if is_risk_key(key):
+            risk_flags[key] = value
+            off, reason = is_effectively_off(key, value)
+            if off:
+                effectively_off.append({'key': key, 'value': value, 'reason': reason})
+    ratio = len(effectively_off) / max(len(risk_flags), 1)
+    return {
+        'profile': profile_name,
+        'total_risk_flags': len(risk_flags),
+        'effectively_off_count': len(effectively_off),
+        'effectively_off_ratio': ratio,
+        'effectively_off_flags': effectively_off,
+        'all_risk_flags': risk_flags,
+        'severity': '🔴🔴 REJECT' if ratio > 0.5 else '🔴 WARN' if ratio > 0.3 else 'OK',
+    }
+
+if __name__ == '__main__':
+    # Usage: python audit_risk_flags.py path/to/profile.py PROFILE_NAME
+    profile_file = sys.argv[1]
+    profile_name = sys.argv[2]
+    spec_globals = {}
+    exec(Path(profile_file).read_text(), spec_globals)
+    profile = spec_globals.get(profile_name) or spec_globals.get(f"{profile_name}_PROFILE")
+    if not profile:
+        print(f"Profile {profile_name} not found in {profile_file}")
+        sys.exit(1)
+    report = scan_profile(profile, profile_name)
+    print(json.dumps(report, indent=2, default=str))
+    if report['severity'] != 'OK':
+        sys.exit(1)
+```
+
+**真实案例（4/19 V15_PROD）**：
+- 总 risk flag: 17
+- effectively-off: 9（dd_tier_1/2/3 + dd_scale_1/2/3 + dd_score_1/2/3 + dd_kill_pct + use_liquidation_check）
+- 比例: 53% → 🔴🔴 REJECT
+- 实际后果：实盘 -73.8%
+
+如果这个 audit 在 V37 commit e80de33（4/13）就跑过，能避免 6 天的虚假研究 + 实盘事故。
 
 ---
 
@@ -1398,6 +1557,151 @@ baseline 与 champion 结果完全相同 → 看不到 alpha 贡献。
   为近期上市 < 730 天新币，自然被 seasoning 门控过滤）
 - H1+H2 champion 在 207-sym 5-fold 上每一折严格优势 baseline：
   ΔCAGR +694 ~ +2216 pp, MDD 每折都改善 → 通过扩展宇宙再验证
+
+---
+
+### 2.13 回测真实性 Flag 审计（Backtest Realism Flag Audit）🔴 高优先级
+
+> **背景故事**：2026-04-19 V15_PROD 实盘 cross-margin cascade -73.8%。事后追因发现：
+> 4/13 V37 时期把 `use_liquidation_check` 设为 False 写入 V15_PROD profile，注释只有
+> "V37: disabled (backtest-only)" 五个字。此后 6 天的所有"研究突破"
+> （V37 Global Optimum CAGR 5459%、H1+H2 champion fDD -37.7%）都是在 cascade 不模拟
+> 的虚假世界里算出来的。同一个 H1+H2 配置开启 use_liquidation_check=True 重跑：
+> CAGR 10865% → 8801%，**fDD -37.7% → -79.1%**（与实盘 -73.8% 同量级）。
+>
+> 关键洞察：**回测引擎里"实现存在"≠"实验启用"**。维度 2.8 检查的是"有没有 cascade
+> sim 实现"，但即使实现完美，也可能被一个 flag 默默关掉。真正的实验脚本里这个 flag
+> 是 True 还是 False，要单独审计。
+
+**为什么必须单独成维度**：
+- 维度 2.8 解决"实现层"问题：cross margin sim 写得对不对
+- 维度 2.13 解决"启用层"问题：跑回测时这些 sim 真的开了吗
+- 这两个问题正交，全 pass 维度 2.8 也可能 cascade liquidates 不被模拟
+- 4/19 之前的 backtest engine review (90/90 tests pass) 没覆盖这层，是审计盲区
+
+**所有真实性相关 flag 清单**（典型量化项目）：
+
+| Flag | 关掉的后果 | 默认应为 |
+|---|---|---|
+| `use_liquidation_check` | cross-margin cascade 不模拟，MaxDD 严重低估 | True |
+| `use_wick_check` | intra-bar wick 不触发 stop-loss / liquidation，MaxDD 低估 | True |
+| `use_funding_cost` | 持仓成本不扣除，长持仓策略 CAGR 严重高估 | True (合约策略) |
+| `use_slippage` | 成交价等于 mid price，高频/小币种策略 CAGR 高估 | True |
+| `use_partial_fill` | 默认全成交，流动性差的币种容量假设失真 | 视项目而定 |
+| `next_bar_entry` | 同 bar 信号同 bar 成交 → look-ahead bias | True |
+| `use_realistic_spread` | 假设无买卖差价，做市/HFT 策略尤其失真 | True |
+
+**审查清单**：
+
+```
+□ 2.13.1 自动化扫描所有 backtest 脚本
+   □ grep `backtest_scripts/` 找出所有 use_*_check / use_*_simulation /
+     use_*_cost / next_bar_entry 的实际值
+   □ 输出表格：脚本路径 × flag × 值 × 是否对照 default
+   □ 任何被设为 False/disabled 的实验性脚本，标记为 ⚠️
+   □ 任何被设为 False 的 production profile，标记为 🔴
+
+□ 2.13.2 ProductionProfile vs ResearchScript 一致性
+   □ 同一个 flag 在 production profile 和研究脚本里必须一致
+   □ 例：V15_PROD 里 use_liquidation_check=False，那研究脚本也应该 False
+     才能解释生产数字；或者研究是 True 但生产也应改 True
+   □ 不一致 → 🔴（"用 True 算出来的数字部署到 False 的环境去跑"或反之）
+
+□ 2.13.3 关闭 flag 必须带技术理由
+   □ 任何 use_*_check=False 的设定必须有 inline comment 引用 commit hash
+   □ 该 commit 必须包含至少一个对照实验（开/关该 flag 的同时运行结果）
+   □ 缺乏技术理由 → 🔴 关键问题
+   □ 反模式识别：注释只有 "disabled"、"backtest-only"、"deprecated" 等
+     不解释 why 的字眼 → 🔴
+
+□ 2.13.4 Flag 关闭后的"突破数字"必须重新验证
+   □ 如果发现某轮研究使用了 use_*_check=False，所有该轮产出的"champion 配置"
+     必须在 use_*_check=True 下重跑后才能进入决策
+   □ 重跑结果如果 MaxDD 恶化 > 10pp，原 champion 称号失效，须重新评估
+   □ 真实案例：H1+H2 fDD -37.7% (False) → -79.1% (True)，差距 41.4pp，
+     champion 称号应被撤销
+
+□ 2.13.5 "Safety mechanism by hiding the alarm" 反模式识别
+   □ 检查 git log 和注释里有没有这种模式：发现某种回测失败 → 关掉模拟
+     而不是改策略
+   □ 真实案例：run_safety_sweep.py 注释 "12 个 safety mechanism 候选" 中
+     第 9 个 "Liquidation disabled" — 这是把"看不到"当成"安全"，必须
+     标记为 🔴 反模式
+   □ 类似句式："改了之后 cascade 就不发生了" 如果改的是模拟开关而非策略
+     行为 → 🔴
+
+□ 2.13.6 "高 CAGR 自动触发 cascade 频率检查"门控
+   □ 任何回测 CAGR > 3000% / Calmar > 100 / MaxDD < -40% 的"突破"，
+     必须在报告中显性给出：
+     - liquidation_events 总数与年化频率
+     - cascade 发生时的 universe 状态
+     - use_liquidation_check 的实际值
+   □ 如果上述三项缺一，🔴 拒绝标记为"突破"
+```
+
+**自动化脚本** (`audit_cascade_simulation.py`，skill 应内置)：
+
+```python
+"""
+Scan all backtest scripts and profiles for realism flag values.
+Flag any use_*_check / use_*_simulation set to False.
+"""
+import re, sys, json
+from pathlib import Path
+from collections import defaultdict
+
+REALISM_FLAGS = [
+    'use_liquidation_check', 'use_wick_check', 'use_funding_cost',
+    'use_slippage', 'use_partial_fill', 'use_realistic_spread',
+    'next_bar_entry',
+]
+
+# Match: 'use_liquidation_check': False  OR  use_liquidation_check=False
+PATTERN = re.compile(
+    r"['\"]?(" + "|".join(REALISM_FLAGS) + r")['\"]?\s*[:=]\s*(True|False)",
+    re.IGNORECASE
+)
+
+def scan(root: Path) -> dict:
+    findings = defaultdict(list)
+    for py in root.rglob("*.py"):
+        if "__pycache__" in str(py):
+            continue
+        text = py.read_text(errors='ignore')
+        for m in PATTERN.finditer(text):
+            flag, val = m.group(1), m.group(2)
+            line_no = text[:m.start()].count('\n') + 1
+            findings[flag].append({
+                'file': str(py.relative_to(root)),
+                'line': line_no,
+                'value': val == 'True',
+                'context': text.split('\n')[line_no-1].strip()[:120],
+            })
+    return findings
+
+def report(findings: dict) -> dict:
+    summary = {}
+    issues = []
+    for flag, entries in findings.items():
+        false_count = sum(1 for e in entries if not e['value'])
+        true_count = sum(1 for e in entries if e['value'])
+        summary[flag] = {'false': false_count, 'true': true_count, 'total': len(entries)}
+        for e in entries:
+            if not e['value']:
+                # Heuristic: production profile is critical, research is warning
+                severity = '🔴 CRITICAL' if 'profile' in e['file'].lower() else '⚠️ WARN'
+                issues.append({**e, 'flag': flag, 'severity': severity})
+    return {'summary': summary, 'issues': issues}
+
+if __name__ == '__main__':
+    root = Path(sys.argv[1] if len(sys.argv) > 1 else '.')
+    print(json.dumps(report(scan(root)), indent=2))
+```
+
+**红线（不可妥协）**：
+1. 任何 production profile 里 use_liquidation_check=False → 🔴 立刻修
+2. 任何 research script 里 use_liquidation_check=False 且基于其结果做了部署决策 → 🔴 重跑
+3. 任何"safety mechanism"候选包含关闭模拟 flag → 🔴 拒绝该候选
 
 ---
 
@@ -3631,6 +3935,125 @@ full_snapshot_timeout_seconds    默认 max(heartbeat_timeout × 2, 5400s)
 
 **与维度 3.8 的关系**：3.8 关注交易决策日志（事后分析），4.5 关注实时状态导出（监控消费）。
 两者互补但不重叠：3.8 记录"为什么做了这个决策"，4.5 导出"当前策略处于什么状态"。
+
+### 4.5.2 Identity 字段反硬编码（Identity Anti-Hardcode）🔴 高优先级
+
+> **背景故事**：2026-04-25 调查 4/19 cascade 时，第一反应是看 `monitor_export.identity.strategy`，
+> 看到 "Regime-Adaptive DCA V15 (MEGA V2)" 就判断 H1+H2 没部署 → 给情绪低谷的 Tom 扣了一顶
+> 错误的帽子。实际查证后发现：identity.strategy 是 `live_dca_bot.py` 第 4972 行硬编码的常量
+> 字符串，跟 V15_PROD profile 加载完全无关；H1+H2 (use_maturity_factor=True, w_maturity=0.30
+> 等) 在 profile 里是开着的。
+>
+> 后果：在事故调查这种高压场景下，cosmetic 字段误导了诊断方向，险些把"信号层修复 H1+H2"
+> 当成 root cause。如果不是后续亲自查 profile 文件，错误诊断可能持续多轮，每一轮都浪费
+> Tom 的情绪和决策窗口。
+
+**核心规则**：**identity 类字段必须从配置反射，不能硬编码字符串。**
+
+**为什么必须强制**：
+- 硬编码字符串与实际 profile 解耦：profile 切换、参数 toggle 都不会反映在 identity 里
+- monitor_export 是事故调查的第一入口，cosmetic 字段比"无字段"更危险（无字段会逼你查别处，cosmetic 会误导你停在表面）
+- 在 LLM 协作场景尤其危险：assistant 看到 identity 字符串容易直接 attribution，跳过验证步骤
+
+**审查清单**：
+
+```
+□ 4.5.2.1 Identity 字段不得为硬编码常量
+   □ grep monitor_export 所有 identity.* 字段的赋值位置
+   □ 任何形如 "strategy": "V15 MEGA V2 ..." 的字符串字面量 → 🔴
+   □ 必须改为从 BotConfig 反射构造，例如：
+     ```python
+     identity = {
+         "bot_name": cfg.label,                          # ← from profile.label
+         "strategy": describe_strategy(cfg),             # ← derived from cfg fields
+         "exchange": cfg.exchange,
+         "session_id": str(self.session_id),
+         "profile_name": cfg.label,                      # ★ NEW: explicit profile name
+         "profile_signature": profile_signature(cfg),    # ★ NEW: hash of risk-relevant fields
+     }
+     ```
+
+□ 4.5.2.2 关键 toggle 必须出现在 identity 里
+   □ identity.strategy 字符串中必须显式包含影响策略行为的关键 toggle 值，例如：
+     "V15_PROD (maturity=True/0.30, conf_floor=0.20, max_exp=2.0, dd_kill=0.99, liq_check=False)"
+   □ 这样事故调查时一眼能看出"实际跑的是什么"，不需要再去 grep profile
+
+□ 4.5.2.3 Profile signature 字段
+   □ 在 identity 里增加 profile_signature 字段：对所有 risk-relevant 字段
+     做 stable hash（如 SHA256 前 8 位）
+   □ 调查时可以快速判断：当前 profile 是否与某个已知 commit 一致
+   □ 实现示例：
+     ```python
+     def profile_signature(cfg):
+         risk_keys = sorted([k for k in cfg.__dataclass_fields__
+                              if any(p in k for p in
+                                     ['use_', 'kill', 'tier', 'scale',
+                                      'exposure', 'concurrent', 'maturity',
+                                      'confidence', 'liquidation'])])
+         payload = json.dumps({k: getattr(cfg, k) for k in risk_keys}, sort_keys=True)
+         return hashlib.sha256(payload.encode()).hexdigest()[:8]
+     ```
+
+□ 4.5.2.4 Identity 字段 vs 实际 BotConfig 一致性测试
+   □ 单元测试：apply_profile(BotConfig(), 'V15_PROD') 之后，
+     monitor_export.identity 字段必须能反推出当前的 profile 名和关键 toggle
+   □ 测试断言例：
+     `assert "maturity=True" in monitor_export['identity']['strategy']`
+   □ 反模式识别：identity.strategy 是常量字符串、不依赖 cfg.* → 🔴
+
+□ 4.5.2.5 LLM/调查友好的描述格式
+   □ identity.strategy 应当是人类（和 LLM）一眼能 parse 的格式
+   □ 推荐格式：
+     "{profile_label} (key1={val1}, key2={val2}, ...) sig={signature}"
+   □ 不推荐：codename "MEGA V2" 这种内部代号 — 失去与配置的可追溯性
+```
+
+**修复模板**（对当前项目最小改动）：
+
+```python
+# Before（4/19 事故时的代码，反模式）：
+def export_identity(self):
+    return {
+        "bot_name": "V15_PROD",
+        "strategy": "Regime-Adaptive DCA V15 (MEGA V2)",  # ← 硬编码常量
+        "exchange": "binance",
+    }
+
+# After（修复后）：
+def export_identity(self):
+    cfg = self.cfg
+    key_toggles = [
+        f"maturity={cfg.use_maturity_factor}/{cfg.w_maturity}" if cfg.use_maturity_factor else "maturity=off",
+        f"conf={cfg.use_confidence_weighting}/{cfg.confidence_floor}" if cfg.use_confidence_weighting else "conf=off",
+        f"max_exp={cfg.max_exposure_pct}",
+        f"dd_kill={cfg.dd_kill_pct}",
+        f"liq_check={cfg.use_liquidation_check}",
+    ]
+    return {
+        "bot_name": cfg.label,
+        "strategy": f"{cfg.label} ({', '.join(key_toggles)})",
+        "exchange": cfg.exchange,
+        "profile_name": cfg.label,
+        "profile_signature": profile_signature(cfg),
+    }
+```
+
+**验证示例**（修复后的 identity 长什么样）：
+```json
+"identity": {
+  "bot_name": "V15_PROD",
+  "strategy": "V15_PROD (maturity=True/0.3, conf=True/0.2, max_exp=2.0, dd_kill=0.99, liq_check=False)",
+  "exchange": "binance",
+  "profile_name": "V15_PROD",
+  "profile_signature": "a3f8b1c2"
+}
+```
+
+→ 一眼能看出：H1+H2 是开着的（maturity=True, conf=True），但 dd_kill 和 liq_check 都关了。
+事故调查不会再误判。
+
+**红线**：production bot 的 identity.strategy 字符串里不出现任何硬编码 codename
+（如 "MEGA V2"、"H1+H2 Champion"、"V37 Global Optimum"），必须由配置反射。
 
 ---
 
