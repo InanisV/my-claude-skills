@@ -75,6 +75,14 @@ A user may ask you to create, edit, or analyze the contents of an .xlsx file. Yo
 
 ## Reading and analyzing data
 
+### Quick text dump
+```bash
+# Tab-separated rows under `## Sheet:` headers
+extract-text file.xlsx | head -100
+# .xlsm: same zip structure, override the extension
+extract-text --format xlsx file.xlsm | head -100
+```
+
 ### Data analysis with pandas
 For data analysis, visualization, and basic operations, use **pandas** which provides powerful data manipulation capabilities:
 

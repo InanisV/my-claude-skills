@@ -212,6 +212,8 @@ class BaseSchemaValidator:
                     elem.getparent().remove(elem)
 
                 for elem in root.iter():
+                    if not hasattr(elem, "tag") or callable(elem.tag):
+                        continue
                     tag = (
                         elem.tag.split("}")[-1].lower()
                         if "}" in elem.tag
@@ -423,6 +425,8 @@ class BaseSchemaValidator:
                 r_ns = self.OFFICE_RELATIONSHIPS_NAMESPACE
                 rid_attrs_to_check = ["id", "embed", "link"]
                 for elem in xml_root.iter():
+                    if not hasattr(elem, "tag") or callable(elem.tag):
+                        continue
                     for attr_name in rid_attrs_to_check:
                         rid_attr = elem.get(f"{{{r_ns}}}{attr_name}")
                         if not rid_attr:

@@ -140,7 +140,7 @@ To cast a shadow upward (e.g. on a footer bar), use `angle: 270` with a positive
 
 ```javascript
 // From file path
-slide.addImage({ path: "images/chart.png", x: 1, y: 1, w: 5, h: 3 });
+slide.addImage({ path: "images/photo.jpg", x: 1, y: 1, w: 5, h: 3 });
 
 // From URL
 slide.addImage({ path: "https://example.com/image.jpg", x: 1, y: 1, w: 5, h: 3 });
@@ -286,6 +286,12 @@ slide.addTable(tableData, { x: 1, y: 3.5, w: 8, colW: [4, 4] });
 
 ## Charts
 
+**Keep charts native and editable. Choose your approach by what PowerPoint can represent, not by what's quickest to code:**
+
+1. **Library-native** (bar, column, line, pie, area, scatter, bubble, radar, doughnut, combo): use `addChart()` below. For combo charts pass an array of `{type, data, options}` objects. Never render these to an image.
+2. **PowerPoint-native but not exposed by the library** (trendlines, error bars): stay native — either compute the extra series yourself (e.g., regression line as a second `LINE`/`SCATTER` series) or inject the OOXML element (e.g., `<c:trendline>`) by post-processing the generated `.pptx` XML. Do **not** fall back to a matplotlib PNG; the user loses editability.
+3. **Genuinely no native PowerPoint representation** (Sankey, network/graph, chord, complex statistical plots): only here is rendering to an image and inserting via `addImage()` appropriate.
+
 ```javascript
 // Bar chart
 slide.addChart(pres.charts.BAR, [{
@@ -304,6 +310,17 @@ slide.addChart(pres.charts.LINE, [{
 slide.addChart(pres.charts.PIE, [{
   name: "Share", labels: ["A", "B", "Other"], values: [35, 45, 20]
 }], { x: 7, y: 1, w: 5, h: 4, showPercent: true });
+
+// Scatter with a computed trend line (tier-2: stay native, add regression as a second series)
+const xs = [8, 12, 18, 22, 25, 31], ys = [102, 145, 198, 241, 267, 312];
+const n = xs.length, sx = xs.reduce((a,b)=>a+b), sy = ys.reduce((a,b)=>a+b);
+const sxy = xs.reduce((a,x,i)=>a+x*ys[i],0), sxx = xs.reduce((a,x)=>a+x*x,0);
+const m = (n*sxy - sx*sy)/(n*sxx - sx*sx), b = (sy - m*sx)/n;
+slide.addChart(pres.charts.SCATTER, [
+  { name: "X",     values: xs },
+  { name: "Data",  values: ys },
+  { name: "Trend", values: xs.map(x => m*x + b) },
+], { x: 0.5, y: 1, w: 9, h: 4 });
 ```
 
 ### Better-Looking Charts
@@ -414,7 +431,7 @@ titleSlide.addText("My Title", { placeholder: "title" });
 ## Quick Reference
 
 - **Shapes**: RECTANGLE, OVAL, LINE, ROUNDED_RECTANGLE
-- **Charts**: BAR, LINE, PIE, DOUGHNUT, SCATTER, BUBBLE, RADAR
+- **Charts**: BAR, COLUMN, LINE, AREA, PIE, DOUGHNUT, SCATTER, BUBBLE, RADAR, combo (array of `{type, data, options}`)
 - **Layouts**: LAYOUT_16x9 (10"×5.625"), LAYOUT_16x10, LAYOUT_4x3, LAYOUT_WIDE
 - **Alignment**: "left", "center", "right"
 - **Chart data labels**: "outEnd", "inEnd", "center"

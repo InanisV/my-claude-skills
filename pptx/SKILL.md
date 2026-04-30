@@ -10,7 +10,7 @@ license: Proprietary. LICENSE.txt has complete terms
 
 | Task | Guide |
 |------|-------|
-| Read/analyze content | `python -m markitdown presentation.pptx` |
+| Read/analyze content | `extract-text presentation.pptx` |
 | Edit or create from template | Read [editing.md](editing.md) |
 | Create from scratch | Read [pptxgenjs.md](pptxgenjs.md) |
 
@@ -19,8 +19,8 @@ license: Proprietary. LICENSE.txt has complete terms
 ## Reading Content
 
 ```bash
-# Text extraction
-python -m markitdown presentation.pptx
+# Text extraction, one `## Slide N` section per slide
+extract-text presentation.pptx
 
 # Visual overview
 python scripts/thumbnail.py presentation.pptx
@@ -135,19 +135,22 @@ Choose colors that match your topic — don't default to generic blue. Use these
 - **Don't forget text box padding** — when aligning lines or shapes with text edges, set `margin: 0` on the text box or offset the shape to account for padding
 - **Don't use low-contrast elements** — icons AND text need strong contrast against the background; avoid light text on light backgrounds or dark text on dark backgrounds
 - **NEVER use accent lines under titles** — these are a hallmark of AI-generated slides; use whitespace or background color instead
+- **Don't add decorative full-width colored bars/rectangles** — header/footer bars, side ribbons, or colored stripes read as AI slop unless the user explicitly requests them
+- **Don't default to cream/beige backgrounds** — when no background is specified, use white (`FFFFFF`) or the user's brand palette; avoid warm-neutral defaults like `F5F5DC`, `FAF0E6`, `FAEBD7`, `FFF8E1`
+- **Don't ship text that overflows its shape** — if text doesn't fit, reduce font size, split across slides, or enlarge the container; never leave content cut off or spilling past bounds
 
 ---
 
 ## QA (Required)
 
-**Assume there are problems. Your job is to find them.**
+Your first render usually has a few real issues — overlaps, overflow, misalignment. Find and fix those, then stop. Don't keep iterating on minor coordinate nudges or chase a "perfect" render.
 
-Your first render is almost never correct. Approach QA as a bug hunt, not a confirmation step. If you found zero issues on first inspection, you weren't looking hard enough.
+Work, don't narrate: minimize prose between tool calls. Run the check, apply the fix, move on.
 
 ### Content QA
 
 ```bash
-python -m markitdown output.pptx
+extract-text output.pptx
 ```
 
 Check for missing content, typos, wrong order.
@@ -155,7 +158,7 @@ Check for missing content, typos, wrong order.
 **When using templates, check for leftover placeholder text:**
 
 ```bash
-python -m markitdown output.pptx | grep -iE "\bx{3,}\b|lorem|ipsum|\bTODO|\[insert|this.*(page|slide).*layout"
+extract-text output.pptx | grep -iE "\bx{3,}\b|lorem|ipsum|\bTODO|\[insert|this.*(page|slide).*layout"
 ```
 
 If grep returns results, fix them before declaring success.
@@ -167,7 +170,7 @@ If grep returns results, fix them before declaring success.
 Convert slides to images (see [Converting to Images](#converting-to-images)), then use this prompt:
 
 ```
-Visually inspect these slides. Assume there are issues — find them.
+Visually inspect these slides for user-visible defects.
 
 Look for:
 - Overlapping elements (text through shapes, lines through words, stacked elements)
@@ -183,25 +186,22 @@ Look for:
 - Text boxes too narrow causing excessive wrapping
 - Leftover placeholder content
 
-For each slide, list issues or areas of concern, even if minor.
+For each slide, list user-visible issues. Skip sub-pixel positioning and cosmetic nitpicks a viewer wouldn't notice.
 
 Read and analyze these images — run `ls -1 "$PWD"/slide-*.jpg` and use the exact absolute paths it prints:
 1. <absolute-path>/slide-N.jpg — (Expected: [brief description])
 2. <absolute-path>/slide-N.jpg — (Expected: [brief description])
 ...
-
-Report ALL issues found, including minor ones.
 ```
 
 ### Verification Loop
 
 1. Generate slides → Convert to images → Inspect
-2. **List issues found** (if none found, look again more critically)
-3. Fix issues
-4. **Re-verify affected slides** — one fix often creates another problem
-5. Repeat until a full pass reveals no new issues
-
-**Do not declare success until you've completed at least one fix-and-verify cycle.**
+2. **Check text bounds first** — for every text box, confirm the rendered text fits inside its shape. Overflow is the most common defect and is always user-visible.
+3. List any other issues found
+4. Fix issues
+5. Re-verify only the affected slides
+6. **Stop after one fix-and-verify cycle** unless a new *user-visible* defect appears (overlap, overflow, missing content). Do not loop on sub-pixel positioning, minor color tweaks, or issues a viewer wouldn't notice.
 
 ---
 
@@ -224,7 +224,6 @@ ls -1 "$PWD"/slide-*.jpg
 
 ## Dependencies
 
-- `pip install "markitdown[pptx]"` - text extraction
 - `pip install Pillow` - thumbnail grids
 - `npm install -g pptxgenjs` - creating from scratch
 - LibreOffice (`soffice`) - PDF conversion (auto-configured for sandboxed environments via `scripts/office/soffice.py`)

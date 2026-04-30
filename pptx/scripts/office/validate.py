@@ -90,6 +90,12 @@ def main():
             validators = [
                 PPTXSchemaValidator(unpacked_dir, original_file, verbose=args.verbose),
             ]
+        case ".xlsx":
+            print(
+                "No XSD schema validation is performed for .xlsx files. "
+                "For formula-error checking, use scripts/recalc.py instead."
+            )
+            sys.exit(0)
         case _:
             print(f"Error: Validation not supported for file type {file_extension}")
             sys.exit(1)
