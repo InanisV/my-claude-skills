@@ -2011,6 +2011,483 @@ keep/discard **只看** test_* 和 sub11_* 列。is_* 列仅供诊断。
 
 ---
 
+## 🔴 多轮独立审计协议（Multi-Round Independent Audit Protocol）
+
+**最危险的 bug 不在第一遍审计中发现。它们藏在"修了上一个 bug 之后引入的代码"
+里，或者藏在"两个独立正确的设计组合起来错了"的接缝里。这两类 bug 永远需要
+至少 2-3 轮独立审计才能挖出来。**
+
+### 核心数据（来自 R89.7 Phase 0 实战）
+
+```
+轮次              发现方式                  找到的真问题数
+───────────────────────────────────────────────────────────
+Round 1 (清单式)   带 verification 清单      3🔴 + 8🟡
+Round 2 (清单式)   带 P0.5 修复清单          1🔴 (前轮修复引入) + 2 并发缺口
+Round 3 (开放式)   无清单, "你自己审"        1🔴 (组合 bug) + 1 文档残留
+Round 4 (Phase 1)  开放式, 第一次审 Phase 1  5 P0 + 3 P1 + 设计层 bug → FAIL
+```
+
+**关键观察**：
+- Round 2 找的 1🔴 是 Round 1 的修复**引入**的（保留 unlink-on-release "做 housekeeping"）
+- Round 3 找的 1🔴 是清单**永远不会列**的组合 bug（send-fail 不推 cooldown
+  + Markdown 默认 = CRITICAL 永久 silent drop）
+- 每轮都收敛但**永远不会零产出**——直到 Phase 1 的 FAIL 出现新一类问题
+
+### 在量化研究中的对应
+
+```
+量化研究中"修了上一个 bug 引入新 bug"的真实场景：
+
+✅ 修复 leg A 的 cross-margin 风险 → 改了仓位上限 → leg B 的杠杆假设失效
+✅ 修复回测引擎的 fee 计算 → 旧的所有 results.tsv 数字都需要重新解读
+✅ 修复 walk-forward 的 train_end 边界 → 之前的 OOS 实际是 IS overlap
+
+量化研究中"组合 bug"的真实场景：
+
+✅ Leg A 单独 Final Gate 通过 + Leg B 单独通过 → 组合后相关性爆了
+✅ Universe 扩展 + DD brake 调严 → 单看每条都对，组合后选币变少且回撤增大
+✅ Vol-target=0.4 + Calmar reward + 3x leverage → 单维度合理，组合 = 50% MaxDD
+```
+
+### 三轮审计协议（必须执行）
+
+**适用场景**：
+- 修复了关键策略 bug 后（特别是涉及 leg 协作 / fee 模型 / 回测引擎核心逻辑）
+- 产生新冠军且 Final Gate 通过后（不只一次 Final Gate）
+- 即将上线实盘前
+- 任何"我自己看了一遍觉得没问题"的关键节点
+
+**协议**：
+
+```
+Round 1 — 清单式审计（catch 已知失败模式）
+  → 维护一份"失败模式清单"（如：look-ahead bias、fee 假设、universe 漂移、
+    回测引擎对齐、jitter 范围、状态恢复...）
+  → 逐项验证：每条都能给出"通过/不通过"的具体证据
+  → 适合：捕获已知陷阱
+
+Round 2 — 修复回归审计（catch 上一轮修复引入的 bug）
+  → 输入：Round 1 的修复清单
+  → 验证目标：每条修复**真的修了**那个问题
+  → 关键追问："这个修复有没有引入新的副作用？"
+  → 特别关注："聪明地保留 X 当作 housekeeping" 这种叙事
+  → 适合：防止"修一个引入一个"
+
+Round 3 — 开放式审计（catch 组合 bug 和盲点）
+  → 不给清单，让审计员用自己的方法论
+  → 提示语："如果这套代码运行 90 天无人值守，什么会静默失败？"
+  → 关键问题："哪些独立正确的设计组合起来会错？"
+  → 适合：捕获组合 bug + 我和审计员都没想到的盲点
+```
+
+**Round 3 的提示语模板**（可以直接复制给独立审计员）：
+
+```
+我已经做了 N 轮内部审计。这一轮请你**用自己的方法论**审，不给清单。
+
+设想这套策略/代码上线 90 天无人值守，期间会发生：
+  - API 暂时返回坏数据
+  - 网络抽风
+  - 一个 leg 训练出来的模型突然有一行 NaN
+  - cron 调度器 reboot 后双跑
+  - 时钟 NTP 跳 30 分钟
+  - 一个币 delist
+  - 一种 regime 我从未见过
+
+什么会静默失败？什么会响铃失败？哪些独立正确的设计组合起来会错？
+
+不要为了"找够 N 个问题"而捏造发现——找不到就直接说"我看了，没找到"。
+```
+
+### 审计员选择
+
+```
+✅ 好的审计员（按推荐顺序）：
+1. 独立的 AI（codex / Claude opus / GPT-5），不参与开发
+2. 同事 / 朋友里有量化经验的人，看大方向
+3. 你自己，但**至少隔一周**回来重看（避免短期记忆偏差）
+
+❌ 不好的审计员：
+1. 当时正在写这个代码的 AI（同 session 自审 = 共享盲点）
+2. 你自己，刚写完一气呵成（confirmation bias 最强的时候）
+```
+
+### 审计停止规则
+
+```
+✅ 可以停的信号：
+- 连续 2 轮独立审计没找到 P0/P1 问题
+- 第 3 轮明确说 "I looked hard and didn't find anything"
+- 失败模式清单全绿 + 开放式审计无新发现
+
+❌ 不能停的信号：
+- 这一轮找到的问题里有"前一轮修复引入的"
+- 这一轮找到的问题在文档/契约里写错了（说明心智模型还没对齐）
+- 找到了 design-level 问题（比 implementation bug 更深，需要重设计）
+```
+
+### 不同问题类型的修复优先级
+
+```
+🔴🔴 P0 (必修，且新 bug 不能放过)：
+  - 数据正确性（look-ahead、survivorship、stale data）
+  - 实盘-回测对齐（profile key 不匹配、决策路径不同）
+  - 修复引入的回归（Round 2 的核心目标）
+  - 组合 bug（Round 3 的核心目标）
+
+🔴 P1 (本期必修)：
+  - 验证薄弱（声称的检查实际没做）
+  - 错误归类（local 损坏当 transient 处理）
+  - 监控盲点（fail 但记录为 success）
+
+🟡 P2 (followup)：
+  - 文档残留（旧描述没更新）
+  - 性能优化
+  - 命名一致性
+```
+
+---
+
+## 🔴 修复-引入-回归预防协议（Fix-Induced Regression Prevention）
+
+**修复一个 bug 引入另一个 bug 的概率比想象中高得多。R89.7 Phase 0 三轮
+codex 审计中，每一次"修复"都至少引入一个新的需要后续审计的副作用。**
+
+### 三个真实案例
+
+**案例 A：cron_lock 的 unlink-on-release（P0.5 → P0.6）**
+```
+Round 1 发现：stale-PID + unlink-and-retry 路径会 split-brain
+P0.5 修复：移除 stale-takeover 路径
+
+但我"聪明地"保留了 unlink-on-release："文件残留太丑了，release 时清掉"
+副作用：waiter 持有的 fd 变成孤儿 inode；release 后 waiter flock 成功
+       + 新 acquirer 在新 inode flock 成功 = 同时进入 critical section
+Round 2 发现：新 race，FAIL
+
+教训：每修一个 race，都问"这个修复在多进程下展开会怎样？"
+```
+
+**案例 B：alert send-failure cooldown（P0.5）+ Markdown 默认（P0.7）**
+```
+两个独立的设计：
+  设计 A (P0.5)：send 失败不推 cooldown → 永远重试
+  设计 B (默认)：parse_mode="Markdown" 美化消息
+
+每个独立看都对。组合起来：
+  CRITICAL 含 stack trace（含反引号、下划线）→ Markdown parse error
+  → send 永远失败 → 永远重试 → 永远 parse error → CRITICAL 永久 silent drop
+
+Round 3 发现：组合 bug，整个 R89.7 "0 人工介入"承诺破产
+
+教训：每加一个 retry 机制，问"如果失败是 deterministic 的，这个 retry 会
+     变成什么？"
+```
+
+**案例 C：atomic_write_dir oldswap 残留**
+```
+Round 1 修复：加 oldswap recovery（target 缺失时从 oldswap 恢复）
+但 cleanup 只在"target 缺失"分支里做
+
+副作用：crash-after-publish-before-cleanup 留下的 oldswap 不会被清理
+       + 时间戳碰撞 → "Directory not empty"
+
+Round 2 发现：另一种 crash 模式没覆盖，FAIL
+
+教训：crash recovery 要列出**所有可能的 crash 点**，不只是修复时想到的那个。
+```
+
+### 预防协议
+
+**每次写"修复"时，强制走完三问**：
+
+```
+□ Q1: 这个修复在哪些 caller 场景下会展开？
+   - 单进程 / 多进程 / 多线程
+   - 正常路径 / 异常路径 / SIGKILL
+   - 列出至少 3 种调用 timeline
+
+□ Q2: 我保留的"原有合理设计"在新 context 下还合理吗？
+   - 例：保留 unlink 是为了"清洁"——但 unlink 的安全前提是
+     "我们持有 lock"，新代码改变了 lock 持有时机吗？
+   - 例：保留 Markdown 是为了"美观"——但消息内容来源变了吗？
+     现在会包含哪些字符？
+
+□ Q3: 这个修复 + 现有 N 个独立设计 = 是否有意外组合？
+   - 列出所有"独立看都对"的现有设计
+   - 矩阵地问："修复 + 设计 A 会怎样？修复 + 设计 B 会怎样？"
+   - 特别关注 retry / cooldown / cache 这类有"重复执行"语义的设计
+```
+
+**在量化研究中的对应**：
+
+```
+案例 A 的对应（修一个引入一个）：
+  □ 修复 leg A 的 cross-margin 风险 → 改了仓位上限
+  □ Q1: leg B/C 是否依赖原来的仓位上限做 sizing？
+  □ Q2: 仓位上限的"原有合理性"建立在哪些假设上？
+  □ Q3: 改后跑 K-fold 重新验证全部 leg，不只 leg A
+
+案例 B 的对应（组合 bug）：
+  □ 修复 universe 扩展 + 修复 DD brake → 都通过 Final Gate
+  □ Q1: 这两个修复独立 vs 组合的回测结果差多少？
+  □ Q2: 每个修复的"独立合理性"假设了对方的什么前提？
+  □ Q3: **强制做一次组合回测**，不假设"独立通过 = 组合通过"
+
+案例 C 的对应（覆盖不全）：
+  □ 加 crash recovery → 覆盖了 mid-rename 场景
+  □ Q1: 列出所有 crash 点（before/after each os call）
+  □ Q2: 每个 crash 点对应的 recovery 路径是什么？
+  □ Q3: 实际给每个 crash 点写一个 chaos test
+```
+
+---
+
+## 🔴 研究代码 vs 生产代码语义鸿沟（Research vs Production Semantic Gap）
+
+**研究代码和生产代码看起来都是 Python，但语义假设完全不同。
+直接 wrap 研究代码做生产 = 必爆。**
+
+### 研究代码的隐含假设
+
+```
+研究代码的"幸福路径"假设：
+  ✅ 输出路径固定（OUT_PATH = REPO/research/foo.parquet）
+  ✅ "OUT 存在就 skip"（缓存友好，但破坏可重跑）
+  ✅ "全量重建" 是常态（增量？什么是增量？）
+  ✅ 失败 = 抛异常 = 我看到 traceback = 调试
+  ✅ "我手动跑"（人在场调试 + 无 cron 调度）
+  ✅ 输出格式可以"改一下"（下游就一两个 reader，我直接改）
+  ✅ 日志打 print 就行（我盯着看）
+  ✅ universe / 时间窗 / fee 假设硬编码（research run 一致就行）
+```
+
+### 生产代码的硬约束
+
+```
+生产代码的现实：
+  ❌ 可能要写多个路径（per-symbol / per-window / atomic）
+  ❌ "OUT 存在就 skip" = cron 永远 no-op，必须破坏
+  ❌ 增量必须支持（全量重建 cron 资源吃不消 / 时间窗不够）
+  ❌ 失败 = 静默或响铃 = 没人看 = 必须分类 + 记录 + 触发 alert
+  ❌ "无人值守" cron 调度 + 多机时钟漂移 + 网络抽风
+  ❌ 输出格式是契约（10 个下游 reader 都依赖，改 = 全跑一遍）
+  ❌ 必须结构化日志（journalctl 几个月后还要查）
+  ❌ universe / 时间窗 / fee 必须从配置读，且要支持 hot-update
+```
+
+### 三个反模式（必须避免）
+
+**反模式 1：subprocess 包装研究脚本**
+
+```python
+# ❌ 错误（R89.7 Phase 1 P0-4 的真实 bug）
+def auto_refresh_v30_features():
+    if V30_OUT.exists():
+        V30_OUT.unlink()  # 突破"skip-if-exists"
+    subprocess.run([sys.executable, "scripts/r63_build_v30_features.py"])
+    # 生产现实：subprocess crash → V30_OUT 永久消失
+    # 研究脚本不知道有 atomic 需求，写到一半也不会 cleanup
+
+# ✅ 正确：要么 refactor 研究脚本，要么写新的生产 builder
+def build_v30_features_for_production(out_path: Path):
+    # 直接调用核心函数，写到 caller 指定的 scratch path
+    df = compute_v30(klines, funding, universe)
+    df.to_parquet(out_path)
+
+# 然后在 cron 脚本里：
+with atomic_write_file(canonical_out) as scratch:
+    build_v30_features_for_production(scratch)
+```
+
+**反模式 2：消费者契约靠记忆**
+
+```python
+# ❌ 错误（R89.7 Phase 1 P0-5 的真实 bug）
+def load_v30_features():
+    meta = json.loads(open("v30_features.json").read())
+    # 我"记得"key 是 features
+    feature_list = meta.get("features", meta)  # 错——实际是 feature_cols
+
+# ✅ 正确：写新代码前先 grep 现有消费者
+# $ grep -n "feature_cols\|features" live/signals/v30_inference.py
+# → live/signals/v30_inference.py:108 用 meta["feature_cols"]
+# → 这是真正的 contract，不是研究脚本里的随便起个名字
+def load_v30_features():
+    meta = json.loads(open("v30_features.json").read())
+    feature_list = meta["feature_cols"]  # 跟 v30_inference.py 严格一致
+```
+
+**反模式 3：`--help` 通过当作 work**
+
+```bash
+# ❌ 错误（R89.7 Phase 1 整个的脚本验证策略）
+python3 scripts/auto_refresh_klines.py --help  # OK
+python3 scripts/auto_refresh_coinmetrics.py --help  # OK
+python3 scripts/auto_refresh_v30_features.py --help  # OK
+python3 scripts/auto_refresh_ml_predictions.py --help  # OK
+# "4 个脚本都通过了 smoke" → commit → codex 审 → FAIL
+
+# ✅ 正确：至少跑一次真实场景的 dry-run
+python3 scripts/auto_refresh_klines.py --dry-run --symbols BTCUSDT
+# 真的发 1 次 HTTP，真的解析返回，真的写 tmp 文件
+# 如果 metadata key 错了 / 增量逻辑错了 / atomic write 错了，这步就会暴露
+```
+
+### 在量化研究中的对应
+
+```
+反模式 1 的量化版本：
+  ❌ 把 r28_ppo_rl.py（研究 trainer）直接 subprocess 在 weekly_retrain.sh 里
+     → trainer crash 留下半训好的 zip？trainer 用的 sb3 版本变了？
+  ✅ 抽出 train_ppo(env, config, seed) 核心函数，
+     研究脚本和生产 retrain 都调用它
+
+反模式 2 的量化版本：
+  ❌ 写新 leg 时凭记忆假设"v30 输出 schema 是 (symbol, ts, pred)"
+  ✅ 先 grep "ml_predictions_v30" 看下游 5 个 reader 怎么读，
+     按它们的实际期望写
+
+反模式 3 的量化版本：
+  ❌ 跑一次小 universe / 1 个月数据，结果数字合理 → 上 final gate
+  ✅ 至少跑一次"全 universe + 全期 + 真实 fee + walk-forward"，
+     即使慢，必须真实端到端。"我以为它会工作" 经常 = "它不工作"
+```
+
+---
+
+## 经典失败案例库 — 工程审计层（R89.7 系列）
+
+### 案例 5：R89.7 Phase 1 FAIL — 5 个 P0 + 设计层 bug（2026-05-01）
+
+**背景**：Phase 0（lock / atomic write / alerts 等基础设施）经过 3 轮 codex
+审计达到 PASS。Phase 1 是第一次真正使用这些基础设施的应用层 —— 4 个数据
+刷新 cron 脚本（klines / coinmetrics / v30_features / ml_predictions）。
+
+**结果**：codex 一次审计直接 FAIL，5 P0 + 3 P1 + 2 P2 + 一个设计层问题。
+
+**5 个 P0 详细**：
+
+```
+P0-1: cron_runner 契约错配
+  错：用 return rc 模式
+  实：cron_runner 只看 exception，return code 完全被忽略
+  后果：失败的 cron 写 last_success；dry-run 也写 last_success；
+       手动 metadata 被覆盖
+  根因：用 helper 前没读 helper body
+
+P0-2: klines 接受未关闭的小时 bar
+  错：until_ms = time.time()*1000（包含正在 forming 的 bar）
+  实：next cursor = max(open_time)+1，partial 永久污染
+  根因：没仔细想 Binance 时间窗语义
+
+P0-3: CoinMetrics 接受当天行
+  错：end_date = today
+  实：当天 daily metric 还在更新，next cursor 跳过它
+  根因：同 P0-2，没想清楚 closed-period 语义
+
+P0-4: v30 wrapper 删 canonical 文件再跑 builder
+  错：unlink(V30_OUT) → subprocess(builder) → 失败 = 永久丢失
+  实：window 内 readers 看到 missing；builder crash 灾难
+  根因：subprocess 包装研究脚本（反模式 1）
+
+P0-5: ml_predictions 解析不了真实的 v30_features.json
+  错：feature_list = meta.get("features", ...)
+  实：实际 key 是 feature_cols（live/signals/v30_inference.py:108）
+  根因：没 grep 消费者契约（反模式 2）
+```
+
+**设计层 bug**：即使 5 P0 修了，v30 features 也**不会 advance**——研究
+builder 依赖静态 ml_features_v1.parquet，Phase 1 不刷新它。本地复现：
+raw klines 在 2026-04-28，v1 + v30 卡在 2026-04-26。这是"包装研究脚本"
+的更深层后果：研究脚本的输入假设和生产场景完全不匹配。
+
+**"--help 全过 ≠ work"**：4 个脚本提交前我跑了 `python3 -m pytest` (99/99
+green) + 4 个 `--help` (全 OK)。第一次真跑 `auto_refresh_ml_predictions`
+就因为 P0-5 直接 DataCorruptionError。
+
+**核心教训**：
+- 研究代码 wrap 成生产 = code smell（反模式 1）
+- 凭记忆写消费者契约 = 反模式 2
+- syntax + help 当 smoke = 反模式 3
+- 5 P0 中的 P0-1 是**"用 helper 前没读 helper body"**，与之前案例 1 (V15 DCA
+  cross-sectional 过拟合)、案例 4 (cross-margin 清算级联) 一样属于"心智模型
+  和实现差异"导致
+
+**修复结构**：
+```
+Batch A：6 个表层修复（feature_cols / closed-period × 2 / 本地损坏 /
+        threshold / Makefile）— 250 LoC
+Batch B：cron_run() API + CronResult dataclass + 4 脚本重构 +
+        ~30 测试 — 400 LoC
+Batch C：真正的 production v30 builder（不 wrap 研究脚本）+
+        data-timestamp freshness gate — 600 LoC
+```
+
+**给未来量化研究的对应教训**：
+
+```
+1. 研究代码不要 subprocess 当生产用
+   → 类比：r28_ppo_rl.py 研究 trainer 不要直接被 weekly_retrain 调用
+   → 应该：抽出 train_ppo() 核心函数，研究和生产都调用它
+
+2. 写新 leg 前先看下游怎么读现有 leg
+   → 类比：写新 inference 前，看现有 inference 的 schema
+   → grep 比记忆可靠
+
+3. unit test 全过 ≠ 端到端 work
+   → 必须真实数据跑一次（dry-run 模式 + 至少 1 个真实 symbol）
+   → "我相信它会工作" 经常错
+
+4. 多个独立合理的设计组合可能错
+   → 5 个 P0 + 1 个设计 bug 中，至少 2 个是"独立合理但组合错"
+   → 修一个引入另一个的 reorder（P0.5 → P0.6 已经经历过）
+
+5. FAIL 不是耻辱，是 audit 在工作
+   → 接受 FAIL → 写修复计划 → 下个 session 干净开始
+   → 比"这个能 hot fix 我就先上线" 强得多
+```
+
+---
+
+## 量化研究的"四类审计观点"
+
+把 R89.7 学到的多视角审计方法系统化为量化研究中可用的观点矩阵。
+
+每次 Final Gate 之前，从这四个独立观点过一遍：
+
+```
+观点 1：清单视角（Catch the Known）
+  问题：我列出来的"已知失败模式"是否每条都有验证？
+  工具：失败模式清单 + 一对一验证证据
+  捕获：look-ahead、survivorship、universe 漂移、fee 假设、对齐...
+  适合：第一轮 / 防止低级错
+
+观点 2：回归视角（Catch the Re-introduced）
+  问题：上一次修复的 bug 在新代码里有没有变种重新出现？
+  工具：旧 audit report + 修复 commit 列表
+  捕获：修一个引入另一个、commit 间的语义漂移
+  适合：每次重大改动后
+
+观点 3：开放视角（Catch the Combinations）
+  问题：如果这套策略 90 天无人值守，什么会静默失败？
+  工具：独立审计员（外部 AI / 同事 / 隔周的自己）
+  捕获：组合 bug、文档/代码差异、设计层盲点
+  适合：上实盘前 / 找冠军后
+
+观点 4：消费者视角（Catch the Contract Drift）
+  问题：我的输出会被谁读？他们读的方式是不是和我写的方式一致？
+  工具：grep 下游所有 reader + 把它们的期望写成单测
+  捕获：schema drift、key naming、量纲不一致、unit-scale 假设错配
+  适合：每次新 leg 上线前
+```
+
+四个观点是**叠加而非替代**的。R89.7 经验显示：每个独立的观点都会找到
+其他观点找不到的 bug。
+
+---
+
 ## Reference
 
 研究模板见 `references/research-template.md`。
