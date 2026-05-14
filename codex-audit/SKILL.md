@@ -1,24 +1,24 @@
 ---
 name: codex-audit
 description: >
-  Three-layer Codex CLI audit pipeline. Trigger when the user says
-  "audit with codex", "let codex review", "走一轮 codex", "审一下";
-  when a CODEX_REVIEW_PROMPT_*.md file is freshly committed and pending
-  review; when Claude lands a milestone implementation commit that
-  closes a design plan and the next step expects independent
-  verification. The skill picks Layer 1 (sandbox-driven, Claude
-  self-runs, ~30s budget) for small focused commits, Layer 2 (Claude
-  Code on Mac, multi-round audit + auto-fix loop, no time limit) for
-  cross-cutting / large / failed-L1 audits, and Layer 3 (user runs
-  audit directly with no Claude middleware) for trust-critical
-  audits like pre-deploy gates or audits of the audit pipeline
-  itself. All three layers use the SAME codex CLI as reviewer
-  (gpt-5.5) — only the executor and the trust boundary depth differ.
-  For multi-step implementations, group steps into phases (2-3 steps
-  per phase) and run ONE L2 audit per phase, NOT per step — see
-  "Phase-grouped audit cadence" below.
+  Three-layer Codex CLI audit. Trigger on "audit with codex" /
+  "走一轮 codex" / "审一下", a fresh CODEX_REVIEW_PROMPT_*.md
+  awaiting review, or milestone-closure commits needing
+  independent verification. L1 = Claude sandbox self-run
+  (~30s budget, small commits). L2 = Claude Code on Mac with
+  auto-fix loop (cross-cutting / failed-L1 / phase-grouped audits).
+  L3 = user runs codex directly with no Claude middleware
+  (pre-deploy gates, audits of the audit pipeline). All layers use
+  the same gpt-5.5 reviewer; only the executor and trust boundary
+  differ. For multi-step work, group steps into phases (2-3 each)
+  and run ONE L2 per phase. Every audit ends with a REQUIRED
+  finding-triage step: classify each finding as bug (concrete
+  invariant violation) vs preference (softening language like
+  "preferably" / "would be safer" / "I would"), do EV math on
+  preferences, only commit fixes for bugs + math-positive
+  preferences. See references/finding-triage.md.
 metadata:
-  version: "0.5.0"
+  version: "0.6.0"
   author: "Tom Zhang"
 ---
 
@@ -269,11 +269,30 @@ Round procedure:
      prescribed an unsupported config — exiting on round 2's
      exit-0 would have shipped the bug.
    - **1, 2**: HALT verdict (PASS WITH FOLLOWUPS + P0/P1, or
-     CONDITIONAL/FAIL). Read `CODEX_AUDIT_X.md`, understand the
-     finding(s), plan a code fix, apply via Edit/Write, run
-     `make test-lib && pytest tests/scripts/` (if applicable),
-     commit with message `fix(audit-loop): close <finding ID>`,
-     then go back to step 1.
+     CONDITIONAL/FAIL). Read `CODEX_AUDIT_X.md`. Then **TRIAGE
+     each finding before planning any fix** (see Finding-triage
+     section in SKILL.md + `references/finding-triage.md` for the
+     full rubric):
+       a. Classify each finding as **Bug** (concrete invariant
+          violation, file:line citation, verifiable by grep/A-B)
+          or **Preference** (softening language: "preferably",
+          "consider", "I would", "tight operationally", "would be
+          safer", "tighter would catch", "small/marginal slippage"
+          without quantification).
+       b. For each Preference, compute the EV math:
+          `net = avoided_loss × frequency - drag_from_change`.
+          If net < 0 → KEEP old value, mark `[NOT FIXED] reason: X`
+          in your loop summary. If net > 0 → fix.
+          If Tom has previously stated a position on the same
+          parameter, default to keeping Tom's choice unless codex
+          cites a NEW FACT (not new opinion).
+       c. For each Bug → fix as before.
+       d. Plan code fixes only for Bugs + math-positive Preferences.
+     Apply fixes via Edit/Write, run `make test-lib && pytest
+     tests/scripts/` (if applicable), commit with message
+     `fix(audit-loop): close <finding ID>` (or `audit-loop: reject
+     <finding ID> — net = X-Y` for documented rejections), then go
+     back to step 1.
    - **3, 5, 6, 124**: parse error / network / ambiguous /
      timeout → STOP loop, report to Tom for manual review.
 
@@ -283,6 +302,10 @@ Round procedure:
 4. At end of loop, write a summary message to Tom:
    - Final verdict (PASS / halted)
    - Number of rounds
+   - **Triage table**: for every finding across all rounds, list
+     `bug | pref-fixed | pref-rejected (reason + math)`. This is
+     the audit-of-audits record — proves no preference slipped
+     through as deference.
    - Each fix commit's SHA + finding ID + brief rationale
    - Audit file paths
    - Total tokens used (sum from CODEX_AUDIT_LOG.jsonl entries
@@ -357,6 +380,108 @@ those require user review (L1) or Claude Code's loop logic (L2).
 
 L3 has no exit codes — Tom interprets verdict directly.
 
+## Finding triage (REQUIRED before any fix commit)
+
+Codex audits report findings without distinguishing bugs from
+preferences. The fix-or-keep decision is **Claude's** (L1/L2) or
+**Tom's** (L3) — NOT codex's. Before applying any code change in
+response to a finding:
+
+### 1. Classify each finding
+
+- **Bug**: concrete invariant violation, verifiable by code grep,
+  diff read, or empirical A/B test. Examples from real audits:
+  `build_panel does fillna(0.0) on missing funding → silent leg
+  neutralization with no halt`. The fix is mandatory.
+- **Preference**: opinion about defaults / conservatism / style.
+  Backed by reviewer intuition, not a failure analysis. Examples:
+  `preferably use a 5-second buffer instead of 1-second`,
+  `I would halt by default`, `tighter would catch X earlier`. The
+  fix is OPTIONAL pending math.
+
+### 2. Trigger phrases that flag preferences
+
+When codex uses any of these, **stop and triage**:
+
+| Phrase | Why it's a flag |
+|---|---|
+| "preferably" | by definition opinion |
+| "consider" / "may want to" | invitation, not instruction |
+| "suggest" / "I would" | first-person opinion |
+| "tight operationally" / "would be safer" | aesthetic, not factual |
+| "irrelevant slippage" / "small impact" | quantify before agreeing |
+| "tighter would catch X earlier" | tighter at what cost? |
+
+Full list + math template + R12-R15 worked examples:
+**`references/finding-triage.md`**.
+
+### 3. For preferences, do the math BEFORE the fix
+
+```
+Change cost   = expected_drag(NEW value) - expected_drag(OLD value)
+Change benefit = avoided_loss_per_event × event_frequency
+Net = benefit - cost
+```
+
+If `net < 0` → KEEP old value. If `net > 0` → APPLY. If you can't
+compute the inputs → ASK Tom, don't accept the default.
+
+The math goes in the commit body (or in a `[NOT FIXED] P? <finding>:
+rejected — net = X-Y = -Z` line if no commit). Future Claude / Tom
+should be able to see "this preference was considered + rejected".
+
+### 4. Honor Tom's prior judgment
+
+If Tom has previously stated an explicit position on the same
+parameter (e.g. "1 second buffer is enough"), the DEFAULT action is
+to **keep Tom's choice** and document why. Override ONLY when codex
+presents NEW FACTS:
+
+| ✅ New fact (override OK) | ❌ New opinion (KEEP Tom's call) |
+|---|---|
+| "code path crashes when X" | "I would set this differently" |
+| "data shows Y, not Z" | "tighter is conservative" |
+| "invariant Y violated at file:line" | "would be safer to halt" |
+
+### 5. PASS WITH FOLLOWUPS exit criterion
+
+A PASS WITH FOLLOWUPS verdict with N preferences as followups does
+NOT mean "must close N followups before exit". The loop can cleanly
+exit on first exit-0 IF all followups are preferences AND your retro
+math doesn't support the change. Pure preference-only PASS WITH
+FOLLOWUPS that exits without closing everything is a **valid
+outcome**. The loop's job is to close bugs, not to please codex
+aesthetically.
+
+### 6. Anti-pattern: arguing from codex authority
+
+Insufficient explanation:
+
+> "Codex R13 found X, so I changed Y to Z."
+
+Correct explanation:
+
+> "Codex R13 flagged X as 'preferably 5s'. Triaging as preference
+> (softening language, no $-magnitude). Math: 4s × 30 positions ×
+> turnover × vol × 250/yr ≈ 2%/yr drag vs 0.001%/yr miss cost.
+> KEEPING old value. Documented in audit closure."
+
+The first form is deference. The second is review. **Always the
+second form.**
+
+### 7. Audit-of-audits before deploy
+
+Before any production deploy (or end of multi-round sequence), write
+a retrospective triage table:
+
+| Round | Finding | Bug or Pref? | Math support? | Action | Status |
+|---|---|---|---|---|---|
+
+If > 10% of findings turn out to have been preferences accepted
+without math, the audit prompts likely need more constraint ("only
+flag concrete bugs") AND the fix loop needs the triage step
+front-loaded. See `references/finding-triage.md` for full rubric.
+
 ## After the audit (any layer, same flow)
 
 Always summarize the audit outcome to the user in plain language:
@@ -364,8 +489,12 @@ Always summarize the audit outcome to the user in plain language:
 1. State the verdict (e.g. "PASS WITH FOLLOWUPS, 3 P2 cleanup
    items").
 2. List findings briefly (P0/P1 first, then P2/P3, then notes).
-3. Cite the audit file path so user can read full detail.
-4. State next action based on exit code / Tom direction.
+3. **Triage each finding (Bug vs Preference per the rubric above).
+   Surface the triage table to the user, especially when ≥ 1
+   finding is a preference.**
+4. Cite the audit file path so user can read full detail.
+5. State next action based on exit code / Tom direction — fixes
+   only for Bugs + math-positive Preferences.
 
 Example summary:
 
@@ -451,3 +580,11 @@ responsible for verbatim transfer.
   detection rules for Claude when writing audit prompts AND
   when running the L2 loop. R102 v2 Phase C's R3-P0 ship-blocker
   is the load-bearing worked example.
+- `references/finding-triage.md` — REQUIRED post-audit rubric for
+  classifying findings as Bug vs Preference, EV math template,
+  honoring user's prior judgment, audit-of-audits retrospective.
+  Three worked examples from `crypto-deep-learning-beta` R12-R15
+  (cron-buffer revert, shadow halt-by-default luck, funding
+  threshold defensible). Added v0.6.0 to prevent the deference
+  failure mode where every codex finding is mechanically closed
+  as if it were a bug.

@@ -1,29 +1,29 @@
 ---
 name: quant-code-review
 description: |
-  量化交易系统代码审计 — 在每次重大代码改动后自动执行全面审查。覆盖维度
-  P (项目阶段+P.4 Profile 风险开关清单)、0 (模块盘点)、1 (实盘/回测对齐+1.4)、
-  2 (回测真实性 +2.10/2.11/2.12/2.13 Backtest Realism Flag)、3 (运维鲁棒性
-  +3.6/3.7/3.8/3.9/3.10/3.11)、4 (状态持久化 +4.5 Monitor Protocol +4.5.2
-  Identity 反硬编码)、5 (代码性能)、6 (AI 协作)、7 (供应链安全 +7.8)。
+  量化交易系统代码审计 — 重大代码改动后自动执行全面审查。维度 P (阶段+
+  P.4 Profile 风险开关清单)、0 (模块盘点)、1 (实盘/回测对齐 + 1.4 部署缺口
+  + 1.5 bar 时间约定)、2 (回测真实性 +2.10/2.11/2.12/2.13)、3 (运维鲁棒性
+  +3.6-3.11 + 3.12 NTP/.env 前置)、4 (状态持久化 +4.5 Monitor Protocol
+  +4.5.2 Identity 反硬编码 +4.6 Unknown-state latch)、5 (性能)、6 (AI 协作
+  +6.5 External Review Discipline)、7 (供应链 +7.8)。
 
   🔴 高优先级必查项：4.5 Monitor Protocol、P.4 + 2.13 + 4.5.2 ("4/19 Cascade
-  三件套")。后三者源自 2026-04-19 V15_PROD 实盘 cross-margin cascade -73.8%
-  事故 — 当时 use_liquidation_check 被设为 False 作为"safety mechanism"导致
-  H1+H2 真实 fDD -79.1% 显示为 -37.7%，monitor identity 硬编码 "MEGA V2"
-  误导事故调查。任一维度发现问题必须作为 🔴 关键问题上报。
+  三件套") 源自 2026-04 实盘 -73.8% 事故；1.5 + 4.6 + 6.5 源自 2026-05
+  codex R12-R15 系列（bar 时间约定 1h 偏移、unknown-state double-fill、
+  对 codex 建议 deference）。任一维度发现问题作为 🔴 关键问题上报。
 
-  触发时机（非常重要）：
-  - 完成策略逻辑修改后（参数、信号、仓位管理、PnL 模型等）
-  - 完成实盘 bot 代码改动后
-  - 完成回测引擎改动后
+  触发时机：
+  - 策略逻辑/实盘 bot/回测引擎改动后
   - 用户说 "review"、"审查"、"检查一下"、"code review"
   - 用户说 "改完了"、"提交了"、"commit 了" 之后
   - Claude 自己完成代码改动准备 commit 之前
-  - 即使改动很小也要触发：一个参数微调、一个 fee 改成 config 读取，都可能
-    带来策略行为重大偏离。
+  - 即使一个参数微调，都可能带来策略行为重大偏离
 
-  适用于所有量化交易项目（现货/合约/期权、CTA/套利/做市/DCA/网格等）。
+  适用于所有量化项目（现货/合约/期权、CTA/套利/做市/DCA/网格等）。
+metadata:
+  version: "0.2.0"
+  author: "Tom Zhang"
 ---
 
 # 量化交易系统代码审计
@@ -518,6 +518,104 @@ Step 5 — 实盘亏损时的系统性诊断：
 3. 🟡 制定部署计划：将研究策略接入实盘信号流
 4. 🟡 部署后端到端验证：确认实盘输出与研究输出一致
 5. 🟢 建立防复发机制：在 CI/CD 或 review 流程中加入 Step 1-4 的自动检查
+
+### 1.5 Bar 时间约定审计（Bar Timing Convention）🔴 高优先级
+
+> **背景故事**：2026-05-14 `crypto-deep-learning-beta` codex R12 P0。
+> binance 1h klines 用 `open_time` 索引（每根 bar 代表 `[open_time, open_time+1h)`），
+> 而 `pandas.resample("1D", label="right", closed="right")` 锚定在 UTC 午夜。
+> 结果：bin 标签 `D 00:00` 实际覆盖的 open_times 是 `(D-1 00:00, D 00:00]`，
+> 包含 24 行 open_times `D-1 01:00 ... D 00:00`。其中最后一行 `open_time=D 00:00`
+> 的那根 1h bar **要等到 D 01:00 才闭合**。所以 1D bar 标签 "D 00:00" 的 close
+> 实际上是 D 01:00 的价格，bar 内容是 `[D-1 01:00, D 01:00) UTC`。
+>
+> 实盘后果：cron 在 D 00:00:01 触发时，data_refresh 排除了未闭合的
+> `open_time=D 00:00` 那根 1h（因为 `open_time + 1h > now`），导致 1D resample
+> 得到的 bar 只有 **23 个 subbars**，"close" 变成 D 00:00 的价格。
+> A/B 实测一根 BTC bar 差 **$650 / 0.83%**。整个回测使用的是 24 subbar 的
+> 数据，实盘用 23 subbar → 结构性偏移。
+>
+> 这个 bug 在 codex 找到之前，4 轮内部 review 全部漏掉。
+
+**为什么必须做**：
+- 1h kline 的索引（open_time vs close_time）+ resample 的 boundary
+  （closed/label）组合形成的 **bar 真实时间范围**，跟人凭直觉理解的
+  "calendar day D" 经常不一样
+- 实盘 cron 时间必须对齐"bar 内容真正闭合"的时刻，而不是"bar 标签是今天"
+- 用 close_time 重新索引能让 bar 时间范围回到自然 calendar day，
+  但代价是整个 alpha-lab 的 hyperparameter 都要重训（R12 实测：
+  v1.37 CAGR 从 +3583% 跌到 +1267%，-65%）
+
+**审查清单**：
+
+```
+□ 1.5.1 索引 vs 边界 = 实际时间范围
+   □ 找到 kline 加载位置（如 data_loader.load_klines_1h）
+   □ 确认索引列：open_time 还是 close_time？
+   □ 找到 resample 调用：参数 closed=left/right? label=left/right?
+   □ 推导"标签 X 的 bar 真实代表哪段 wall-clock 时间"
+     - open_time index + closed=right + label=right + 1D:
+       bar "D 00:00" = open_times (D-1 00:00, D 00:00]
+                     = wall-clock [D-1 01:00, D 01:00)  ← 注意偏移 1h
+     - close_time index + closed=right + label=right + 1D:
+       bar "D 00:00" = close_times (D-1 00:00, D 00:00]
+                     = wall-clock [D-1 00:00, D 00:00)  ← 自然 calendar day
+
+□ 1.5.2 实盘 cron 时间匹配
+   □ 找到实盘 cron 调度（systemd / cron / loop sleep）
+   □ 推算 cron 触发时，最新 1D bar 是否有完整 N 个 subbars
+   □ 如果不是 N 个，可能是：(a) bar 未完全闭合，(b) cron 太早，
+     (c) 索引/边界约定与回测不一致
+   □ 关键：bar.close 的"真实时间" vs cron 时间的差距 = 实盘
+     vs 回测的入场价格偏移 = 系统性 drag
+
+□ 1.5.3 Partial-bar guard
+   □ compute_weights / 信号入口必须断言"最新 bar 是完整 bar"
+   □ grep "len(in_bin)" / "n_subbars" / "subbars" 检查是否有
+     bar 完整性校验
+   □ 缺失的话补一个 cheap check（如读 BTC 1h parquet，count
+     open_times in (last_bar - 1d, last_bar]，应 = 24）
+   □ 缺失 + 实盘在跨日刚开始时跑 → 🔴 已经悄悄用了 23-subbar 数据
+
+□ 1.5.4 数据 refresh 的 boundary filter
+   □ data_refresh 在 fetch klines 时是否过滤未闭合的 in-progress bar？
+     通常 binance API 会返回当前小时的未完结 kline
+   □ 标准做法：保留 open_time + interval_ms ≤ now 的 bar
+   □ 缺失这个 filter → 数据里混入未闭合 bar，所有下游 resample 都坏
+```
+
+**自动化探测**（粗略 grep）：
+
+```bash
+# 找索引设置
+grep -rn "set_index.*open_time\|set_index.*close_time" src/
+
+# 找 resample 调用 + 参数
+grep -rn "resample(" src/ | grep -v test
+
+# 找 bar 完整性校验
+grep -rn "subbars\|n_subbars\|24.*hours.*bar" src/
+```
+
+**Action priority**：
+
+1. 🔴 索引约定 mismatch（回测和实盘的索引列不一致）→ **数据来源在两边
+   要完全一致**，否则所有 close 价都偏 1h
+2. 🔴 resample 边界 mismatch（一边 closed=right，另一边 closed=left）
+   → 任意一个 bar 的 close 价都不一样
+3. 🟡 cron 时间错位（数据约定正确但 cron 没等到 bar 完整闭合）→
+   实盘吃 partial aggregate
+4. 🟢 没有 partial-bar guard（约定都对，但缺乏 defense-in-depth）→
+   加 `_assert_N_subbars` 类断言
+
+**重要：换索引约定 = 重做 alpha-lab**
+
+如果发现回测用的是不优 convention，**不要直接换索引重新跑**。R12 实测
+教训：v1.37 在 open_time 上 CAGR +3583%，换成 close_time 后 CAGR 跌到
++1267%（-65%）。Hyperparameter 全部都是 alpha-lab 针对原 convention
+搜出来的，换了 convention 等于在新 distribution 上跑一个未优化的
+strategy。RL boost 会自动重训，但~50 个 hardcoded gates/thresholds/
+scale 不会。完整 re-tuning 需要重做 alpha-lab，1-2 周以上。
 
 ---
 
@@ -3597,6 +3695,95 @@ total_entries × 20% → 说明 API 层不稳定，需要人工介入；长期�
 - **3.2 订单执行异常**：处理订单 level 的 retry/partial fill；本节处理"协议级"
   的 limit→market 时序和 fee 语义
 
+### 3.12 时间/环境前置（Timing & .env Prerequisites）🔴 强烈推荐
+
+> **背景故事 1（NTP）**：2026-05-14 codex R13 P2 找到的 timing fragility。
+> v1.37 cron 设计在 01:00:01 UTC（让 D 00:00 那根 1h bar 闭合），但服务器
+> NTP 漂移 > 500ms 时，cron 可能在 wall-clock 00:59:59.x 触发，data_refresh
+> 排除还未闭合的 bar，partial-bar guard trip，cycle halt。
+>
+> **背景故事 2（.env）**：codex R15 P2 找到的 deploy-blocker。Runbook 写
+> "edit .env, then run `python3 -m src.live.run_bot`"，但 `run_bot.main()` 只
+> 读 `os.environ`，不主动 parse `.env`。Smoke 脚本和 leverage 工具都自己
+> parse，但主 bot 没有 → 操作员严格按 runbook 执行 → 静默 DRY-RUN，没下
+> 真实单。Fail-closed but 逻辑上就是部署失败。
+
+**核心问题**：实盘 bot 的前置环境（系统时间精度 + 环境变量加载）在 deploy
+runbook 里被默认"应该正常"，但实际部署时这两件事经常出问题，而且都是
+fail-closed（不会出错单，但会静默不工作或意外 halt），最难诊断。
+
+**审查清单**：
+
+```
+□ 3.12.1 NTP 时间同步
+   □ Deploy runbook 是否明确要求 NTP daemon（chrony / systemd-timesyncd）？
+   □ 是否在 smoke / pre-flight 中校验 NTP 状态？
+     ```bash
+     timedatectl status   # 应显示 "NTP service: active"
+     ```
+   □ Cron 时间是否在 bar 边界后留 buffer（≥ 1s）应对漂移？
+     - 1s buffer：modern NTP 漂移 < 100ms，足够
+     - 5s+ buffer：过保守，每秒 ~0.045%/position×turnover 的 drag
+     - 没 NTP：1s 不够，必须装 NTP
+   □ Buffer 大小是否由数学决定，不是 "preferably" 决定？（见 6.5）
+
+□ 3.12.2 .env 加载一致性
+   □ Main bot entry（run_bot.py / main.py）是否 parse .env？
+   □ Smoke / 辅助脚本是否 parse .env？
+   □ **两者必须一致** — 不然 operator 跟着 runbook 跑会陷入"smoke 看
+     起来加载了 .env，但实际 bot 没加载"的悖论
+   □ 推荐实现（与 smoke 共享）：
+     ```python
+     def load_env_file():
+         env = Path(__file__).parent / ".env"
+         if env.exists():
+             for line in env.read_text().splitlines():
+                 line = line.strip()
+                 if line and not line.startswith("#") and "=" in line:
+                     k, v = line.split("=", 1)
+                     os.environ.setdefault(k.strip(), v.strip())
+     ```
+   □ 用 `setdefault`（而非 `[]=`），让 explicit export 仍然 win
+   □ 注意：模块顶层 import 的 const（如 `STRATEGY_NAME =
+     os.environ.get(...)`) 是 module-load 时捕获的；这种值如果要
+     被 .env 覆盖，必须在 main() 第一行 load_env_file，且 .env-only
+     override 模块顶层 const 是 caveat（需要 export）
+
+□ 3.12.3 启动脚本和实际入口的一致性
+   □ Runbook 写 "python3 -m mymodule.main"，main() 的第一行是否
+     做了所有必要的 env 准备（NTP check, .env load, signal-handling
+     setup）？
+   □ 如果某些 env-load 逻辑在外部 wrapper（systemd unit, docker
+     entrypoint），文档里必须明示"不能直接 python -m ..."
+   □ 不要让 operator 猜：runbook 给出的命令必须能直接拷贝执行
+
+□ 3.12.4 时间精度敏感性测试
+   □ 故意把系统时间往前调 1s（模拟 NTP 漂移）跑一次 dry-run
+   □ 看 partial-bar guard / staleness 检查会否 trip
+   □ 故意往后调 1s 也跑一次，看是否照常工作
+   □ 这种 chaos test 在 deploy 前做一次比上线后再发现问题便宜得多
+```
+
+**自动化探测**（粗略 grep）：
+
+```bash
+# .env 加载位置一致性
+grep -rn "def load_env\|os.environ.setdefault\|dotenv" src/ scripts/
+
+# 主入口是否 load .env
+sed -n "/def main/,/^def /p" src/live/run_bot.py | grep -i "env\|load"
+
+# NTP / timing 文档
+grep -rn "NTP\|timedatectl\|chrony" docs/ README.md
+```
+
+**Action priority**：
+
+1. 🔴 Main bot entry 不 load .env，runbook 又说"编辑 .env" → silent DRY-RUN
+2. 🔴 没有 NTP requirement 在 runbook，cron buffer < 1s → 服务器漂移即 halt
+3. 🟡 Smoke 和主 bot 的 .env 加载不一致 → 给 operator 信号不一致的 cue
+4. 🟢 没有 chaos test，但其他 check 都到位 → 上线后第一周观察
+
 ---
 
 ## 维度四：状态持久化完整性
@@ -4055,6 +4242,92 @@ def export_identity(self):
 **红线**：production bot 的 identity.strategy 字符串里不出现任何硬编码 codename
 （如 "MEGA V2"、"H1+H2 Champion"、"V37 Global Optimum"），必须由配置反射。
 
+### 4.6 Unknown-State 订单 Hard Latch（Order Ack 丢失保护）🔴 高优先级
+
+> **背景故事**：2026-05-14 codex R12 P1。Executor 的 cancel-race 保护路径中，
+> 如果 cancel/market-fallback 期间交易所 ack 丢失，那些订单的 fill 状态
+> "未知" — 可能已成交，可能挂在 order book 上待成交。原代码：抛
+> `OrderStateUnknownError`，把 partial_results 存到 state，返回 rc=2，loop
+> 继续。但 `consecutive_errors` 会被后续成功 cycle 重置，孤儿 limit
+> 单还挂在交易所上 — **下个 cycle 的新 limit 单会和孤儿单同时 fill =
+> double-fill 风险**。
+>
+> 教训：order ack 丢失不能用 "continue + log" 应对，必须 **hard latch** —
+> 状态保留到操作员手动 reconcile + clear。
+
+**核心原则**：实盘 bot 不能假设"自己知道交易所的状态"。当那个假设破裂
+（ack 丢失、网络 partition、cancel-race），唯一安全的行为是 **halt
++ require operator intervention**，不是 "continue and hope"。
+
+**审查清单**：
+
+```
+□ 4.6.1 Unknown-state 路径识别
+   □ Executor 是否有 cancel-race 保护（cancel 后再下 market 时检查
+     filled_qty）？
+   □ Cancel response 不返回 executedQty 时是否 re-query get_order？
+   □ Re-query 也失败时是否抛专用异常（如 OrderStateUnknownError）？
+   □ 异常是否携带受影响的 symbols 列表？
+
+□ 4.6.2 State persistence on unknown
+   □ 抛异常前是否把已知部分（partial_results）持久化到 state？
+   □ 是否设置一个**专用字段**（如 unknown_state_symbols）保存
+     受影响 symbols？
+   □ State save 是否 atomic（tempfile + rename）？
+
+□ 4.6.3 下一轮 cycle 入口 latch
+   □ run_cycle / main loop 入口是否 **先检查** unknown_state_symbols？
+   □ 如果非空，**拒绝交易** + telegram alert，return rc=1？
+   □ 拒绝必须在 plan_orders **之前**，因为：
+     - get_current_state 读 positionRisk 看不到挂着的孤儿 limit 单
+     - plan_orders 看 current vs target，会再下一笔 → 双开仓 race
+   □ 是否区分 consecutive_errors（软熔断，可自愈）vs unknown_state
+     （硬 latch，需人工）？
+
+□ 4.6.4 Operator 清理流程文档
+   □ Runbook 是否有 "Clearing the unknown-state latch" 章节？
+   □ 流程应包含：
+     a. Aster UI 上 cancel-all 受影响 symbols
+     b. 对比三个数字：current_pos vs target_weights × equity vs
+        submitted_orders 里相关条目
+     c. 如果一致：edit state.json 把 unknown_state_symbols 改成 []
+     d. 如果不一致：手动调仓 match target，再 clear
+   □ 必须明示："**不要直接删 unknown_state_symbols 就重启**" —
+     孤儿单还在交易所上，下个 cycle 立刻 double-fill
+
+□ 4.6.5 文档引用字段正确性
+   □ Clearance procedure 引用的 state 字段必须是**真实被更新的**
+     字段（如 target_weights, submitted_orders），不能引用
+     placeholder 字段（如 R14 中发现的 last_executed_weights 从未
+     被 executor 更新过）
+   □ 写文档时跟着 grep "state.<field> ="确认每个引用的字段都有
+     真实写入路径
+
+□ 4.6.6 测试覆盖
+   □ 是否有 mock test 模拟 cancel response 缺 executedQty 路径？
+   □ 是否有 mock test 模拟 re-query get_order 失败路径？
+   □ 是否有 integration test 验证 latch 在下一 cycle 入口生效？
+```
+
+**自动化探测**：
+
+```bash
+# 找 unknown-state 异常和 latch
+grep -rn "OrderStateUnknown\|unknown_state\|ack.*lost\|reconcile" src/
+
+# 验证 state 字段引用一致性（文档 vs 代码）
+grep -rn "last_executed_weights\|target_weights\|submitted_orders" \
+  docs/ src/live/state.py src/live/executor.py
+```
+
+**Action priority**：
+
+1. 🔴 没有 OrderStateUnknownError 路径，cancel-race 直接 fail-open → 必修
+2. 🔴 异常抛出后 loop 继续，没有 hard latch → 必修
+3. 🟡 Runbook 没有 clearance procedure → operator 不知道怎么恢复
+4. 🟡 Latch 引用了 placeholder state 字段 → 流程文档失效
+5. 🟢 缺测试覆盖 → 上线后第一次 reconcile 会很慌
+
 ---
 
 ## 维度五：代码性能
@@ -4274,6 +4547,90 @@ AI 生成的测试代码有三种常见的"永远通过"模式，在量化系统
 - 关键路径（下单、持仓变更、状态保存）的日志永远不删，只调整级别
 - 审计时检查：最近的 commit 是否在修 bug 的同时删除了 logging 语句
 ```
+
+### 6.5 外部 Review 反馈不盲从 — 分类 + 算账（External Review Discipline）🔴 高优先级
+
+> **背景故事**：2026-05-14 `crypto-deep-learning-beta` R12–R15 codex 审计循环。
+> R13 codex 写："01:00:01 UTC is safe by assertion but tight operationally.
+> **preferably** use a few-second buffer, e.g. 01:00:05 UTC"。Claude 直接接受了
+> 这条建议，把 cron 从 01:00:01 改成 01:00:05，并 propagate 到 3 个 commit。
+> Tom 在 R15 后追问："为什么不是 1s?"。Claude 这时做了 30 秒的算账：
+> `4s × 30 positions × √(0.70²/yr / sec) × 20% turnover × 250/yr ≈ 2%/yr drag`
+> vs `NTP-drift miss < 1/yr × 0.4%/event = 0.001%/yr`。Net = -2%/yr → 数学
+> 明确否决了 codex 的建议。Cron 在 commit `6fc988d` 改回 01:00:01。
+>
+> 教训：Claude 把 codex 当成了 authority 而不是 reviewer。"preferably" 是
+> 意见，不是 bug。三轮审计里有 3 处类似的 deference（cron buffer 是错的，
+> 另外两处侥幸数学支持，但 process 同样错了 — 没算账就改）。
+
+**核心原则**：外部审计（codex / peer review / lint / LLM suggestion）的反馈
+不是 spec，是 raw findings。**接受前必须做分类 + 算账。**
+
+```
+□ 6.5.1 每条 finding 分类：Bug vs Preference
+   □ Bug：具体 invariant 违反，可被 grep / diff / A-B 验证
+     范例："build_panel 在 fillna(0.0) 处会掩盖 stale funding"
+     → 是 bug，必修
+   □ Preference：含 softening language 的意见
+     范例："preferably 5s buffer", "I would halt", "tight operationally"
+     → 是意见，需算账
+
+   触发词清单（看到任意一个 → slow down）：
+   - "preferably" / "would be safer" / "tight operationally"
+   - "consider" / "may want to" / "I suggest" / "I would"
+   - "tighter would catch X earlier"
+   - "irrelevant slippage" / "small impact"（没量化的）
+   - "best practice" / "stricter default"（没引证的）
+
+□ 6.5.2 Preference 必须算账（EV math）
+   公式：
+     net = avoided_loss_per_event × event_frequency
+           - drag_from_change × cycles_per_year
+
+   - net > 0 → 接受变更，math 写在 commit body
+   - net < 0 → 保留旧值，commit body 写 "[NOT FIXED] <finding>: rejected — net = X-Y = -Z"
+   - 算不出 inputs → 问用户，**不要默认接受**
+
+   范例（来自 R13 cron buffer，反例）：
+     change cost  = 4s × 30 pos × √(0.70²/yr / sec) × 20% × 250/yr ≈ 2%/yr drag
+     change benefit = (NTP miss < 1/yr) × 0.4%/event ≈ 0.001%/yr
+     net = 0.001% - 2% = -2%/yr → 不接受。
+
+□ 6.5.3 尊重用户的既往判断
+   如果用户对同一参数已经表达过明确立场（"等 1 秒就够了"），
+   默认动作是**保留用户的选择**。覆盖必须满足：
+   □ codex 给出 NEW FACT (not new opinion):
+     ✅ "code path crashes when X"
+     ✅ "empirical A/B shows X% impact"
+     ❌ "I would set this differently"
+     ❌ "tighter is conservative"
+
+□ 6.5.4 PASS WITH FOLLOWUPS ≠ "must close N followups"
+   多轮审计的 PASS WITH FOLLOWUPS 经常带 P2/P3 preferences。
+   loop exit 不等于必须关闭每一条。如果所有 followup 都是
+   math-negative preferences，干净 exit 是合法结局。
+   commit log 写 "considered + rejected" 即可。
+
+□ 6.5.5 Audit-of-audits（部署前必跑）
+   多轮审计循环结束 / 部署前必须出一张回顾表：
+   | Round | Finding | Bug or Pref? | Math support? | Action | Status |
+   如果 preferences 占比 > 10%，说明审计 prompt 太松，或者
+   fix loop 把每条 finding 都当 bug 处理（deference 失败）。
+
+□ 6.5.6 Anti-pattern: "Codex said so, I changed it"
+   ❌ "Codex R13 found X, so I changed Y to Z."
+   ✅ "Codex R13 flagged X as preference (softening language).
+      Math: ... Net = -2%/yr. KEEPING old value. Documented."
+   第一种是 deference，第二种是 review。永远写第二种。
+```
+
+**审计触发**：每次跑外部审计（codex L1/L2/L3、peer review、LLM critique）
+之后，audit 报告需新增 triage 段：每条 finding 标 [Bug] / [Pref-accepted] /
+[Pref-rejected]，pref 必须附 EV math。
+
+**参考**：`codex-audit` skill 的 `references/finding-triage.md` 有完整 rubric
++ trigger phrases 表格 + 3 个 worked examples（cron buffer revert / shadow
+halt 侥幸 / funding 24h→12h defensible）。
 
 ## 维度七：供应链与运行时安全
 
@@ -4935,3 +5292,15 @@ P.2 部署就绪度（如适用）：
 50. **锚定效应会让你在错误的层面排查数周** — 当实盘亏损时，人的第一反应是"执行有问题"（手续费算错了、fill rate 太低、滑点太大）。如果第一次排查确实发现了一些执行层面的小问题（费率不精确、gas 成本被低估），锚定效应会加强——你会更加确信"就是执行的问题"，然后在这个方向上越走越深。但真正的根因可能完全在另一个层面：你跑的就不是那个好策略。教训：实盘亏损排查的第一步不应该是查执行，而应该是确认"我们在跑哪个策略，它是不是仓库里最好的那个"。
 51. **Research 到 Production 的"最后一公里"需要正式 checkpoint** — 量化系统的 R&D 流程（idea → 回测 → Alpha Lab 验证 → champion config）和部署流程（config → wire into bot → integration test → paper trading → live）之间存在天然断层。R&D 的交付物是"一个 JSON config + 一组独立模块"，但部署需要的是"bot.py 中的信号流改动 + 冷启动适配 + 风控集成"。这个 gap 不会自动弥合。必须有一个显式的 deployment checklist（就像 r4_champion_config.json 中的 deployment_checklist），且每次 review 时必须检查这个 checklist 的完成状态。
 52. **Maker-First 不是"在 entry 用 limit 单"那么简单，它是一整套协议** — 真实项目 crypto-factor-mining-beta 的实现展示了完整形态：(a) Entry 用 GTC limit @ mid，等 LIMIT_TIMEOUT 秒，超时 cancel 再 IOC market；(b) Exit 直接 IOC market（确定性 > 省费）；(c) 用 pre/post position delta 测量 limit 阶段真实 fill（而非依赖 order response）；(d) 每笔 trade 记录 execution_style（limit_only / limit_then_market / market_ioc）；(e) 回测用 entry_maker_pct × maker_fee + entry_taker_pct × taker_fee 的加权模型；(f) 关键联动：LIMIT_TIMEOUT 参数的 env override 必须触发 startup warning，提醒重新校准 backtest 的 entry_maker_pct（5s→15s 会把 realized maker pct 从 0.50 推到 0.60+）；(g) 部署 7-14 天后用 live fill logs 反推 realized_maker_pct，回灌到 backtest config —— 没有这个校准闭环，回测和实盘就永远是两个平行宇宙。常见踩坑：exit 也用 maker-first（错过止损窗口）、limit_px 跨越价差（实际 100% taker，假 maker-first）、用 order response 的 filled_sz 测量（低估 maker fill 率）、fire-and-forget cancel 后立即下 market（双重成交风险）。**Maker-First 的本质是把交易所的 "快 vs 省" 权衡显式化，然后按 entry/exit 的业务语义做不同选择——入场不急，走 maker 省费；出场急，走 taker 求确定。**
+
+53. **Bar 时间约定能把 alpha 杀掉** — 真实案例（2026-05-14 crypto-deep-learning-beta R12 P0）：binance 1h klines 用 `open_time` 索引，pandas `resample(closed=right, label=right)` 锚定 UTC 午夜。结果"D 00:00 的 1D bar"实际代表 wall-clock `[D-1 01:00, D 01:00)`，close 是 D 01:00 的价格而不是 D 00:00。实盘 cron 在 D 00:00:01 触发时，data_refresh 排除了未闭合的 D 00:00 1h bar，1D resample 只拿到 23 个 subbars → close 变成 D 00:00 的价格（差 1 小时）。A/B 单根 BTC bar 差 $650 / 0.83%。结构性偏移每天都发生，跟回测训练数据完全不一致。**索引列（open_time/close_time）+ resample 边界（closed/label）+ 1D 锚定时刻 = bar 的实际时间范围**。这三个不对齐，所有 close 价偏移；偏移 1 小时 × 250 cycles × 每秒 ~0.045% vol drag 就是真实金额。必须有 `_assert_N_subbars` defense。
+
+54. **换数据索引约定 = 重做整套 alpha-lab** — 同一项目的延伸（R12 alt-path 实测）：把 data_loader 从 open_time 换成 close_time 索引（让 bar 回到自然 calendar day），重跑 v1.37 backtest。结果 CAGR 从 +3583% 跌到 +1267% (-65%)，DD 从 -35% 跌到 -50%，minY 从 +1952% 跌到 +264%（**未达 1500% mandate**）。原因：策略的 ~50 个 hardcoded hyperparameters（top_n, vol_target, gross_cap, base_boost, gate k/mid, ~22 个 boost gate strength，ensemble lookback，shadow cost ratio…）全部是 alpha-lab 针对 open_time convention 搜出来的。RL boost 会自动重训，但这些 scaffold 不会。教训：**"RL 重训"≠"重做 alpha-lab"**。production 策略对底层数据 convention 高度敏感，看似无害的"对齐"改动可能会扼杀全部 alpha；要换 convention 必须重做 alpha-lab，耗时 1-2 周且结果不保证更好（funding-related legs 在 funding 结算前 vs 后的 close 上信号-to-noise 比可能本就不同）。
+
+55. **fillna(0.0) on missing funding 是 funding-leg 的隐形杀手** — build_panel 在 join funding 到 kline panel 时通常 `df["funding_rate"] = df["funding_rate"].fillna(0.0)`。Funding parquet 如果 stale（数据 pipeline 挂了几天没刷新），新的 trade days 拿不到 funding 行，全部填 0 → fa / fund_low / fchg60 / fdisp30 等 funding-based legs 在那些日子里"看起来都是中性 funding"，信号全部归 0。weights 出来"看起来正常"（用其他 leg 撑着），但 4/9 legs 实际失效。leg-weight 的 max-date staleness 检查**抓不到这个 case**（panel index 是新的，只是 fillna 把缺失盖住了）。必须有 **per-source freshness gate**（每个 parquet 文件的 max(fundingTime) 单独校验），不只是看 panel 的 last bar date。
+
+56. **smoke 和 main bot 必须共享 .env loader** — codex R15 P2：runbook 写 "edit .env → python -m mymodule.main"，smoke 脚本自己 parse .env，但 `main.main()` 只读 `os.environ`，不主动加载 .env。Operator 严格按 runbook 执行 → smoke 全绿（因为它自己 parse 了）→ 跑主 bot → 静默 DRY-RUN（`ASTER_ENABLE_TRADING=1` 没有进 process env）。Fail-closed but 逻辑上就是部署失败。教训：**所有 entry point 共享同一个 `load_env_file()` 函数**，用 `os.environ.setdefault`（显式 export 仍 win）。文档里要说明 module-load 时捕获的 const（如 `STRATEGY_NAME` 在 module 顶层 init）不会被 .env-only override 覆盖，需要 `export`。
+
+57. **OrderStateUnknownError 必须 hard latch，不能 continue** — codex R12 P1 抓到的真实坑：executor cancel-race 保护检测到 cancel response 缺 executedQty / re-query get_order 失败 → 抛 OrderStateUnknownError，run_bot 把 partial_results 存到 state，return rc=2 让 loop 继续。但 `consecutive_errors` 会被后续成功 cycle 重置，**孤儿 limit 单还挂在交易所上**。下个 cycle 看 positionRisk（看不到挂着的 limit），plan_orders 重新下一笔 → 孤儿 + 新单同时 fill = double-fill。修法：state 加 `unknown_state_symbols: List[str]`，下个 cycle 入口 **先检查这个字段**，非空就 halt rc=1 + telegram alert，**强制人工 reconcile** 后清空才能继续。Runbook 必须有 "Clearing the unknown-state latch" 流程：先 cancel-all on exchange → 对比 current pos vs target_weights × equity vs submitted_orders → 三者一致才能 clear。**绝对不能直接删字段重启** — 孤儿单还在。
+
+58. **外部 review 反馈是 raw findings，不是 spec** — 2026-05-14 R12-R15 codex 审计循环最后总结的元教训：Claude 在 4 轮审计中接受了 3 处 codex 的 "preferably / I would / tight operationally" 建议作为 must-fix，没有算账。其中 cron buffer 1s → 5s 的改动经 retrospective 测算是 **-2%/yr drag**（4s 额外延迟 × 30 positions × 0.045%/s vol × 20% turnover × 250 cycles/yr）vs 0.001%/yr benefit，明显应该拒绝。另外两处（shadow halt-by-default、funding 24h→12h）侥幸数学支持，但 process 同样错了。教训：(a) codex / lint / peer review / LLM critique 提的每条建议**先分类** — Bug（具体 invariant 违反，可被 grep/diff 验证）vs Preference（含 softening language）；(b) Preference **必须算账**才能动手，公式 `net = avoided_loss × freq - drag × cycles/yr`；(c) 用户已经表达过明确立场的参数，**默认保留用户选择**，除非 codex 给出 NEW FACT（不是 new opinion）；(d) PASS WITH FOLLOWUPS exit 不等于必须关闭每一条 follow-up，纯 preference 的 follow-up 可以 documented-reject；(e) 部署前必跑 audit-of-audits 回顾表，验证 deference rate ≤ 10%。**永远不要写 "codex said X, so I changed Y"**，必须写 "codex 提了 X，我分类为 Bug/Pref，算账 net=Z，所以接受/拒绝"。详见 codex-audit skill 的 `references/finding-triage.md`。
