@@ -13,7 +13,13 @@ pres.title = 'Presentation Title';
 let slide = pres.addSlide();
 slide.addText("Hello World!", { x: 0.5, y: 0.5, fontSize: 36, color: "363636" });
 
-pres.writeFile({ fileName: "Presentation.pptx" });
+pres.writeFile({ fileName: "Presentation.pptx" }).then(() => console.log("done"));
+```
+
+After `writeFile` completes, **always recompress the output** — pptxgenjs writes an uncompressed ZIP with empty directory stubs, which bloats the file (its `compression: true` option has no effect):
+
+```bash
+python scripts/rezip.py Presentation.pptx
 ```
 
 ## Layout Dimensions
@@ -103,7 +109,6 @@ slide.addShape(pres.shapes.RECTANGLE, {
 });
 
 // Rounded rectangle (rectRadius only works with ROUNDED_RECTANGLE, not RECTANGLE)
-// ⚠️ Don't pair with rectangular accent overlays — they won't cover rounded corners. Use RECTANGLE instead.
 slide.addShape(pres.shapes.ROUNDED_RECTANGLE, {
   x: 1, y: 1, w: 3, h: 2,
   fill: { color: "FFFFFF" }, rectRadius: 0.1
@@ -113,9 +118,11 @@ slide.addShape(pres.shapes.ROUNDED_RECTANGLE, {
 slide.addShape(pres.shapes.RECTANGLE, {
   x: 1, y: 1, w: 3, h: 2,
   fill: { color: "FFFFFF" },
-  shadow: { type: "outer", color: "000000", blur: 6, offset: 2, angle: 135, opacity: 0.15 }
+  shadow: { type: "outer", color: "000000", blur: 6, offset: 2, angle: 45, opacity: 0.15 }
 });
 ```
+
+**⚠️ NEVER add decorative color bars or accent stripes** — thin solid-fill rectangles along one edge of the slide (a vertical sidebar stripe, a top/bottom band) or along one edge of a card (a thin colored strip on the top or left of a content block). These read as AI-generated filler. To set a card apart, use a subtle `fill` tint or a `shadow` (as above), not an edge stripe. Avoid patterns like `addShape(RECTANGLE, {x:0, w:0.25, h:5.625, ...})` (slide-edge sidebar) or `{x:1, y:1, w:0.08, h:1.5, ...}` (card-edge accent).
 
 Shadow options:
 
@@ -125,10 +132,10 @@ Shadow options:
 | `color` | string | 6-char hex (e.g. `"000000"`) | No `#` prefix, no 8-char hex — see Common Pitfalls |
 | `blur` | number | 0-100 pt | |
 | `offset` | number | 0-200 pt | **Must be non-negative** — negative values corrupt the file |
-| `angle` | number | 0-359 degrees | Direction the shadow falls (135 = bottom-right, 270 = upward) |
+| `angle` | number | 0-359 degrees | Direction the shadow falls, clockwise from 3 o'clock (45 = bottom-right, 135 = bottom-left, 270 = upward) |
 | `opacity` | number | 0.0-1.0 | Use this for transparency, never encode in color string |
 
-To cast a shadow upward (e.g. on a footer bar), use `angle: 270` with a positive offset — do **not** use a negative offset.
+To cast a shadow upward (e.g. on a card near the bottom of the slide), use `angle: 270` with a positive offset — do **not** use a negative offset.
 
 **Note**: Gradient fills are not natively supported. Use a gradient image as a background instead.
 
@@ -304,12 +311,12 @@ slide.addChart(pres.charts.BAR, [{
 // Line chart
 slide.addChart(pres.charts.LINE, [{
   name: "Temp", labels: ["Jan", "Feb", "Mar"], values: [32, 35, 42]
-}], { x: 0.5, y: 4, w: 6, h: 3, lineSize: 3, lineSmooth: true });
+}], { x: 0.5, y: 2.5, w: 6, h: 2.5, lineSize: 3, lineSmooth: true });
 
 // Pie chart
 slide.addChart(pres.charts.PIE, [{
   name: "Share", labels: ["A", "B", "Other"], values: [35, 45, 20]
-}], { x: 7, y: 1, w: 5, h: 4, showPercent: true });
+}], { x: 6.5, y: 1, w: 3, h: 3, showPercent: true });
 
 // Scatter with a computed trend line (tier-2: stay native, add regression as a second series)
 const xs = [8, 12, 18, 22, 25, 31], ys = [102, 145, 198, 241, 267, 312];
@@ -380,9 +387,24 @@ titleSlide.addText("My Title", { placeholder: "title" });
 
 ---
 
+## Speaker Notes
+
+Add presenter-only notes (visible in Presenter View, not on the slide itself) with `addNotes()`:
+
+```javascript
+slide.addNotes(
+  "Open with the FY25 revenue headline. Pause after the 42% number. " +
+  "If asked about the dip in Q3: supply chain, resolved in Q4."
+);
+```
+
+Call `addNotes()` once per slide with plain text (no formatting). If the task asks for speaker notes, talking points, or a presenter script, add them this way — don't put them in a text box on the slide.
+
+---
+
 ## Common Pitfalls
 
-⚠️ These issues cause file corruption, visual bugs, or broken output. Avoid them.
+⚠️ These issues cause file corruption, visual bugs, broken output, or decks that read as AI-generated. Avoid them.
 
 1. **NEVER use "#" with hex colors** - causes file corruption
    ```javascript
@@ -415,15 +437,15 @@ titleSlide.addText("My Title", { placeholder: "title" });
    slide.addShape(pres.shapes.RECTANGLE, { shadow: makeShadow(), ... });
    ```
 
-8. **Don't use `ROUNDED_RECTANGLE` with accent borders** - rectangular overlay bars won't cover rounded corners. Use `RECTANGLE` instead.
+8. **Don't add edge accent bars to cards** — a thin colored strip on one edge of a card (see the "NEVER add decorative color bars" note in the Shapes section). If you want a card to stand out, use a `fill` tint or `shadow`:
    ```javascript
-   // ❌ WRONG: Accent bar doesn't cover rounded corners
-   slide.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 1, y: 1, w: 3, h: 1.5, fill: { color: "FFFFFF" } });
-   slide.addShape(pres.shapes.RECTANGLE, { x: 1, y: 1, w: 0.08, h: 1.5, fill: { color: "0891B2" } });
-
-   // ✅ CORRECT: Use RECTANGLE for clean alignment
+   // ❌ WRONG: thin left-edge accent stripe on a card
    slide.addShape(pres.shapes.RECTANGLE, { x: 1, y: 1, w: 3, h: 1.5, fill: { color: "FFFFFF" } });
    slide.addShape(pres.shapes.RECTANGLE, { x: 1, y: 1, w: 0.08, h: 1.5, fill: { color: "0891B2" } });
+
+   // ✅ CORRECT: tint or shadow instead
+   slide.addShape(pres.shapes.RECTANGLE, { x: 1, y: 1, w: 3, h: 1.5, fill: { color: "F0F9FB" },
+     shadow: { type: "outer", color: "000000", blur: 6, offset: 2, angle: 45, opacity: 0.12 } });
    ```
 
 ---

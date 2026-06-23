@@ -57,7 +57,7 @@ Use when no template or reference presentation is available.
 - **Pick a bold, content-informed color palette**: The palette should feel designed for THIS topic. If swapping your colors into a completely different presentation would still "work," you haven't made specific enough choices.
 - **Dominance over equality**: One color should dominate (60-70% visual weight), with 1-2 supporting tones and one sharp accent. Never give all colors equal weight.
 - **Dark/light contrast**: Dark backgrounds for title + conclusion slides, light for content ("sandwich" structure). Or commit to dark throughout for a premium feel.
-- **Commit to a visual motif**: Pick ONE distinctive element and repeat it — rounded image frames, icons in colored circles, thick single-side borders. Carry it across every slide.
+- **Commit to a visual motif**: Pick ONE distinctive element and repeat it — rounded image frames, icons in colored circles. Carry it across every slide. **Do not use a color bar or accent stripe as your motif** (see Avoid list).
 
 ### Color Palettes
 
@@ -97,18 +97,13 @@ Choose colors that match your topic — don't default to generic blue. Use these
 
 ### Typography
 
-**Choose an interesting font pairing** — don't default to Arial. Pick a header font with personality and pair it with a clean body font.
+**Font names you write into the .pptx are rendered by the user's PowerPoint, not by this environment.** Your visual QA renders via LibreOffice, which substitutes fonts it doesn't have — and for some fonts the substitute has different widths, so your QA preview can show text overflow (or fit) that the real deck won't have. To keep your QA trustworthy:
 
-| Header Font | Body Font |
-|-------------|-----------|
-| Georgia | Calibri |
-| Arial Black | Arial |
-| Calibri | Calibri Light |
-| Cambria | Calibri |
-| Trebuchet MS | Calibri |
-| Impact | Arial |
-| Palatino | Garamond |
-| Consolas | Calibri |
+- **Safe fonts** (render true-to-width in QA *and* ship with Office): **Arial, Calibri, Cambria, Times New Roman, Courier New, Bookman Old Style, Century Schoolbook**. Use these for body text and anything where fit matters.
+- **Headers with personality at zero QA risk**: pair a safe-list serif header (Cambria, Bookman Old Style, Century Schoolbook) with a safe-list sans body (Calibri or Arial). You get visual contrast without giving up reliable overflow checks.
+- **If the user asks for a font outside the safe list** (e.g. Georgia or Trebuchet MS): use it where the user asked, but size those containers with extra slack (~10%) and don't trust QA text-fit on those elements — the preview of that font is approximate. If the user hasn't specified, prefer safe-list fonts for body text.
+- **QA-unreliable fonts** (substitute has different widths — overflow checks can be wrong): Georgia, Trebuchet MS, Impact, Arial Black, Garamond, Consolas, Palatino Linotype. Calibri Light substitution varies by environment; treat as QA-unreliable. Fine for titles/accents with slack; don't trust QA text-fit on these.
+- **Never default to Aptos** — Office's post-2023 default has no metric-compatible substitute here *and* is missing from older Office installs, so it's unreliable on both ends.
 
 | Element | Size |
 |---------|------|
@@ -135,7 +130,7 @@ Choose colors that match your topic — don't default to generic blue. Use these
 - **Don't forget text box padding** — when aligning lines or shapes with text edges, set `margin: 0` on the text box or offset the shape to account for padding
 - **Don't use low-contrast elements** — icons AND text need strong contrast against the background; avoid light text on light backgrounds or dark text on dark backgrounds
 - **NEVER use accent lines under titles** — these are a hallmark of AI-generated slides; use whitespace or background color instead
-- **Don't add decorative full-width colored bars/rectangles** — header/footer bars, side ribbons, or colored stripes read as AI slop unless the user explicitly requests them
+- **NEVER add decorative color bars or accent stripes** — this includes: header/footer bars spanning the slide width, vertical sidebar stripes down one edge of the slide, thin accent stripes along one edge of a card or content block, and "single-side borders" on rectangles. These read as AI-generated filler. If you want to set a card apart, use a subtle background tint, a drop shadow, or an icon — not an edge stripe.
 - **Don't default to cream/beige backgrounds** — when no background is specified, use white (`FFFFFF`) or the user's brand palette; avoid warm-neutral defaults like `F5F5DC`, `FAF0E6`, `FAEBD7`, `FFF8E1`
 - **Don't ship text that overflows its shape** — if text doesn't fit, reduce font size, split across slides, or enlarge the container; never leave content cut off or spilling past bounds
 
@@ -175,13 +170,13 @@ Visually inspect these slides for user-visible defects.
 Look for:
 - Overlapping elements (text through shapes, lines through words, stacked elements)
 - Text overflow or cut off at edges/box boundaries
-- Decorative lines positioned for single-line text but title wrapped to two lines
 - Source citations or footers colliding with content above
 - Elements too close (< 0.3" gaps) or cards/sections nearly touching
 - Uneven gaps (large empty area in one place, cramped in another)
 - Insufficient margin from slide edges (< 0.5")
 - Columns or similar elements not aligned consistently
 - Low-contrast text (e.g., light gray text on cream-colored background)
+- Template decoration mispositioned after text replacement — e.g., a title underline positioned for one line, but the replaced title wrapped to two
 - Low-contrast icons (e.g., dark icons on dark backgrounds without a contrasting circle)
 - Text boxes too narrow causing excessive wrapping
 - Leftover placeholder content
@@ -197,7 +192,7 @@ Read and analyze these images — run `ls -1 "$PWD"/slide-*.jpg` and use the exa
 ### Verification Loop
 
 1. Generate slides → Convert to images → Inspect
-2. **Check text bounds first** — for every text box, confirm the rendered text fits inside its shape. Overflow is the most common defect and is always user-visible.
+2. **Check text bounds first** — for every text box, confirm the rendered text fits inside its shape. Overflow is the most common defect and is always user-visible. (Exception: for text in a QA-unreliable font per the Typography section, the preview is approximate — rely on the ~10% slack you added, not on the preview's apparent fit.)
 3. List any other issues found
 4. Fix issues
 5. Re-verify only the affected slides

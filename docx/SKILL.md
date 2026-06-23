@@ -18,6 +18,8 @@ A .docx file is a ZIP archive containing XML files.
 | Create new document | Use `docx-js` - see Creating New Documents below |
 | Edit existing document | Unpack → edit XML → repack - see Editing Existing Documents below |
 
+> **Script paths:** every `scripts/...` command in this document is relative to **this skill's directory** (the directory containing this `SKILL.md`). Run them from here, or prefix with the skill's absolute path.
+
 ### Converting .doc to .docx
 
 Legacy `.doc` files must be converted before editing:
@@ -44,7 +46,10 @@ python scripts/office/unpack.py document.docx unpacked/
 ```bash
 python scripts/office/soffice.py --headless --convert-to pdf document.docx
 pdftoppm -jpeg -r 150 document.pdf page
+ls page-*.jpg
 ```
+
+`pdftoppm` zero-pads the page number to the width of the total page count (so a 12-page PDF produces `page-01.jpg`…`page-12.jpg`, not `page-1.jpg`). Use the `ls` to get the actual filenames before reading them.
 
 ### Accepting Tracked Changes
 
