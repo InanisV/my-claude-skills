@@ -2619,3 +2619,15 @@ Batch C：真正的 production v30 builder（不 wrap 研究脚本）+
 
 认知升级阶梯方法论完整版见 `references/cognitive-escalation-ladder.md`——
 撞墙时（搜索穷尽 / 没 alpha）按此逐级爬升，含本-session 实证案例与 rigor 套件配方。
+
+### 新增方法论参考（road-to-2000 弧线，2026-07）
+
+撞墙→提认知→穷尽实践的一轮沉淀。7 个参考文档，撞到相应场景时读：
+
+- `references/ceiling-law.md` — exp(Sharpe²/2) CAGR 天花板 + CAGR@DD 反解。宣布"够不到 X% CAGR"前先算理论上界（1000% 需 Sh≥2.19@Kelly；DD≤55 需 2.5-2.7）。
+- `references/inflation-patterns.md` — 8 类回测虚高/泄漏目录（gate-bypass / funding×N / 静态-tilt lookahead / dredge / 年化错配 / accrual-无-MTM / 多重比较 / ML样本内膨胀）+ 加冕前 8 项 checklist。
+- `references/leakage-audit-mlrl.md` — ML/RL 腿泄漏审计：train/test 重叠陷阱、peek-ahead 探针（shift(-1) 暴涨=因果签名）、真-OOS=所有训练截止之后。
+- `references/orthogonal-structures.md` — N_eff / 正交『结构』≠正交『信号』（TS动量⊥XS⊥宏观择时⊥carry⊥RL）/ 等权(1-N)打败均值方差 OOS（DeMiguel）。
+- `references/leg-mining-harness.md` — 手工搜索穷尽 → 规模化：legkit 共享 harness（agent 只写信号）+ 并行穷尽 leg-mining workflow + family-null best-of-N（含全部死构造）。
+- `references/priorwork-reconcile.md` — 认知升级阶梯第 5 rung（向内/旁求）：撞墙或宣布墙之前，与用户自己的 prior work / sibling 仓对账。
+- `references/deployable-discipline.md` — 研究 Sharpe vs 可部署 Sharpe：回测构造 vs live 因果可算 + 跨仓腿依赖=部署断点。上真金前每部件须有因果 live builder + 机器零 parity。
