@@ -3,6 +3,10 @@
 Merges adjacent <w:r> elements that have identical <w:rPr> properties.
 Works on runs in paragraphs and inside tracked changes (<w:ins>, <w:del>).
 
+Only WordprocessingML runs are touched. DrawingML (a:r) and math (m:r) runs
+have different content models — a:t allows no xml:space attribute, and m:r
+can carry both m:rPr and w:rPr — so merging them corrupts formatting.
+
 Also:
 - Removes rsid attributes from runs (revision metadata that doesn't affect rendering)
 - Removes proofErr elements (spell/grammar markers that block merging)
@@ -11,6 +15,8 @@ Also:
 from pathlib import Path
 
 import defusedxml.minidom
+
+WORDML_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 
 def merge_runs(input_dir: str) -> tuple[int, str]:
@@ -22,15 +28,16 @@ def merge_runs(input_dir: str) -> tuple[int, str]:
     try:
         dom = defusedxml.minidom.parseString(doc_xml.read_text(encoding="utf-8"))
         root = dom.documentElement
+        run_names = _run_tag_names(root)
 
         _remove_elements(root, "proofErr")
-        _strip_run_rsid_attrs(root)
 
-        containers = {run.parentNode for run in _find_elements(root, "r")}
+        runs = _find_runs(root, run_names)
+        _strip_rsid_attrs(runs)
 
         merge_count = 0
-        for container in containers:
-            merge_count += _merge_runs_in(container)
+        for container in {run.parentNode for run in runs}:
+            merge_count += _merge_runs_in(container, run_names)
 
         doc_xml.write_bytes(dom.toxml(encoding="UTF-8"))
         return merge_count, f"Merged {merge_count} runs"
@@ -39,6 +46,17 @@ def merge_runs(input_dir: str) -> tuple[int, str]:
         return 0, f"Error: {e}"
 
 
+
+
+def _run_tag_names(root) -> set[str]:
+    names = set()
+    for attr in root.attributes.values():
+        if attr.value == WORDML_NS:
+            if attr.name == "xmlns":
+                names.add("r")
+            elif attr.name.startswith("xmlns:"):
+                names.add(attr.name.split(":", 1)[1] + ":r")
+    return names or {"w:r", "r"}
 
 
 def _find_elements(root, tag: str) -> list:
@@ -54,6 +72,10 @@ def _find_elements(root, tag: str) -> list:
 
     traverse(root)
     return results
+
+
+def _find_runs(root, run_names: set[str]) -> list:
+    return [e for e in _find_elements(root, "r") if _is_run(e, run_names)]
 
 
 def _get_child(parent, tag: str):
@@ -96,8 +118,8 @@ def _remove_elements(root, tag: str):
             elem.parentNode.removeChild(elem)
 
 
-def _strip_run_rsid_attrs(root):
-    for run in _find_elements(root, "r"):
+def _strip_rsid_attrs(runs: list):
+    for run in runs:
         for attr in list(run.attributes.values()):
             if "rsid" in attr.name.lower():
                 run.removeAttribute(attr.name)
@@ -105,14 +127,14 @@ def _strip_run_rsid_attrs(root):
 
 
 
-def _merge_runs_in(container) -> int:
+def _merge_runs_in(container, run_names: set[str]) -> int:
     merge_count = 0
-    run = _first_child_run(container)
+    run = _first_child_run(container, run_names)
 
     while run:
         while True:
             next_elem = _next_element_sibling(run)
-            if next_elem and _is_run(next_elem) and _can_merge(run, next_elem):
+            if next_elem and _is_run(next_elem, run_names) and _can_merge(run, next_elem):
                 _merge_run_content(run, next_elem)
                 container.removeChild(next_elem)
                 merge_count += 1
@@ -120,14 +142,14 @@ def _merge_runs_in(container) -> int:
                 break
 
         _consolidate_text(run)
-        run = _next_sibling_run(run)
+        run = _next_sibling_run(run, run_names)
 
     return merge_count
 
 
-def _first_child_run(container):
+def _first_child_run(container, run_names: set[str]):
     for child in container.childNodes:
-        if child.nodeType == child.ELEMENT_NODE and _is_run(child):
+        if child.nodeType == child.ELEMENT_NODE and _is_run(child, run_names):
             return child
     return None
 
@@ -141,19 +163,18 @@ def _next_element_sibling(node):
     return None
 
 
-def _next_sibling_run(node):
+def _next_sibling_run(node, run_names: set[str]):
     sibling = node.nextSibling
     while sibling:
         if sibling.nodeType == sibling.ELEMENT_NODE:
-            if _is_run(sibling):
+            if _is_run(sibling, run_names):
                 return sibling
         sibling = sibling.nextSibling
     return None
 
 
-def _is_run(node) -> bool:
-    name = node.localName or node.tagName
-    return name == "r" or name.endswith(":r")
+def _is_run(node, run_names: set[str]) -> bool:
+    return node.tagName in run_names
 
 
 def _can_merge(run1, run2) -> bool:
@@ -175,6 +196,18 @@ def _merge_run_content(target, source):
                 target.appendChild(child)
 
 
+def _element_text(elem) -> str:
+    return "".join(
+        child.data
+        for child in elem.childNodes
+        if child.nodeType in (child.TEXT_NODE, child.CDATA_SECTION_NODE)
+    )
+
+
+def _has_preserve(elem) -> bool:
+    return elem.getAttribute("xml:space") == "preserve"
+
+
 def _consolidate_text(run):
     t_elements = _get_children(run, "t")
 
@@ -182,16 +215,21 @@ def _consolidate_text(run):
         curr, prev = t_elements[i], t_elements[i - 1]
 
         if _is_adjacent(prev, curr):
-            prev_text = prev.firstChild.data if prev.firstChild else ""
-            curr_text = curr.firstChild.data if curr.firstChild else ""
-            merged = prev_text + curr_text
+            merged = _element_text(prev) + _element_text(curr)
+            had_preserve = _has_preserve(prev) or _has_preserve(curr)
 
-            if prev.firstChild:
-                prev.firstChild.data = merged
-            else:
-                prev.appendChild(run.ownerDocument.createTextNode(merged))
+            new_text = run.ownerDocument.createTextNode(merged)
+            for node in list(prev.childNodes):
+                if node.nodeType in (node.TEXT_NODE, node.CDATA_SECTION_NODE):
+                    prev.removeChild(node)
+                else:
+                    run.insertBefore(node, curr)
+            prev.appendChild(new_text)
+            for node in list(curr.childNodes):
+                if node.nodeType not in (node.TEXT_NODE, node.CDATA_SECTION_NODE):
+                    run.insertBefore(node, curr)
 
-            if merged.startswith(" ") or merged.endswith(" "):
+            if merged != merged.strip() or had_preserve:
                 prev.setAttribute("xml:space", "preserve")
             elif prev.hasAttribute("xml:space"):
                 prev.removeAttribute("xml:space")

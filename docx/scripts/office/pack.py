@@ -1,4 +1,4 @@
-"""Pack a directory into a DOCX, PPTX, or XLSX file.
+"""Pack a directory into a DOCX, PPTX, or XLSX file (or .dotx/.potx/.xltx template).
 
 Validates with auto-repair, condenses XML formatting, and creates the Office file.
 
@@ -19,6 +19,7 @@ from pathlib import Path
 
 import defusedxml.minidom
 
+from helpers import OOXML_FAMILY
 from validators import DOCXSchemaValidator, PPTXSchemaValidator, RedliningValidator
 
 def pack(
@@ -30,19 +31,19 @@ def pack(
 ) -> tuple[None, str]:
     input_dir = Path(input_directory)
     output_path = Path(output_file)
-    suffix = output_path.suffix.lower()
+    family = OOXML_FAMILY.get(output_path.suffix.lower())
 
     if not input_dir.is_dir():
         return None, f"Error: {input_dir} is not a directory"
 
-    if suffix not in {".docx", ".pptx", ".xlsx"}:
-        return None, f"Error: {output_file} must be a .docx, .pptx, or .xlsx file"
+    if family is None:
+        return None, f"Error: {output_file} must be one of: {', '.join(sorted(OOXML_FAMILY))}"
 
     if validate and original_file:
         original_path = Path(original_file)
         if original_path.exists():
             success, output = _run_validation(
-                input_dir, original_path, suffix, infer_author_func
+                input_dir, original_path, family, infer_author_func
             )
             if output:
                 print(output)
@@ -69,13 +70,13 @@ def pack(
 def _run_validation(
     unpacked_dir: Path,
     original_file: Path,
-    suffix: str,
+    family: str,
     infer_author_func=None,
 ) -> tuple[bool, str | None]:
     output_lines = []
     validators = []
 
-    if suffix == ".docx":
+    if family == "docx":
         author = "Claude"
         if infer_author_func:
             try:
@@ -87,7 +88,7 @@ def _run_validation(
             DOCXSchemaValidator(unpacked_dir, original_file),
             RedliningValidator(unpacked_dir, original_file, author=author),
         ]
-    elif suffix == ".pptx":
+    elif family == "pptx":
         validators = [PPTXSchemaValidator(unpacked_dir, original_file)]
 
     if not validators:
@@ -111,7 +112,8 @@ def _condense_xml(xml_file: Path) -> None:
             dom = defusedxml.minidom.parse(f)
 
         for element in dom.getElementsByTagName("*"):
-            if element.tagName.endswith(":t"):
+            local_name = element.tagName.rsplit(":", 1)[-1]
+            if local_name in ("t", "delText", "instrText", "delInstrText"):
                 continue
 
             for child in list(element.childNodes):
@@ -130,10 +132,10 @@ def _condense_xml(xml_file: Path) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Pack a directory into a DOCX, PPTX, or XLSX file"
+        description="Pack a directory into a DOCX, PPTX, or XLSX file (or .dotx/.potx/.xltx template)"
     )
     parser.add_argument("input_directory", help="Unpacked Office document directory")
-    parser.add_argument("output_file", help="Output Office file (.docx/.pptx/.xlsx)")
+    parser.add_argument("output_file", help="Output Office file (.docx/.pptx/.xlsx or .dotx/.potx/.xltx)")
     parser.add_argument(
         "--original",
         help="Original file for validation comparison",

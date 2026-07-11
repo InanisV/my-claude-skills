@@ -1,4 +1,4 @@
-"""Unpack Office files (DOCX, PPTX, XLSX) for editing.
+"""Unpack Office files (DOCX, PPTX, XLSX, or .dotx/.potx/.xltx templates) for editing.
 
 Extracts the ZIP archive, pretty-prints XML files, and optionally:
 - Merges adjacent runs with identical formatting (DOCX only)
@@ -20,6 +20,7 @@ from pathlib import Path
 
 import defusedxml.minidom
 
+from helpers import OOXML_FAMILY, safe_extract
 from helpers.merge_runs import merge_runs as do_merge_runs
 from helpers.simplify_redlines import simplify_redlines as do_simplify_redlines
 
@@ -39,27 +40,24 @@ def unpack(
 ) -> tuple[None, str]:
     input_path = Path(input_file)
     output_path = Path(output_directory)
-    suffix = input_path.suffix.lower()
+    family = OOXML_FAMILY.get(input_path.suffix.lower())
 
     if not input_path.exists():
         return None, f"Error: {input_file} does not exist"
 
-    if suffix not in {".docx", ".pptx", ".xlsx"}:
-        return None, f"Error: {input_file} must be a .docx, .pptx, or .xlsx file"
+    if family is None:
+        return None, f"Error: {input_file} must be one of: {', '.join(sorted(OOXML_FAMILY))}"
 
     try:
         output_path.mkdir(parents=True, exist_ok=True)
 
         with zipfile.ZipFile(input_path, "r") as zf:
-            zf.extractall(output_path)
+            safe_extract(zf, output_path)
 
         xml_files = list(output_path.rglob("*.xml")) + list(output_path.rglob("*.rels"))
-        for xml_file in xml_files:
-            _pretty_print_xml(xml_file)
-
         message = f"Unpacked {input_file} ({len(xml_files)} XML files)"
 
-        if suffix == ".docx":
+        if family == "docx":
             if simplify_redlines:
                 simplify_count, _ = do_simplify_redlines(str(output_path))
                 message += f", simplified {simplify_count} tracked changes"
@@ -67,6 +65,9 @@ def unpack(
             if merge_runs:
                 merge_count, _ = do_merge_runs(str(output_path))
                 message += f", merged {merge_count} runs"
+
+        for xml_file in xml_files:
+            _pretty_print_xml(xml_file)
 
         for xml_file in xml_files:
             _escape_smart_quotes(xml_file)
@@ -100,7 +101,7 @@ def _escape_smart_quotes(xml_file: Path) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Unpack an Office file (DOCX, PPTX, XLSX) for editing"
+        description="Unpack an Office file (DOCX, PPTX, XLSX, or .dotx/.potx/.xltx template) for editing"
     )
     parser.add_argument("input_file", help="Office file to unpack")
     parser.add_argument("output_directory", help="Output directory")
