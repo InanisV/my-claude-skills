@@ -1,24 +1,9 @@
-"""Slide-XML defects PowerPoint refuses, and nothing else.
+"""Pick the slide-XML schema errors PowerPoint refuses the file over.
 
-`validate.py` never schema-checked ppt/slides/slideN.xml. That hole hid four
-defects that made real decks unopenable, including an eight-digit hex colour
-this repo shipped in an eval output for months with every check green.
-
-The hole cannot be closed by simply pointing the schema at slide parts. The
-bundled ISO-IEC29500-4 schemas are the *Strict* flavour, and every Transitional
-document -- everything PowerPoint reads, everything pptxgenjs writes -- trips
-them. Measured over 427 decks PowerPoint itself authored, slide-level XSD
-produces seven error classes, all of which PowerPoint reads back happily:
-buSzPct percentages, the ea/cs/latin/buFont typeface facets, an ST_Coordinate
-union, and one txBody ordering case.
-
-So this reports a denylist, not an allowlist: only the classes seen exclusively
-on decks PowerPoint refuses. An unknown class is therefore a miss, never a false
-alarm -- and a false alarm is what teaches an agent to "fix" valid XML and ship
-a deck that will not open.
-
-Each entry below names how it was confirmed.
+A denylist over lxml's messages, so an unrecognised error class is a miss rather
+than a false alarm.
 """
+
 
 from __future__ import annotations
 

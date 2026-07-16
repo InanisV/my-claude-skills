@@ -1,20 +1,9 @@
-"""Chart constraints PowerPoint enforces that no XSD can express.
+"""Find chart XML that PowerPoint refuses but the schema accepts.
 
-`<c:dLblPos>`'s legal values depend on the chart group that contains it, and
-for bar charts on that group's `<c:grouping>`. XSD 1.0 has no co-occurrence
-constraints (they arrived as `xsd:assert` in 1.1, which libxml2 does not
-implement), so `ST_DLblPos` is a plain global enumeration and every value
-validates everywhere. Verified: dml-chart.xsd calls a stacked bar chart with
-`dLblPos="outEnd"` valid, while PowerPoint declares the file corrupt, discards
-the chart, and rebuilds the slide that held it from its layout. python-pptx
-opens such a deck; LibreOffice renders it.
-
-Scope is one cell: `outEnd` on a stacked or percentStacked bar -- the only one
-checked against real PowerPoint. ECMA constrains far more, but a false positive
-here makes an agent "fix" a working deck, so widen only after confirming a case
-in PowerPoint. Detection only: two fixes are valid and only the author knows
-which was meant.
+Detection only: for either fault more than one repair is valid, and only the
+author knows which was meant.
 """
+
 
 from __future__ import annotations
 

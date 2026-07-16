@@ -1,26 +1,9 @@
-"""Report the shared master theme PowerPoint actually refuses.
+"""Find masters sharing a theme part in the way PowerPoint refuses to open.
 
-Under OPC each master part — slideMaster, notesMaster, handoutMaster — owns a
-theme part. pptxgenjs (through 4.0.1) writes one theme and points both the
-slide master and the notes master at it.
-
-PowerPoint tolerates that *only* while <p:notesMasterIdLst> is the element
-immediately after <p:sldIdLst> — where pptxgenjs writes it, in all 448 sharing
-decks in this repo, every one of which opens. Move it anywhere else — to the
-position ECMA-376 requires (before <p:sldIdLst>, where PowerPoint itself writes
-it), or to the very end — and PowerPoint declares the file corrupt. Adjudicated
-in real PowerPoint, one variable per file.
-
-So a shared theme is a *latent* defect: harmless in the order pptxgenjs writes,
-fatal once something moves that element. Neither python-pptx nor LibreOffice
-enforces either rule, which is why it went unnoticed. Reporting the inert case
-would fail a deck the user can open — which is how the deck that started this
-work got hand-edited into corruption — so only a live share is reported.
-
-The tolerance concerns the notes master alone: two slide masters sharing a theme
-is never inert. Nothing here rewrites the deck; PowerPoint's own repair clones
-the theme, and the smaller fix is to put the element back.
+Reports only; the fix is to move <p:notesMasterIdLst> back to directly after
+<p:sldIdLst> in ppt/presentation.xml.
 """
+
 
 from __future__ import annotations
 

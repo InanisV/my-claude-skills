@@ -35,7 +35,7 @@ import defusedxml.minidom
 from xml.parsers.expat import ExpatError
 from xml.sax.saxutils import escape as xml_escape
 
-from office.helpers import rezip as _rezip, safe_extract as _safe_extract
+from office.helpers import opc_target, rezip as _rezip, safe_extract as _safe_extract
 
 TEMPLATE_DIR = Path(__file__).parent / "templates"
 NS = {
@@ -181,14 +181,22 @@ def _ensure_comment_relationships(unpacked_dir: Path) -> None:
         return
     dom = defusedxml.minidom.parseString(rels_path.read_text(encoding="utf-8"))
     root = dom.documentElement
-    existing = {
-        rel.getAttribute("Target")
-        for rel in dom.getElementsByTagName("Relationship")
-    }
+    comment_types = {rel_type for rel_type, _ in _COMMENT_RELS}
+    existing = set()
+    for rel in dom.getElementsByTagName("Relationship"):
+        if rel.getAttribute("Type") not in comment_types:
+            continue
+        part = opc_target(
+            rel.getAttribute("Target"),
+            "word/document.xml",
+            rel.getAttribute("TargetMode"),
+        )
+        if part is not None:
+            existing.add(part)
     next_rid = _get_next_rid(rels_path)
     changed = False
     for rel_type, target in _COMMENT_RELS:
-        if target in existing:
+        if opc_target(target, "word/document.xml") in existing:
             continue
         rel = dom.createElement("Relationship")
         rel.setAttribute("Id", f"rId{next_rid}")
@@ -236,6 +244,8 @@ def add_comment(
     unpacked_dir = Path(unpacked_dir)
     if not raw:
         text = xml_escape(text)
+    author = xml_escape(author, {'"': "&quot;"})
+    initials = xml_escape(initials, {'"': "&quot;"})
     word = unpacked_dir / "word"
     if not word.exists():
         raise FileNotFoundError(f"{word} not found (not an unpacked .docx?)")

@@ -5,7 +5,7 @@ Validator for PowerPoint presentation XML files against XSD schemas.
 import re
 from pathlib import Path
 
-from helpers import safe_extract
+from helpers import opc_target, rels_source_part, safe_extract
 
 from .base import BaseSchemaValidator
 
@@ -395,17 +395,17 @@ class PPTXSchemaValidator(BaseSchemaValidator):
                 ):
                     rel_type = rel.get("Type", "")
                     if "notesSlide" in rel_type:
-                        target = rel.get("Target", "")
-                        if target:
-                            normalized_target = target.replace("../", "")
-
+                        part = opc_target(
+                            rel.get("Target", ""),
+                            rels_source_part(rels_file, self.unpacked_dir),
+                            rel.get("TargetMode", ""),
+                        )
+                        if part:
                             slide_name = rels_file.stem.replace(
                                 ".xml", ""
                             )  
 
-                            if normalized_target not in notes_slide_references:
-                                notes_slide_references[normalized_target] = []
-                            notes_slide_references[normalized_target].append(
+                            notes_slide_references.setdefault(part, []).append(
                                 (slide_name, rels_file)
                             )
 

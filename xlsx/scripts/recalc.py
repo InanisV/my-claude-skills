@@ -11,16 +11,17 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
+import time
 import zipfile
 from pathlib import Path
 
-from office.soffice import get_soffice_env
+from office.soffice import get_soffice_env, run_soffice
 
 from openpyxl import load_workbook
 
-MACRO_DIR_MACOS = "~/Library/Application Support/LibreOffice/4/user/basic/Standard"
-MACRO_DIR_LINUX = "~/.config/libreoffice/4/user/basic/Standard"
 MACRO_FILENAME = "Module1.xba"
+SOFFICE_MISSING = "soffice not found on PATH; LibreOffice is required to recalculate"
 
 MAX_LOCATIONS = 100
 
@@ -47,32 +48,34 @@ def has_gtimeout():
         return False
 
 
-def setup_libreoffice_macro():
-    macro_dir = os.path.expanduser(
-        MACRO_DIR_MACOS if platform.system() == "Darwin" else MACRO_DIR_LINUX
-    )
-    macro_file = os.path.join(macro_dir, MACRO_FILENAME)
+def _stamp(path):
+    st = os.stat(path)
+    return st.st_mtime_ns, st.st_size
 
-    if (
-        os.path.exists(macro_file)
-        and "RecalculateAndSave" in Path(macro_file).read_text()
-    ):
-        return True
 
-    if not os.path.exists(macro_dir):
-        subprocess.run(
-            ["soffice", "--headless", "--terminate_after_init"],
+def setup_libreoffice_macro(profile_dir: Path, timeout=30):
+    url = profile_dir.as_uri()
+    try:
+        run_soffice(
+            ["--headless", "--terminate_after_init", f"-env:UserInstallation={url}"],
             capture_output=True,
-            timeout=10,
-            env=get_soffice_env(),
+            timeout=timeout,
         )
-        os.makedirs(macro_dir, exist_ok=True)
+    except FileNotFoundError:
+        return None, SOFFICE_MISSING
+    except subprocess.TimeoutExpired:
+        return None, "LibreOffice timed out creating its profile; formulas were NOT recalculated"
+
+    macro_dir = profile_dir / "user" / "basic" / "Standard"
+    if not macro_dir.exists():
+        return None, "LibreOffice did not create a usable profile; formulas were NOT recalculated"
 
     try:
-        Path(macro_file).write_text(RECALCULATE_MACRO)
-        return True
-    except Exception:
-        return False
+        (macro_dir / MACRO_FILENAME).write_text(RECALCULATE_MACRO)
+    except OSError as e:
+        return None, f"Could not install the recalculation macro: {e}"
+
+    return url, None
 
 
 def external_links_at_risk(filename):
@@ -124,6 +127,14 @@ def recalc(filename, timeout=30, force=False):
 
     abs_path = str(Path(filename).absolute())
 
+    if not os.access(abs_path, os.W_OK):
+        return {"error": f"{filename} is not writable; recalculation rewrites the file in place"}
+
+    try:
+        get_soffice_env()
+    except Exception as e:  
+        return {"error": f"Could not prepare the LibreOffice environment: {e}"}
+
     if not force:
         try:
             at_risk = external_links_at_risk(filename)
@@ -144,13 +155,27 @@ def recalc(filename, timeout=30, force=False):
                 "external_link_cells_truncated": max(0, len(at_risk) - len(shown)),
             }
 
-    if not setup_libreoffice_macro():
-        return {"error": "Failed to setup LibreOffice macro"}
+    with tempfile.TemporaryDirectory(
+        prefix="recalc-lo-profile-", ignore_cleanup_errors=True
+    ) as profile_dir:
+        return _recalc_with_profile(filename, abs_path, timeout, Path(profile_dir))
+
+
+def _recalc_with_profile(filename, abs_path, timeout, profile_dir: Path):
+    started = time.monotonic()
+    profile_url, err = setup_libreoffice_macro(profile_dir, timeout=timeout)
+    if err:
+        return {"error": err}
+
+    timeout = max(5, int(timeout - (time.monotonic() - started)))
+
+    before = _stamp(abs_path)
 
     cmd = [
         "soffice",
         "--headless",
         "--norestore",
+        f"-env:UserInstallation={profile_url}",
         "vnd.sun.star.script:Standard.Module1.RecalculateAndSave?language=Basic&location=application",
         abs_path,
     ]
@@ -168,15 +193,23 @@ def recalc(filename, timeout=30, force=False):
         )
     except subprocess.TimeoutExpired:
         return {"error": timed_out}
+    except FileNotFoundError:
+        return {"error": SOFFICE_MISSING}
 
     if result.returncode == 124:
         return {"error": timed_out}
 
     if result.returncode != 0:
-        error_msg = result.stderr or "Unknown error during recalculation"
-        if "Module1" in error_msg or "RecalculateAndSave" not in error_msg:
-            return {"error": "LibreOffice macro not configured properly"}
-        return {"error": error_msg}
+        detail = (result.stderr or "").strip() or f"soffice exited {result.returncode}"
+        return {"error": f"LibreOffice failed to recalculate: {detail}"}
+
+    if _stamp(abs_path) == before:
+        return {
+            "error": (
+                "LibreOffice exited cleanly but never rewrote the file, so nothing was "
+                "recalculated. Check that no other LibreOffice instance is running, then retry."
+            )
+        }
 
     try:
         wb = load_workbook(filename, data_only=True)
@@ -195,6 +228,8 @@ def recalc(filename, timeout=30, force=False):
 
         for sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
+            if not hasattr(ws, "iter_rows"):  
+                continue
             for row in ws.iter_rows():
                 for cell in row:
                     if cell.value is not None and isinstance(cell.value, str):
@@ -204,8 +239,6 @@ def recalc(filename, timeout=30, force=False):
                                 error_details[err].append(location)
                                 total_errors += 1
                                 break
-
-        wb.close()
 
         result = {
             "status": "success" if total_errors == 0 else "errors_found",
@@ -220,10 +253,14 @@ def recalc(filename, timeout=30, force=False):
                     entry["locations_truncated"] = len(locations) - MAX_LOCATIONS
                 result["error_summary"][err_type] = entry
 
+        wb.close()
+
         wb_formulas = load_workbook(filename, data_only=False)
         formula_count = 0
         for sheet_name in wb_formulas.sheetnames:
             ws = wb_formulas[sheet_name]
+            if not hasattr(ws, "iter_rows"):  
+                continue
             for row in ws.iter_rows():
                 for cell in row:
                     if (
