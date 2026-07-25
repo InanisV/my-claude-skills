@@ -29,7 +29,9 @@
 
 ### 指标权重
 ```
-score = 0.40 * sharpe + 0.25 * cagr + 0.20 * (-maxdd) + 0.15 * regime_consistency
+score = 0.30 * sharpe + 0.40 * cagr + 0.15 * (-maxdd) + 0.15 * regime_consistency
+# ↑ Phase 1 默认权重（与 SKILL.md 评估框架一致）；Phase 2/3 权重见
+#   SKILL.md「研究阶段策略」，阶段切换时更新此处
 ```
 
 ### 红线
@@ -37,6 +39,9 @@ score = 0.40 * sharpe + 0.25 * cagr + 0.20 * (-maxdd) + 0.15 * regime_consistenc
 MaxDD > ____%        → discard
 任意 regime < baseline * 0.7  → discard
 交易次数 < baseline * 0.5     → discard
+worst_fold_cagr < 0（动态宇宙）        → discard
+generalization_ratio < 0.3（动态宇宙） → discard（判读注意见泛化优先框架 Layer 2）
+未经预算的 OOS 开封                    → 禁止（铁律 1，预算 ≤ ___ 轮）
 ```
 
 ### Regime 定义
@@ -124,14 +129,17 @@ Box3: [时间范围] — [描述，如"高波动震荡期"]
 
 **终止原因**：[ ] 全局最优 / [ ] 时间预算用尽
 
-### Final Gate 验证结果（机制 9）
+### Final Gate 验证结果（机制 10：The Final Gate）
 | 检验项 | 结果 | 状态 |
 |--------|------|------|
-| OOS 验证（OOS_score/IS_score） | | ✅/🟡/🔴 |
+| 时间 OOS 验证（OOS_score/IS_score） | | ✅/🟡/🔴 |
+| 🔴 横截面 OOS（worst_fold_cagr / gen_ratio） | | ✅/🟡/🔴 |
 | 参数稳定性（std/mean） | | ✅/🟡/🔴 |
 | Decay Ratio（后/前） | | ✅/🟡/🔴 |
 | Rolling Sharpe 斜率 | | ✅/🟡/🔴 |
+| 多重检验（family-null / 朴素 score） | | ✅/🟡/🔴 |
 | 简洁性审计 | | ✅/🟡/🔴 |
+| 成本与容量三查（cost-stress/换手分解/容量） | | ✅/🟡/🔴 |
 
 **可上线信心评级**：⭐ / ⭐⭐ / ⭐⭐⭐
 

@@ -36,6 +36,6 @@ Pick a short, descriptive name in kebab-case (e.g. "daily-inbox-summary", "weekl
 
 ### 4. Determine scheduling
 
-The `create_scheduled_task` tool description explains the options (`cronExpression` for recurring, `fireAt` for one-time, omit both for ad-hoc) and their formats. If the user didn't give a clear schedule, propose one and ask them to confirm before proceeding.
+The `create_scheduled_task` tool description explains the options (`cronExpression` for recurring, `fireAt` for one-time, omit both for ad-hoc) and their formats. If the user didn't give a clear schedule, propose one and ask them to confirm before proceeding — don't rely on an approval prompt to catch a wrong guess, since task creation may be approved automatically in some permission modes.
 
 Finally, call the `create_scheduled_task` tool.

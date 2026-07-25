@@ -108,9 +108,13 @@ it explicitly. Don't silently flip it.
 
 ## PASS WITH FOLLOWUPS exit criterion
 
-The L2 auto-fix loop exits on first PASS WITH FOLLOWUPS without
-P0/P1 (exit code 0). This does **NOT** mean "must close N followups
-before exit".
+Exit follows the **unified exit rule** (SKILL.md::"L2 invocation"):
+the loop may exit only on an exit-0 round with NO commits since the
+previous audited HEAD. A PASS WITH FOLLOWUPS (exit 0) round where
+you reject every followup as a documented preference (zero commits)
+therefore exits immediately; a round where you commit closures
+requires one more confirmation round. Either way, exit 0 does
+**NOT** mean "must close N followups before exit".
 
 **Cleanly exit** when:
 

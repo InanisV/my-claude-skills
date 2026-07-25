@@ -148,5 +148,7 @@ mention), handed off as a manual-patch item with exact content. The task is not
 - [references/numbering-lists-escaping.md](references/numbering-lists-escaping.md)
   — heading numbers vs ordered-list numbers, the "1,1,1" fix, escaping & grep.
 - [references/create-and-diagrams.md](references/create-and-diagrams.md) —
-  building a doc from scratch in native blocks (chunked create), and rendering
-  HTML→PNG diagrams to embed.
+  building a doc from scratch in native blocks (chunked create); diagrams via a
+  **mermaid fence in imported markdown → native Lark whiteboard** (preferred), or
+  HTML→PNG for pixel-exact custom visuals. Note: an embedded whiteboard is not
+  machine-readable on fetch-back — keep the mermaid source as text if logic must survive.

@@ -199,7 +199,10 @@ End your report with one of:
 
 ## Output
 
-Write your report to `<archived audit path>`.
+Print your full report as your response — the pipeline captures
+stdout (`--sandbox read-only`: you cannot write files). For L3
+manual runs, Tom saves the verbatim response to
+`<archived audit path>`.
 ```
 
 ## Auto-fix loop in phase-grouped pattern
@@ -222,7 +225,9 @@ LSR-overlay was harmful). Exiting on round-2's exit-0 would have
 shipped the bug. See `references/audit-failure-modes.md` for the
 full catalog of bug classes confirmation rounds catch and the
 detection rules for Claude. **Exit only after TWO consecutive
-exit-0 rounds.**
+exit-0 rounds** (unified rule: an exit-0 round with zero commits
+since the prior audited HEAD may exit immediately — see
+SKILL.md::"L2 invocation").
 
 R89.8 C.1 Phase B's auto-fix loop closed 3 findings in 3 rounds:
 

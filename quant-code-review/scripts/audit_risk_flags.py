@@ -4,7 +4,7 @@ audit_risk_flags.py — 维度 P.4 自动化扫描
 
 Scan a Python profile module for risk-related flags and report effectively-off values.
 Usage:
-    python audit_risk_flags.py path/to/profile.py PROFILE_NAME
+    python audit_risk_flags.py path/to/profile.py PROFILE_NAME [--ast]
 
 Exit code:
     0 = OK
@@ -14,6 +14,10 @@ Exit code:
 This script is part of the quant-code-review skill, dimension P.4
 (Profile Risk-Switch Inventory). Origin: 2026-04-19 V15_PROD cascade incident
 where 9 of 17 risk flags were effectively-off (53%) and live equity dropped -73.8%.
+
+Security: default loading uses exec() on the profile module (needed for
+{**BASE, ...} style inheritance) -- run only on trusted repos. Pass --ast to
+force AST-only parsing (no code execution) on untrusted codebases.
 """
 import ast
 import json
@@ -102,14 +106,20 @@ def scan_profile(profile_dict: dict, profile_name: str) -> dict:
     }
 
 
-def load_profile_dict(profile_file: Path, profile_name: str) -> dict:
-    """Try simple exec first; fall back to AST parsing if exec fails."""
+def load_profile_dict(profile_file: Path, profile_name: str,
+                      force_ast: bool = False) -> dict:
+    """Try simple exec first; fall back to AST parsing if exec fails.
+
+    force_ast=True skips exec entirely (safe on untrusted code).
+    """
     text = profile_file.read_text()
-    try:
-        ns = {}
-        exec(compile(text, str(profile_file), 'exec'), ns)
-    except Exception:
-        ns = {}
+    ns = {}
+    if not force_ast:
+        try:
+            exec(compile(text, str(profile_file), 'exec'), ns)
+        except Exception:
+            ns = {}
+    if not ns:
         # AST-based fallback: only walks Assign nodes for dict literals
         tree = ast.parse(text)
         for node in tree.body:
@@ -136,12 +146,14 @@ def load_profile_dict(profile_file: Path, profile_name: str) -> dict:
 
 
 def main():
-    if len(sys.argv) < 3:
+    force_ast = '--ast' in sys.argv
+    args = [a for a in sys.argv[1:] if a != '--ast']
+    if len(args) < 2:
         print(__doc__)
         sys.exit(2)
-    profile_file = Path(sys.argv[1])
-    profile_name = sys.argv[2]
-    profile = load_profile_dict(profile_file, profile_name)
+    profile_file = Path(args[0])
+    profile_name = args[1]
+    profile = load_profile_dict(profile_file, profile_name, force_ast=force_ast)
     report = scan_profile(profile, profile_name)
     print(json.dumps(report, indent=2, default=str))
     if 'REJECT' in report['severity']:

@@ -1,0 +1,35 @@
+PRD Authoring Kit — Source-Available License (Attribution + No-Misrepresentation)
+Copyright (c) 2026 Noah Zhan (@noah.zhan) <noah.zhan@mexc.com>
+
+Permission is granted, free of charge, to any person obtaining a copy of this
+kit and associated files (the "Kit"), to use, copy, modify, merge, and
+distribute it — including derivative works — SUBJECT TO ALL of the following:
+
+1. ATTRIBUTION.
+   You must retain this LICENSE and the NOTICE file, and must keep the original
+   author credit — "PRD Authoring Kit, by Noah Zhan (@noah.zhan)" — visibly:
+   (a) in the README/docs of any distribution or derivative, AND
+   (b) in the per-file attribution headers that ship with the Kit.
+   Removing or obscuring these headers/credits is a violation of this License.
+
+2. NO MISREPRESENTATION OF ORIGINALITY.
+   You MAY build on and adapt the Kit. You MUST NOT present the Kit — its
+   structure, its methodology (including "最小充分 / 不臆造 / house-style /
+   对话确认" and the practice of inverting the admission checks into positive
+   authoring rules), or its reference files — as YOUR OWN ORIGINAL CREATION.
+   A derivative must be clearly and prominently labeled as such, e.g.
+   "based on / adapted from PRD Authoring Kit by Noah Zhan (@noah.zhan)".
+
+3. COMPLEMENTARY SCOPE.
+   The Kit is the PRD-AUTHORING half of a pipeline. The admission checks mirrored
+   under references/checks/ belong to the R&D team's nocode review/准入 gate and
+   are credited to their author; this Kit consumes them to help authors comply,
+   and does not claim them.
+
+4. AS-IS.
+   The Kit is provided "AS IS", without warranty of any kind. The author is not
+   liable for any claim or damages arising from its use.
+
+This is a source-available license (not an OSI-approved open-source license). Its
+purpose is to keep authorship clear within and across teams: use it freely, credit
+the origin, and do not rebrand it as your own original work.

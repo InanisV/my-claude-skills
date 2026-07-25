@@ -169,8 +169,11 @@ exit 0. The R102 v2 Phase C audit log shows this pattern:
 | 4 | 0 | PASS WITH FOLLOWUPS | none (op note only) |
 
 If round 2's exit 0 had ended the loop, the P0 from round 3 would
-have shipped. The lesson: **after fixing findings, re-audit until
-TWO consecutive exit-0 rounds**, not just one.
+have shipped. The lesson: **after fixing findings, re-audit until an exit-0
+round lands on a tree with no commits since the prior audit** — in
+the common case, TWO consecutive exit-0 rounds. (A
+preference-only exit-0 round with zero commits exits immediately —
+nothing changed to re-audit; see `references/finding-triage.md`.)
 
 The auto-fix loop logic in `SKILL.md::"L2 invocation"` accommodates
 this — when the verdict is PASS WITH FOLLOWUPS in round N, Claude

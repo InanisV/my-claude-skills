@@ -5,7 +5,7 @@ description: >
   "走一轮 codex" / "审一下", a fresh CODEX_REVIEW_PROMPT_*.md
   awaiting review, or milestone-closure commits needing
   independent verification. L1 = Claude sandbox self-run
-  (~30s budget, small commits). L2 = Claude Code on Mac with
+  (~45s sandbox budget, small commits). L2 = Claude Code on Mac with
   auto-fix loop (cross-cutting / failed-L1 / phase-grouped audits).
   L3 = user runs codex directly with no Claude middleware
   (pre-deploy gates, audits of the audit pipeline). All layers use
@@ -18,7 +18,7 @@ description: >
   preferences, only commit fixes for bugs + math-positive
   preferences. See references/finding-triage.md.
 metadata:
-  version: "0.6.0"
+  version: "0.7.0"
   author: "Tom Zhang"
 ---
 
@@ -214,6 +214,10 @@ timeout 40 python "$SCRIPT" \
   --reasoning high
 ```
 
+⚠️ Always pass `--reasoning` explicitly in L1 (`high`, or `medium`
+for trivial commits). The script default is `xhigh` — tuned for L2
+on Mac — and will blow the 45s sandbox budget every time.
+
 After the bash call:
 - **Exit 0** → audit complete, parse verdict per the exit code table
   below.
@@ -255,17 +259,21 @@ Round procedure:
            --reasoning xhigh
 
 2. Inspect the exit code:
-   - **0**: PASS or PASS WITH FOLLOWUPS without P0/P1 → if any
-     P2/P3 followups in the report, commit a closure per finding
-     (one commit per finding, with `fix(audit-loop): close
-     <finding>` style messages) and re-run the audit. **Do NOT
-     exit the loop on the first exit-0** — the confirmation round
-     is where cross-file consistency issues surface. Exit ONLY
-     after TWO consecutive exit-0 rounds (or one exit-0 round
-     when the prior round was also exit-0 with no commits since).
-     See `references/audit-failure-modes.md` for why: R102 v2
-     Phase C had round 2 exit 0 (PASS WITH FOLLOWUPS), then
-     round 3 found a 🔴 P0 ship-blocker that the runbook
+   - **0**: PASS or PASS WITH FOLLOWUPS without P0/P1 → apply
+     the **unified exit rule**: the loop may exit ONLY on an
+     exit-0 round whose audited tree has NO commits since the
+     previous audited HEAD. Two cases:
+       a. You commit NOTHING in response (all followups are
+          documented-rejected preferences / notes) → exit now —
+          a confirmation round would re-audit an identical tree.
+       b. You commit P2/P3 closures (one commit per finding,
+          `fix(audit-loop): close <finding>` style) → re-run the
+          audit as a confirmation round on the new HEAD; exit
+          only when an exit-0 round is followed by zero commits.
+     In the common case this equals "TWO consecutive exit-0
+     rounds". See `references/audit-failure-modes.md` for why:
+     R102 v2 Phase C had round 2 exit 0 (PASS WITH FOLLOWUPS),
+     then round 3 found a 🔴 P0 ship-blocker that the runbook
      prescribed an unsupported config — exiting on round 2's
      exit-0 would have shipped the bug.
    - **1, 2**: HALT verdict (PASS WITH FOLLOWUPS + P0/P1, or
@@ -293,8 +301,10 @@ Round procedure:
      `fix(audit-loop): close <finding ID>` (or `audit-loop: reject
      <finding ID> — net = X-Y` for documented rejections), then go
      back to step 1.
-   - **3, 5, 6, 124**: parse error / network / ambiguous /
-     timeout → STOP loop, report to Tom for manual review.
+   - **3, 5, 6, 7, 124**: parse error / network / ambiguous /
+     internal 30-min timeout / sandbox timeout → STOP loop,
+     report to Tom for manual review. (On exit 7, consider
+     splitting the prompt or lowering reasoning before re-run.)
 
 3. Loop guard: if you reach round 5 without exit 0, STOP and
    report. Do not iterate indefinitely.
@@ -308,8 +318,12 @@ Round procedure:
      through as deference.
    - Each fix commit's SHA + finding ID + brief rationale
    - Audit file paths
-   - Total tokens used (sum from CODEX_AUDIT_LOG.jsonl entries
-     for this loop)
+   - Total duration + tokens across rounds (sum `duration_s` /
+     `tokens_used` from CODEX_AUDIT_LOG.jsonl entries for this
+     loop; `tokens_used` may be null when codex didn't report it)
+   - Write the triage table to `docs/<topic>/AUDIT_TRIAGE_<topic>.md`
+     and commit it — the audit-of-audits record, per
+     `references/finding-triage.md`
 
 ╰────────────────────────────────────────────────────────────────╯
 
@@ -376,7 +390,8 @@ those require user review (L1) or Claude Code's loop logic (L2).
 | 4 | Invocation error | halt for Tom | halt for Tom |
 | 5 | Auth / network failure | halt for Tom | halt for Tom |
 | 6 | AMBIGUOUS multiple `[x]` | halt for Tom | halt for Tom |
-| 124 | sandbox bash timeout | escalate to L2 | (impossible — no Mac timeout) |
+| 7 | codex exceeded internal 30-min ceiling | (unreachable — 124 fires first) | halt for Tom（split prompt / lower reasoning） |
+| 124 | sandbox bash timeout | escalate to L2 | (n/a on Mac — internal ceiling exits 7 instead) |
 
 L3 has no exit codes — Tom interprets verdict directly.
 
@@ -513,6 +528,37 @@ Next: I'll commit followup closure for F1+F2+F3, then proceed to
 step N+1 of the implementation plan. Will report back when committed.
 ```
 
+## Audit prompt quality checklist (before invoking any layer)
+
+A weak prompt produces exit 3 (unparseable) or a preference-heavy
+report. Before invoking, verify the prompt has:
+
+- **Scope pinned**: every commit listed (`git show <sha>`), every
+  file path exact, repo HEAD stated.
+- **Concrete questions**: verifications phrased as checkable
+  invariants with file:line expectations — never bare "review this".
+- **Verdict block mandated** — the script's parser depends on it;
+  omitting it is the #1 cause of exit 3. Include verbatim:
+
+      ## Verdict scale
+      End your report with exactly ONE checked box:
+      - [ ] **PASS**
+      - [ ] **PASS WITH FOLLOWUPS** — correct but specific cleanups (P2/P3)
+      - [ ] **CONDITIONAL** — fix before proceeding
+      - [ ] **FAIL** — fundamental problem
+
+- **Deference guard**: include the line "Only flag concrete bugs
+  with file:line citations. Label style / conservatism /
+  default-tightening suggestions explicitly as PREFERENCE." This
+  cuts triage load at the source (`references/finding-triage.md`'s
+  10% deference-rate rule).
+- **Failure-mode detectors** where applicable (from
+  `references/audit-failure-modes.md`): config-example ↔ code-branch
+  grep (mode A), silent-clamp warning check (mode B),
+  assertion-strips-discriminator check (mode C), test env-var leak
+  check (mode D).
+- **NOT-in-scope section** for deferred concerns.
+
 ## Prerequisites (one-time setup)
 
 ### For L1 (sandbox)
@@ -564,6 +610,21 @@ multi-layer audit history.
 For L3, trust verification is identical — the audit file is whatever
 Tom pasted, with no `_LOG.jsonl` entry from Claude. Tom is
 responsible for verbatim transfer.
+
+## Cross-skill integration
+
+- **quant-code-review** — its dimension 6.5 (External Review
+  Discipline) is the same rubric as `references/finding-triage.md`;
+  this skill is the canonical home. When audit findings concern
+  quant trading code, run the fixes through quant-code-review
+  (Quick mode, diff-driven) before committing them.
+- **alpha-lab** — its 多轮独立审计协议 Round 3 (open-ended audit)
+  can be executed as an L2/L3 run with the "90 days unattended"
+  prompt; alpha-lab milestone checkpoints trigger quant-code-review,
+  and its pre-deploy gates prefer L3 (production-bound = strongest
+  trust boundary, same spirit as Rule 8).
+- **git-cleanup** — runs before every commit: per-phase workflow
+  step 4 AND before every `fix(audit-loop)` commit.
 
 ## Reference
 

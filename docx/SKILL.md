@@ -54,12 +54,13 @@ find unpacked -type l -delete   # strip symlink entries — docx from external p
 python scripts/merge_runs.py unpacked/   # coalesce fragmented runs so text is findable
 # edit unpacked/word/document.xml in place — do NOT reformat or pretty-print
 (cd unpacked && rm -f ../out.docx && zip -Xr ../out.docx .)
-python scripts/office/validate.py out.docx --original doc.docx   # XSD + tracked-change checks; --auto-repair fixes common issues
+python scripts/office/validate.py out.docx --original doc.docx   # XSD checks; --auto-repair fixes common issues
+# redlining? add --author "<the name you redlined under>" to check every edit is tracked
 ```
 
 Word splits text across many `<w:r>` runs (revision ids, spell-check markers), so a phrase you can see in the document often doesn't exist as a contiguous string in the XML. `merge_runs.py` merges adjacent identically-formatted runs in `word/document.xml` without changing content or rendering; it also accepts a `.docx` directly (`python scripts/merge_runs.py doc.docx -o merged.docx`).
 
-**Tracked changes:** wrap runs in `<w:ins>`/`<w:del>` with `w:id`, `w:author`, `w:date` attributes. Inside `<w:del>`, the text element is `<w:delText>`, not `<w:t>`. A deleted paragraph mark (`<w:pPr><w:rPr><w:del w:id=".." w:author=".." w:date=".."/></w:rPr></w:pPr>`) means "merge this paragraph into the next" — so deleting a paragraph outright is that plus a `<w:del>` around every run. The `<w:del/>` must come before the rPr's other children; their order is schema-enforced.
+**Tracked changes:** when redlining, validate with `--author "<the name you redlined under>"` (needs `--original`) — it reports any text you changed without a `<w:ins>`/`<w:del>` around it, which is easy to do by accident and invisible in the accepted view. Wrap runs in `<w:ins>`/`<w:del>` with `w:id`, `w:author`, `w:date` attributes. Inside `<w:del>`, the text element is `<w:delText>`, not `<w:t>`. A deleted paragraph mark (`<w:pPr><w:rPr><w:del w:id=".." w:author=".." w:date=".."/></w:rPr></w:pPr>`) means "merge this paragraph into the next" — so deleting a paragraph outright is that plus a `<w:del>` around every run. The `<w:del/>` must come before the rPr's other children; their order is schema-enforced.
 
 To produce a clean copy with all tracked changes accepted: `python scripts/accept_changes.py in.docx out.docx`.
 

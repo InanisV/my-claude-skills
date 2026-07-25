@@ -51,6 +51,7 @@ Fields:
 | `reasoning_effort` | `none`/`minimal`/`low`/`medium`/`high`/`xhigh` |
 | `codex_version` | from codex stderr banner |
 | `duration_s` | end-to-end time |
+| `tokens_used` | parsed from codex stderr when reported; `null` otherwise |
 | `exit_code_codex` | codex CLI exit code |
 | `verdict_extracted` | `PASS`/`PASS WITH FOLLOWUPS`/`CONDITIONAL`/`FAIL`/`AMBIGUOUS`/`UNKNOWN` |
 | `checked_verdicts` | list of all `[x]` matches found |
@@ -78,21 +79,23 @@ Verdict unparseable                     → exit 3
 Invocation error (paths, args)          → exit 4
 Network / auth failure                  → exit 5
 AMBIGUOUS (multiple [x])                → exit 6
+Internal 30-min timeout (Mac L2)        → exit 7
 ```
 
 **L1** halts on any non-zero exit. **L2** iterates on exit 1 / 2
-(auto-fix loop) and halts on exit 3 / 5 / 6 (need human judgment).
+(auto-fix loop) and halts on exit 3 / 5 / 6 / 7 (need human judgment).
 **L3** has no exit code — Tom interprets verdict.
 
 ## Rule 4 — No auto-retry on transient failure (L1, L2)
 
-A failed codex invocation (exit 5: network/auth) does NOT auto-retry
+A failed codex invocation (exit 5: network/auth, exit 7: internal
+timeout) does NOT auto-retry
 in L1 or L2's outer loop. The failure is logged + user decides.
 Prevents auto-retry from masking quota / auth issues.
 
 The L2 auto-fix loop iterates on REVIEW failures (exit 1, 2 — codex
 found issues, Claude Code fixes), NOT on INVOCATION failures
-(exit 3-6).
+(exit 3-7).
 
 ## Rule 5 — User's manual override
 
@@ -121,8 +124,8 @@ Claude Code's L2 loop has guards:
   appends to `_LOG.jsonl`. After the loop, Tom can inspect the
   full sequence.
 - **Halt cases NOT iterated**: exit 3 (parse), 5 (auth/network),
-  6 (ambiguity) → halt regardless of round count, since iterating
-  won't help.
+  6 (ambiguity), 7 (internal timeout) → halt regardless of round
+  count, since iterating won't help.
 - **Token budget visibility**: each round logs duration_s and
   codex_version; the L2 summary message reports total
   duration + token usage estimate.

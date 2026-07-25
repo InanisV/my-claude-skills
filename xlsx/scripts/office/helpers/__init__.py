@@ -26,10 +26,10 @@ def opc_target(target: str, source_part: str, target_mode: str = "") -> str | No
         return None
     if target_mode.lower() == "external":
         return None
+    target = urllib.parse.unquote(target)
+
     if _SCHEME_RE.match(target):
         return None
-
-    target = urllib.parse.unquote(target)
 
     if "\\" in target:
         raise ValueError(f"relationship target is not a POSIX part name: {target!r}")
@@ -57,11 +57,19 @@ def opc_target(target: str, source_part: str, target_mode: str = "") -> str | No
 
 def rels_source_part(rels_file: Path, unpacked_dir: Path) -> str:
     owner_dir = rels_file.parent.parent.relative_to(unpacked_dir)
-    return posixpath.join(owner_dir.as_posix(), rels_file.name[: -len(".rels")]).lstrip("./")
+    part = posixpath.join(owner_dir.as_posix(), rels_file.name[: -len(".rels")])
+    return part.removeprefix("./")
 
 
 def part_text(data: bytes) -> str:
     return data.decode("utf-8", "surrogateescape")
+
+
+XML_SPACE = " \t\r\n"
+
+
+def rendered_text(text: str, preserve: bool) -> str:
+    return text if preserve else text.strip(XML_SPACE)
 
 
 def safe_extract(zf: zipfile.ZipFile, dest: Path) -> None:

@@ -19,6 +19,7 @@ from pathlib import Path
 from office.soffice import get_soffice_env, run_soffice
 
 from openpyxl import load_workbook
+from openpyxl.worksheet.formula import ArrayFormula
 
 MACRO_FILENAME = "Module1.xba"
 SOFFICE_MISSING = "soffice not found on PATH; LibreOffice is required to recalculate"
@@ -78,6 +79,12 @@ def setup_libreoffice_macro(profile_dir: Path, timeout=30):
     return url, None
 
 
+def _names_pattern(names):
+    if not names:
+        return None
+    return re.compile(r"\b(" + "|".join(re.escape(n) for n in sorted(names)) + r")\b")
+
+
 def external_links_at_risk(filename):
     try:
         with zipfile.ZipFile(filename) as archive:
@@ -93,16 +100,28 @@ def external_links_at_risk(filename):
         values = load_workbook(filename, data_only=True)
         stack.callback(values.close)
 
-        external_names = [
-            name
-            for name, dn in formulas.defined_names.items()
-            if isinstance(getattr(dn, "value", None), str) and EXTERNAL_REF_RE.search(dn.value)
+        defined_names = list(formulas.defined_names.items())
+        for scope_ws in formulas.worksheets:
+            defined_names.extend(scope_ws.defined_names.items())
+        name_texts = [
+            (name, dn.value)
+            for name, dn in defined_names
+            if isinstance(getattr(dn, "value", None), str)
         ]
-        name_re = (
-            re.compile(r"\b(" + "|".join(re.escape(n) for n in external_names) + r")\b")
-            if external_names
-            else None
-        )
+        external_names = {name for name, text in name_texts if EXTERNAL_REF_RE.search(text)}
+        while True:
+            name_re = _names_pattern(external_names)
+            if name_re is None:
+                break
+            added = {
+                name
+                for name, text in name_texts
+                if name not in external_names and name_re.search(text)
+            }
+            if not added:
+                break
+            external_names |= added
+        name_re = _names_pattern(external_names)
 
         at_risk = []
         for sheet in formulas.sheetnames:
@@ -113,6 +132,8 @@ def external_links_at_risk(filename):
             for row in ws.iter_rows():
                 for cell in row:
                     v = cell.value
+                    if isinstance(v, ArrayFormula):
+                        v = v.text
                     if not (isinstance(v, str) and v.startswith("=")):
                         continue
                     reaches_out = EXTERNAL_REF_RE.search(v) or (name_re and name_re.search(v))
@@ -263,11 +284,10 @@ def _recalc_with_profile(filename, abs_path, timeout, profile_dir: Path):
                 continue
             for row in ws.iter_rows():
                 for cell in row:
-                    if (
-                        cell.value
-                        and isinstance(cell.value, str)
-                        and cell.value.startswith("=")
-                    ):
+                    v = cell.value
+                    if isinstance(v, ArrayFormula):
+                        v = v.text
+                    if isinstance(v, str) and v.startswith("="):
                         formula_count += 1
         wb_formulas.close()
 
@@ -297,7 +317,12 @@ def main():
         sys.exit(1)
 
     filename = args[0]
-    timeout = int(args[1]) if len(args) > 1 else 30
+    try:
+        timeout = int(args[1]) if len(args) > 1 else 30
+    except ValueError:
+        result = {"error": f"timeout must be an integer number of seconds, got {args[1]!r}"}
+        print(json.dumps(result, indent=2))
+        sys.exit(1)
 
     result = recalc(filename, timeout, force=force)
     print(json.dumps(result, indent=2))

@@ -1,8 +1,9 @@
 # Creating docs from scratch & embedding rendered diagrams
 
-For building a new doc (or rebuilding one you fully own) in native blocks, and
-for the HTML→PNG diagram trick used to fake a Lark whiteboard when the whiteboard
-write API isn't available.
+For building a new doc (or rebuilding one you fully own) in native blocks, and for
+diagrams. Two diagram routes: a **mermaid fence in imported markdown → native Lark
+whiteboard** (try first — cheap, editable, no image), and the **HTML→PNG stand-in**
+for pixel-exact custom visuals or block-by-block patching.
 
 ## High-fidelity create: chunked, XML, stdin
 
@@ -61,10 +62,46 @@ Caveat: a markdown ordered list whose items are separated by a table gets its
 numbering reset to 1 per fragment — if fixed numbering matters, put numbers in
 the heading text rather than relying on `1.` list syntax.
 
-## HTML → PNG diagrams (stand-in for a whiteboard)
+## Mermaid fence → native Lark whiteboard (try this FIRST for flow/state diagrams)
 
-When you need a flow/scenario diagram and the whiteboard write API isn't
-available, render an HTML mockup to PNG and embed it as an image.
+A ` ```mermaid ` fenced code block inside the markdown you import with
+`docs +create --api-version v2 --doc-format markdown` is converted by Lark into a
+**native, editable whiteboard block** (画板) — a real diagram, not a flattened image.
+No Playwright, no headless-Chrome screenshot, no `media-insert`. Proven for
+`flowchart`, `stateDiagram-v2`, `sequenceDiagram`, etc. This is the cheapest way to
+get a flow / state / scenario diagram into a freshly-created doc — reach for it before
+the HTML→PNG route below.
+
+Put a plain fenced mermaid block straight into the `.md` you import:
+
+```mermaid
+flowchart LR
+  A([Enter page]) --> B{Logged in & has access?}
+  B -- no --> B1[Block & prompt]
+  B -- yes --> C[Load list] --> D([Tap item])
+```
+
+- 🔴 **Caveat (proven, important): the rendered whiteboard is NOT machine-readable on
+  fetch-back.** `docs +fetch` does **not** return the diagram's semantic content — a
+  downstream agent / reviewer reading the doc programmatically sees nothing where the
+  diagram sits (same blind spot as pasted screenshots and embedded画板). So when the
+  diagram carries logic that another agent or a reviewer must read, or that must survive
+  a later round-trip edit, **also keep the mermaid source as text in the doc** (e.g. an
+  adjacent "flow (text)" block) — never let the whiteboard be the only copy of that logic.
+- **Scope**: proven on markdown **whole-file / create import** (`docs +create`, the
+  section above). For block-level patching of an existing doc, a mermaid fence inside
+  `--doc-format markdown` `append` / `block_insert_after` content is worth trying but
+  **verify the round-trip first**; if it doesn't convert, fall back to HTML→PNG.
+- **Don't re-import a whole doc just to add one diagram** — that wipes hand-added
+  screenshots/@mentions (see the patching rules). Either include the mermaid fence in the
+  original create, or patch in an HTML→PNG image.
+
+## HTML → PNG diagrams (fallback / pixel-exact custom visuals)
+
+Use this when the native mermaid whiteboard above doesn't fit — you need a pixel-exact
+custom layout, styling mermaid can't express, or you're patching a diagram into an
+existing doc block-by-block (not via markdown import). Render an HTML mockup to PNG and
+embed it as an image.
 
 - **No Playwright / PIL needed**, and the Mac PingFang font path that's often
   quoted (`/System/Library/Fonts/PingFang.ttc`) may not exist — use headless

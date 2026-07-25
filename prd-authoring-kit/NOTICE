@@ -1,0 +1,25 @@
+PRD Authoring Kit
+Copyright (c) 2026 Noah Zhan (@noah.zhan) <noah.zhan@mexc.com>
+
+Origin / canonical source : 公司内部分发（作者 Noah Zhan / @noah.zhan）
+
+What this is
+------------
+The PRD-AUTHORING half of the nocode-PRD pipeline: it helps PMs write / upgrade /
+self-check PRDs that pass the R&D team's nocode 准入 gate, then publishes them to
+Lark via lark-cli — across Claude Code / Codex / Gemini / Kiro from one shared core.
+
+Relationship to the nocode review gate
+--------------------------------------
+This Kit is built ON TOP OF and COMPLEMENTS the R&D team's nocode review/准入
+product (the prd-review skill and its 18-check system), authored by @coast.lin.
+The 18 admission checks mirrored under references/checks/ are that gate's work,
+credited to @coast.lin; this Kit consumes them so authors can comply easily.
+Authoring (this Kit, Noah Zhan) + Review (@coast.lin's gate) = the full pipeline.
+
+Attribution
+-----------
+Derivatives and redistributions must retain this NOTICE and the LICENSE, keep the
+per-file attribution headers, and must NOT be presented as their own original
+creation. Clearly label derivatives as "based on PRD Authoring Kit by Noah Zhan".
+See LICENSE for terms.

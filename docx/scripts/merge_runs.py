@@ -32,7 +32,7 @@ from pathlib import Path
 
 import defusedxml.minidom
 
-from office.helpers import rezip, safe_extract
+from office.helpers import XML_SPACE, rendered_text, rezip, safe_extract
 
 WORDML_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
@@ -119,7 +119,7 @@ def _is_adjacent(elem1, elem2) -> bool:
             return True
         if node.nodeType == node.ELEMENT_NODE:
             return False
-        if node.nodeType == node.TEXT_NODE and node.data.strip():
+        if node.nodeType == node.TEXT_NODE and node.data.strip(XML_SPACE):
             return False
         node = node.nextSibling
     return False
@@ -224,8 +224,7 @@ def _has_preserve(elem) -> bool:
 
 
 def _rendered_text(elem) -> str:
-    text = _element_text(elem)
-    return text if _has_preserve(elem) else text.strip()
+    return rendered_text(_element_text(elem), _has_preserve(elem))
 
 
 def _consolidate_text(run):
@@ -254,7 +253,7 @@ def _consolidate_text_elements(run, tag: str):
                 if node.nodeType not in (node.TEXT_NODE, node.CDATA_SECTION_NODE):
                     run.insertBefore(node, curr)
 
-            if merged != merged.strip() or had_preserve:
+            if merged != merged.strip(XML_SPACE) or had_preserve:
                 prev.setAttribute("xml:space", "preserve")
             elif prev.hasAttribute("xml:space"):
                 prev.removeAttribute("xml:space")

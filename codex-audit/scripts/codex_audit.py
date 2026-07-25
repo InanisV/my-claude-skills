@@ -33,6 +33,7 @@ this script (Tom can `git diff` to verify Claude can't bypass them):
     FAIL                                       → exit 2  HALT for Tom
     Verdict unparseable                        → exit 3  HALT for Tom
     codex exec failed (network / auth / etc.)  → exit 5  HALT for Tom
+    codex exec exceeded 30-min internal ceiling→ exit 7  HALT for Tom
 
   Rule 4 — No retry on transient failure:
     A failed codex invocation (exit 5) does NOT auto-retry. The
@@ -119,6 +120,8 @@ EXIT_HALT_UNPARSEABLE = 3
 EXIT_INVOCATION_ERROR = 4
 EXIT_AUTH_OR_NETWORK = 5
 EXIT_HALT_AMBIGUOUS = 6  # codex checked multiple verdict boxes
+EXIT_TIMEOUT = 7  # codex exec exceeded TIMEOUT_S internal ceiling
+                  # (Mac L2 only — sandbox bash dies at 45s → 124 first)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -157,6 +160,10 @@ def get_git_head_sha(repo_root: Path) -> str:
 # entire stdout IS the response body — no extraction needed. The .raw
 # file = stdout bytes byte-identical; .md = same content + metadata
 # header. response_sha256 covers .raw.
+#
+# v4 (v0.7.0 skill audit): TimeoutExpired now exits 7 (was 5 — an
+# internal timeout was misreported as auth/network, misdirecting
+# diagnosis); tokens_used parsed from stderr when codex reports it.
 # ─────────────────────────────────────────────────────────────────────────
 def extract_codex_version_from_stderr(stderr_str: str) -> str:
     """codex exec writes 'OpenAI Codex v0.128.0 (research preview)' to
@@ -381,8 +388,10 @@ def main(argv=None) -> int:
             timeout=TIMEOUT_S,
         )
     except subprocess.TimeoutExpired:
-        print(f"ERROR: codex exec timed out after {TIMEOUT_S}s", file=sys.stderr)
-        return EXIT_AUTH_OR_NETWORK
+        print(f"ERROR: codex exec timed out after {TIMEOUT_S}s "
+              f"(internal ceiling — split the prompt or lower reasoning)",
+              file=sys.stderr)
+        return EXIT_TIMEOUT
     duration_s = time.time() - start_ts
 
     raw_stdout_bytes = proc.stdout  # bytes — DO NOT decode for sha256
@@ -413,6 +422,10 @@ def main(argv=None) -> int:
     stdout_str = raw_stdout_bytes.decode("utf-8", errors="replace")
     audit_body_for_display = stdout_str
     codex_version = extract_codex_version_from_stderr(stderr)
+    tokens_used = None
+    m_tok = re.search(r"tokens used[:\s]+([\d,]+)", stderr, re.IGNORECASE)
+    if m_tok:
+        tokens_used = int(m_tok.group(1).replace(",", ""))
 
     # Build human-readable .md (extracted body view + metadata header)
     metadata_for_md = {
@@ -431,7 +444,7 @@ def main(argv=None) -> int:
         "reasoning_effort": args.reasoning,
         "duration_s": round(duration_s, 1),
         "codex_version": codex_version,
-        "skill_version": "codex_audit.py@v2 (post-self-audit fixes)",
+        "skill_version": "codex_audit.py@v4 (v0.7.0: timeout exit 7 + tokens_used)",
     }
     audit_text = build_audit_file(
         codex_body=audit_body_for_display,
@@ -467,6 +480,7 @@ def main(argv=None) -> int:
         "reasoning_effort": args.reasoning,
         "codex_version": codex_version,
         "duration_s": round(duration_s, 1),
+        "tokens_used": tokens_used,
         "exit_code_codex": proc.returncode,
         "verdict_extracted": parsed["verdict"],
         "checked_verdicts": parsed["checked_verdicts"],

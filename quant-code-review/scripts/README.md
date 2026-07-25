@@ -1,6 +1,6 @@
 # Quant Code Review — Audit Scripts
 
-三个独立的自动化审计脚本，对应 SKILL.md 中三个新维度。**全部产出于 2026-04-19 V15_PROD cross-margin cascade -73.8% 事故的复盘**——每一个脚本都能在事故发生之前捕获该问题。
+三个独立的自动化审计脚本（对应 SKILL.md 三个 🔴 高优先级维度）+ 一个多维度 grep 预扫描。**全部产出于 2026-04-19 V15_PROD cross-margin cascade -73.8% 事故的复盘**——每一个脚本都能在事故发生之前捕获该问题。
 
 ## 脚本清单
 
@@ -9,6 +9,7 @@
 | `audit_risk_flags.py` | P.4 | Profile 里所有风控开关的"effectively-off ratio"。比例 > 50% 拒绝部署 |
 | `audit_cascade_simulation.py` | 2.13 | 全 codebase 扫描 use_*_check / next_bar_entry 等真实性 flag 的实际值，区分 production / research |
 | `audit_identity_hardcode.py` | 4.5.2 | monitor_export.identity.* 里的硬编码字符串识别（特别是内部 codename） |
+| `grep_battery.sh` | 多维度 | 一键跑齐 SKILL.md 各维度散落的 grep 探测（只读预扫描，分节输出命中） |
 
 ## 在真实项目（4/19 之前的 V15_PROD codebase）上验证
 
@@ -90,3 +91,9 @@ python audit_identity_hardcode.py /path/to/project
 > 本目录是 `quant-code-review` skill 的可执行附件。任何 quant project 在 commit
 > production-affecting 改动前都应当跑一遍这三个脚本。如果 ≥ 1 个 CRITICAL，
 > commit 应当被阻止直到修复。
+
+## 安全注意
+
+`audit_risk_flags.py` 默认用 `exec()` 加载 profile 模块（以支持 `{**BASE, ...}`
+继承写法）。**只在受信任的仓库上运行**；审计第三方/不受信代码时加 `--ast`
+（纯 AST 解析，不执行任何代码）。`grep_battery.sh` 为纯只读扫描，无此限制。

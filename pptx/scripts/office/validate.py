@@ -19,13 +19,30 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+import defusedxml.ElementTree as ET
+from defusedxml.common import DefusedXmlException
+
 from helpers import OOXML_FAMILY, rezip, safe_extract
 from validators import DOCXSchemaValidator, PPTXSchemaValidator, RedliningValidator
+
+WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 
 def _fail(message: str):
     print(f"Error: {message}", file=sys.stderr)
     sys.exit(2)
+
+
+def _has_tracked_changes(unpacked_dir: Path) -> bool:
+    document = unpacked_dir / "word" / "document.xml"
+    if not document.is_file():
+        return False
+    try:
+        root = ET.parse(document).getroot()
+    except (ET.ParseError, DefusedXmlException):
+        return False  
+    tracked = {f"{{{WORD_NS}}}ins", f"{{{WORD_NS}}}del"}
+    return any(elem.tag in tracked for elem in root.iter())
 
 
 def main():
@@ -54,10 +71,18 @@ def main():
     )
     parser.add_argument(
         "--author",
-        default="Claude",
-        help="Author name for redlining validation (default: Claude)",
+        default=None,
+        help="The name you are redlining under. Passing it turns on the "
+        "tracked-change check: any text differing from --original without a "
+        "<w:ins>/<w:del> recording it is reported. Untracked edits carry no "
+        "author, so the check covers them whoever made them — the name marks "
+        "the run as redlining work and is not used to filter. Requires "
+        "--original; docx only.",
     )
     args = parser.parse_args()
+
+    if args.author is not None and not args.original:
+        _fail("--author requires --original")
 
     path = Path(args.path)
     if not path.exists():
@@ -76,6 +101,9 @@ def main():
         _fail(
             f"Cannot determine file type from {path}. Use --original or provide one of: {', '.join(sorted(OOXML_FAMILY))}."
         )
+
+    if args.author is not None and family != "docx":
+        _fail(f"--author only applies to docx files, not {family}")
 
     packed_file = None
     temp_dir_ctx = None
@@ -98,9 +126,14 @@ def main():
             validators = [
                 DOCXSchemaValidator(unpacked_dir, original_file, verbose=args.verbose),
             ]
-            if original_file:
+            if args.author is not None:
                 validators.append(
-                    RedliningValidator(unpacked_dir, original_file, verbose=args.verbose, author=args.author)  
+                    RedliningValidator(unpacked_dir, original_file, verbose=args.verbose)  
+                )
+            elif original_file and _has_tracked_changes(unpacked_dir):
+                print(
+                    "Note: this document has tracked changes; they were not "
+                    "checked against the original (pass --author to check)."
                 )
         case "pptx":
             validators = [
