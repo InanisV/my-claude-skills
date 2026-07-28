@@ -38,7 +38,7 @@ lark-cli docs +create --title "【AI】xxx PRD" --doc-format markdown --content 
 ```
 
 - 放指定位置：`--parent-token <wiki节点token或文件夹token>`（问产品要目标位置；默认建个人空间根）。
-- markdown 表格→飞书表格；标题层级、列表、mermaid 代码块保留（mermaid 会转成飞书画板）。
+- markdown 表格→飞书表格；标题层级、列表保留；**```mermaid fence 自动转成原生可编辑画板、fence 不残留**——所以 md 里照写 fence，**别在 fence 之外再贴一份 mermaid 源码或加「mermaid 文本供 XX 读取」说明**（实测用户点名是噪音）。
 - 截图、@人、Figma bookmark、bitable 等富块 markdown 表达不了——先建文字版，再按步骤 2/3 补，或让产品在飞书手动贴。
 - 版本差异：本环境 `docs +create` 无 `--api-version` 参数、默认即新版；若你的 CLI 版本 docs 命令报需要 `--api-version v2`，按 `lark-cli skills read lark-doc` 的提示加。
 
@@ -59,6 +59,8 @@ lark-cli docs +media-insert --doc <id> --file ./pic.png            # --file 用�
 ```
 > 🔴 **禁止在新 block 里写 `<img src="<旧token>">` 复用图片**——会被换成 512×512 占位垃圾图、真图丢失。图片重定位只能靠 `block_move_after`。
 
+**给已有文档补画板（block 级 patch 场景）**：先插入一个空画板块拿 block_token，再 `lark-cli whiteboard +update --input_format mermaid` 直接灌 mermaid（实测可靠；核验用 `whiteboard +query` 导图目检，须传 `--output` 目录）。**发布后核验**：fetch 回读 grep 无 ```mermaid 裸代码块、无「mermaid 文本供」说明句残留——有就删（逻辑已在文字规则里，代码块不留）。
+
 > 建议：正文先用步骤1 markdown 建好，再对少数富块位置用步骤3 局部升级，别一上来全 XML。
 
 ## 步骤 3 · 迭代更新已有文档（保护人工内容，别整篇覆盖）
@@ -77,6 +79,7 @@ lark-cli docs +update --doc "<url>" --command append --content - < more.md --doc
 - 空 td 没有 id：`--detail full` 拿到内部空段落 block id 再 `block_replace` 精准填。
 - XML 正文里 `&` `<` `>` 需转义；校验时按转义形态 grep。
 - 有序编号：飞书 `seq=` 自动编号有时不渲染 → 把 `1./2.` 直接写进标题/正文文本。
+- **含样式文本（红字/底色/评审标记）的块，禁用 markdown 路径 `block_replace`**——markdown 不携带颜色，替换会**静默抹掉整块样式**（实测差点销毁上一轮评审红字）。改前先在 XML 里 grep `span`/`color` 探样式；有样式就走 XML 路径（span 保样式），或只 `str_replace` 内联改文字。
 
 🔴 **改后必做 round-trip 校验**（"命令返回成功"≠改对）：
 ```bash
@@ -87,6 +90,8 @@ AFTER=$(lark-cli docs +fetch --doc "<url>" --doc-format xml | grep -cE '<img |&l
 [ "$AFTER" -ge "$BEFORE" ] || echo "❌ 图片数 $BEFORE→$AFTER，人工内容可能被抹，别继续"
 # 再核对：每个 @人 user-name 仍在、模块/小节数不变、文末无残留 AI 水印/占位
 ```
+
+**迭代改稿标红惯例**：block patch 新增/修改的文本标红色（XML text style，语法读 `lark-doc-xml.md`；markdown 路径的 `block_replace` 表达不了颜色，则在交付简报里列「本轮改动清单」替代），交付时告知产品「红色为本轮改动，评审确认后转黑」；新一轮修改开始时，按产品指示把上一轮红字转黑。首发稿全黑、不标色。
 
 ## 步骤 4 · 收尾
 
