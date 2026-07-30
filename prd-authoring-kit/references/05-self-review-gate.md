@@ -79,24 +79,26 @@
 
 > 在写飞书前，用门禁的**原始 18 条检查**（`references/checks/` 原文）过一遍，达标才发布——把 PRD 变成"对着真卷子做完对完答案"，**显著提高一次过概率**（不等于保证；审查器模型可能有出入）。
 > 找不到 checks 原文时，退回用 `01-authoring-rules.md §2/§3` 内联评并在报告注明"未用 checks 原文"。
-> **基线**：`references/checks/` 是门禁原文镜像（归属审查方产品 @coast.lin），基线 2026-07-06（18 条 check 原文与 2026-07 初版一致；本次升级在审查器 SKILL 层，见下）；门禁若升级需重新校准（报告会带这行）。
+> **基线**：`references/checks/` 是门禁原文镜像（归属审查方产品 @coast.lin），基线 **2026-07-08**（`crypto_data_source` / `external_dependency_declaration` / `implementation_ambiguity` / `internal_consistency` 四条于 2026-07-07 收范围——接口契约细节归技术方案，见下方新规 7；其余 14 条与 2026-07 初版一致；审查器 SKILL 升至 0.11.0）；门禁若升级需重新校准（报告会带这行）。
 
-## 审查器新版行为（2026-07-06，写作与自检都要知道）
+## 审查器新版行为（2026-07，写作与自检都要知道）
 
 真实审查器（prd-review skill）在 18 条语义检查之外新增了这些机制，直接影响怎么写、怎么判：
 
 1. **AI 阅读友好度判定**：审查器先判 PRD 是否"AI 阅读友好"（标题层级清晰、核心章节可定位、无大段口语散文、无需脑补即可逐条判定）。不友好 → 审查器自行"无损转写"后再评，且报告公开标注「未使用 AI 阅读友好的 PRD 格式」。转写依赖审查器归纳、有走样风险——**kit 产出必须直接达到 AI 友好**（分层标题 + 列表化 + 具名章节），跳过转写才最稳。
-2. **复杂度分档**：审查器按反推工作量分 `simple / medium / complex`。simple 只跑 4 项核心（矛盾/逻辑漏洞/可开发/可测试）+ 精简结构检查；**涉及资金、交易、告警推送、埋点的需求一般不判 simple**。kit 轻量档 ≈ simple 档的写作面。
+2. **复杂度分档（2026-07 更新）**：审查器**先填「估算依据表」**（功能点数 / 端数 / 高风险面 / 新数据模型·状态机有无 / 外部依赖数）再据表套档 `simple / medium / complex`。simple 只跑 4 项核心（矛盾/逻辑漏洞/可开发/可测试）+ 精简结构检查（判定条件见 `00` 判体量区）。**确定性护栏：命中 资金 / 交易 / 告警推送 触发词即强制抬到 ≥medium**；**护栏不含埋点——埋点是常规需求、可判 simple**，不因含埋点而升档（旧口径「涉埋点不判 simple」已作废）。kit 轻量档 ≈ simple 档的写作面。
 3. **判定档位（变化）**：有 P0 → 🔴 有条件通过（修完 P0 可推进）；得分 <60 → 🔴 不通过；**无 P0 即通过**，≥80 🟢、60–79 🟡。P1 不再阻塞"通过"决策、只扣分。
 4. **硬互斥封顶**：确认 1 个 `hard_mutual_exclusion` 封顶 79 分（🟡），2 个及以上封顶 74。→ 内部一致性是 🟢 的硬前提。
 5. **跨检查去重**：同一位置同一问题多检查命中只扣最高一条（不会被重复扣死，也别指望"修一处赚多分"）。
 6. **评论回写**：评审报告会以飞书评论回写到 PRD 文档上（就绪度档位 + 问题清单）。
+7. **接口契约细节 = 技术方案职责（2026-07 新规，四条 check 同步收范围）**：接口名、调用方式（GET/POST）、request body、response 结构**不是 PM 在 PRD 里必须交付的内容**——写到「**谁提供 + 什么类数据/接口 + 待联调确认**」颗粒度即达标，给了契约细节算**加分项**（记进亮点/通过依据），缺了**不得判 issue**。落到具体检查：`external_dependency_declaration` 占位即通过；`crypto_data_source` 只要能识别数据来自哪个系统/数据域**或由谁提供**即通过；`implementation_ambiguity` 不把缺接口细节算实现歧义；`internal_consistency` 不把占位标注算内部矛盾。→ 正面写法见 `01 §0.5` 依赖接口条、`02` 后端逻辑先问闸。
+8. **软化呈现**：报告以**就绪度档位领衔**（可开工 / 基本可开工 / 建议完善后开工），分数保留但不作唯一门面；问题用建设性措辞（「待完善项」而非「缺陷」）；**同一问题被多个检查命中，报告只呈现最高优先级的一条**（呈现去重，与第 5 条的扣分去重是两件事）。kit 自检报告同律，见步骤 5。
 
 > kit 发布门槛**维持从严不降**（标准档 P0=0 且 P1=0）：审查器"无 P0 即通过"是它的底线，不是我们的目标——P1 照扣分，堆几个就掉出 🟢（<80）。从严档位恰好锚定 🟢。
 
 ## 自检的两栏口径（先理解）
 
-- **① 门禁判定**：完全按 checks 18 条原文评，决定门禁是否退回。带 **★** 的是 kit 从严升格项（`core_feature_specificity`、`crypto_fund_idempotency` **完全缺失**——源 check 未标 P0，kit 按 P0）；其余按门禁原文严重度。**门禁 P0 永不静默放行。**
+- **① 门禁判定**：完全按 checks 18 条原文评，决定门禁是否退回。带 **★** 的是 kit 标注的 P0 重点项：`core_feature_specificity` **完全缺失**仍属 **kit 从严升格**（引擎 default P1，kit 按 P0）；`crypto_fund_idempotency` **完全缺失** 2026-07 起**引擎 default 已是 P0**，kit 与门禁同级、不再是升格（★ 保留只为提示"这是 P0 重点，别漏"）。其余按门禁原文严重度。**门禁 P0 永不静默放行。**
 - **② kit 加严**（俗称"第二道门"：门禁不查、kit 额外加的逻辑内审六维 **A/F/B/C/E/T** + 幂等键有效性）。分两级：
   - **结构性断点** = **默认阻塞发布、强烈建议修**（门禁本身能过）。**判据（从严）：缺失会让某输入下系统行为无法唯一推导（研发要猜）就是断点**——进入态无退出/可逆转换缺反向/漏 loading/缺关键分支"否则"/幂等键粒度盖不住声明不变量，均属此。**拿不准是否核心 → 默认按断点。**
   - **细节项** = 建议、不阻塞。**仅**当"该枚举成员/时机在任何输入下都不改变对错、只影响展示完备度"才可归此。**细节项不是给真实断点降级的通道**：凡本质是缺分支/缺退出态/缺反向/幂等无效，措辞成"细节"也仍按断点。
@@ -114,7 +116,7 @@
 - [ ] **[扫描器约定]** 功能规格章节标题**含「功能需求/核心功能」**——只叫「User Stories」结构层立不住；house 双语标题「功能需求 User Stories 用户故事」两全。
 - [ ] **[扫描器约定]** 验收**独立成 top-level「验收标准」章节**、按 US-R 组织，别只埋在各 US-R 下（独立成章对 QA 也有真实价值）。
 - [ ] **AI 友好度自证**：章节层级清晰、核心章节可被结构检查定位、无大段散文/截图夹叙述（排版规范见 `07 §五`）；章节名兼容审查器规范骨架（背景与目标/目标用户/核心功能/验收标准/范围边界/异常流程/外部依赖——kit 章节名与之对得上即可，不必改名）。
-- [ ] **复杂度预判**：写下本篇预计档位 `simple/medium/complex`；**涉资金/交易/告警推送/埋点一般不判 simple**（门禁会按 ≥medium 跑全量 18 条），kit 自检不得据 simple 减项（幂等/埋点等域检查照跑）。
+- [ ] **复杂度预判**：先写一行**估算依据表**（`功能点数 | 端数 | 高风险面 | 新数据模型·状态机有无 | 外部依赖数`），再据表写下本篇预计档位 `simple/medium/complex`；**涉资金/交易/告警推送命中护栏 → ≥medium**（门禁按 ≥medium 跑全量 18 条）；**涉埋点不升档、可判 simple**（埋点类检查照跑、最多 P1）。kit 自检**不得据 simple 减项**（幂等/埋点等域检查照跑）。
 
 > 结构立不住的后果（新版）：不再直接判「功能需求章节缺失」P0，而是判 `SOURCE_FORMAT=human` → 审查器无损转写后再评 + 报告公开标注「未使用 AI 阅读友好的 PRD 格式」；转写只救**已存在**的埋没内容、真缺照判缺失，且有转写走样风险。目标是直接被判 `ai`、跳过转写。
 
@@ -138,6 +140,8 @@
 
 ## 步骤 2 · 逐条评判 18 条（① 门禁判定栏）
 
+> **分档读法（`00` 分档加载清单同款，提速用）**：**标准档 18 条原文全读全判**；**轻量档/纯埋点档只读 10 份裁剪集**——下表里 7 条能判 **P0** 的全集（`developer_confusion` / `internal_consistency` / `implementation_ambiguity` / ★`core_feature_specificity` / ★`crypto_fund_idempotency` / `crypto_data_source` / `crypto_alert_cooldown`；后三条按步骤1 的 `is_fund`/`is_crypto_data`/`is_push` 开关判适用，**不适用也要在报告写明，别靠"轻量需求应该不涉 crypto"的隐式假设跳过**）+ `success_metric_quantification` + `acceptance_testable` + `acceptance_derivable`，正好覆盖轻量门槛（`P0=0` + 成功指标有判定口径 + 每 US-R 有验收）。**裁的是读取，不是判定**：未读的纯 P1 检查在报告里如实记「未全评·轻量裁剪」，**不许渲染成 pass**（P1 本就不阻塞轻量档、score 也不作门槛，故对结论零影响）；一旦升为标准档、或用户要真实 P1 数/门禁分，**回头补读全 18 条**。
+
 对每条（跳过不适用域检查），读 `references/checks/<file>` 判事实，按下表定严重度：
 ```
 check_id | pass(✅/❌) | 严重度(P0/P1/P2/none,按本清单) | location | why | fix
@@ -145,13 +149,17 @@ check_id | pass(✅/❌) | 严重度(P0/P1/P2/none,按本清单) | location | wh
 
 | check | 严重度口径（kit 清单，即使原文无 P0 字样也以此为准） |
 |---|---|
-| developer_confusion | **P0**（源 check 明写） |
-| internal_consistency | **P0**（源 check 明写） |
+| developer_confusion | **P0**（源 check 原文明写"不通过（P0）：核心流程分支研发必须任意选择"）；**但**主流程清晰、只是从属功能提示策略/异常兜底有差异 → 源 check 自带降级，最多 **P1** |
+| internal_consistency | **P0**（源 check 明写）；仅 **`hard_mutual_exclusion`**（同一触发条件两套互斥实现）判 P0，属边界歧义 `boundary_ambiguity` 的 ≤P1 |
 | implementation_ambiguity | 仅 `hard_mutual_exclusion` 时 **P0**，否则 ≤P1 |
-| **★ core_feature_specificity** | **P0**（kit 从严；缺失=功能不可推导，等价 developer_confusion） |
-| **★ crypto_fund_idempotency**(is_fund) | **缺幂等段落 = P0**（kit 从严，与 01 §2 一致）；**键粒度盖不住声明不变量的有效性问题 = ② kit 加严·资金安全** |
-| crypto_data_source(is_crypto_data)·crypto_alert_cooldown(is_push) | 缺失 **P1** |
-| exception_coverage·scope_boundary·target_user·external_dependency·success_metric·acceptance_testable·acceptance_derivable·tracking_* | 缺失 **P1**（acceptance/metric 不触发 P0） |
+| **★ core_feature_specificity** | **P0**（kit 从严，引擎 default P1；缺失=功能不可推导，等价 developer_confusion） |
+| **★ crypto_fund_idempotency**(is_fund) | **缺幂等段落 = P0**（与 01 §2 一致；2026-07 起引擎 default 亦为 P0）；**键粒度盖不住声明不变量的有效性问题 = ② kit 加严·资金安全** |
+| crypto_data_source(is_crypto_data) | **缺失 = P0**（2026-07 起门禁 default P0，由 P1 升格）；**占位即通过**——写清"来自哪个系统/接口/数据域"**或**"由谁提供"就算达标，不要求接口名/字段级契约 |
+| crypto_alert_cooldown(is_push) | **缺失 = P0**（2026-07 起门禁 default P0，由 P1 升格）：可高频外发的推送/告警必须写冷却或去重口径 |
+| exception_coverage·scope_boundary·target_user·external_dependency·success_metric·acceptance_testable·acceptance_derivable | 缺失 **P1**（acceptance/metric 不触发 P0；`external_dependency` 占位形态即通过，缺接口契约细节不判 issue） |
+| tracking_*（4 条） | 缺失 **P1 封顶**——埋点是数据需求、不阻塞功能开发，**即便你判了 P0 引擎也会确定性降为 P1**，别按 P0 卡发布 |
+
+> **判读纪律**：严重度以**本清单 + `checks/` 原文措辞**为准，不以引擎 `default_severity` 为天花板——`default_severity` 是"agent 没给严重度时的兜底值"，引擎只把**低于**它的抬升、不把 P0 压下来（唯二例外：`internal_consistency`/`implementation_ambiguity` 非硬互斥时软化为 P1，tracking_* 确定性封顶 P1）。四维归属（完整性30/可量化30/边界20/技术可行20）：`target_user`·`core_feature`·`tracking_requirement`·`tracking_goal` 属完整性；`acceptance_*`·`success_metric`·`developer_confusion` 属可量化性；`scope_boundary`·`exception_coverage`·`crypto_alert_cooldown`·`tracking_platform` 属边界；`external_dependency`·`implementation_ambiguity`·`internal_consistency`·`crypto_data_source`·`crypto_fund_idempotency`·`tracking_feasibility` 属技术可行性。
 
 > **幂等三分支口诀（横跨①②，一次记清）**：① 没写幂等段落 → **① P0(★)**；② 写了但"每人一次"声明与键机制在**同一句话直接自相矛盾** → **① internal_consistency P0**；③ 写了不打架、但**键粒度 < 声明不变量粒度**（只 `event_id` 却声明"每人一次"）→ **② 资金安全·幂等有效性**（步骤2.5 四栏反证，默认修、可知情放行）。**只有第③种在 ② 的可放行范围；①的两种是 P0，永不静默放行。**
 
@@ -204,7 +212,8 @@ check_id | pass(✅/❌) | 严重度(P0/P1/P2/none,按本清单) | location | wh
 
 **发布门槛：**
 
-0. **前置（两档通用）**：`01 §0.5` 推断申报清单已清——清单为空，或产品已逐条拍板；**未清视同缺口，不进发布**。
+0. **前置（两档通用）·推断申报**：`01 §0.5` 推断申报清单已清——清单为空，或产品已逐条拍板；**未清视同缺口，不进发布**。
+0. **前置（两档通用）·复述自查**：按 `02` 顶部「复述上限」的机械自查法跑一遍——**top 高频 保证/定性 短语 N 个，各出现 ≤2 处**（含「前端写死 / 不可点击 / 无后端」这类需求性质定性句）；**任一 ≥3 处 → 先收敛再发布**。
 - **标准档**：① 门禁 `P0=0 且 P1=0`；② 第二道门无**结构性断点**（默认；资金安全/状态机结构缺陷可用户知情放行）。
 - **轻量档**（1 US-R、不新增/改动 发奖·行情取数·主动推送链路；涉资金但纯入口/文案/展示位、不碰发奖逻辑亦可，**但幂等段落仍须完整、缺失照 P0**）：① 门禁 `P0=0` + 成功指标有判定口径 + 每 US-R 有验收（其余 P1 不阻塞轻量档）。score 仅信息性、不作门槛。
 
@@ -217,10 +226,10 @@ check_id | pass(✅/❌) | 严重度(P0/P1/P2/none,按本清单) | location | wh
 ## 步骤 5 · 输出自检报告
 
 ```markdown
-### PRD 自检门禁报告（checks 原文基线 2026-07-06 复核未变；审查器流程已升级、kit 口径已同步；门禁再升级请重新校准）
-- 结论：✅ 达标可发布（标准/轻量档） / ⚠️ 需补充（列阻塞项） / ⚠️ 用户带风险放行（未修:<缺陷+失败时序>）
+### PRD 自检门禁报告（checks 原文基线 2026-07-08；审查器流程已升级、kit 口径已同步；门禁再升级请重新校准）
+- 结论：**就绪度 = 可开工 / 基本可开工 / 建议完善后开工**（档位领衔）→ ✅ 达标可发布（标准/轻量档） / ⚠️ 需补充（列阻塞项） / ⚠️ 用户带风险放行（未修:<缺陷+失败时序>）
 - 结构扫描（步骤0）：7 章节独立成章且非空 ✅/❌ · 功能需求标题含关键词✅ · 验收标准独立成章✅ · AI 友好度预计判 ai✅
-- 预判复杂度档位：simple/medium/complex（涉资金/交易/推送/埋点 ≥medium，自检未减项）
+- 预判复杂度档位：simple/medium/complex（估算依据：功能点 N/端 N/高风险面 有无/新模型·状态机 有无/外部依赖 N；命中资金·交易·推送护栏 →≥medium，涉埋点不升档；自检未减项）
 ① 门禁判定：P0:0 P1:0 P2:n（估算分 XX，仅参考；含 ★core_feature/★fund缺段落 判 P0，永不静默放行）
 ② kit 加严（第二道门）：逐对象闭环矩阵（08 §0.6）已产出、N 个对象 M 条跳转全格无空缺 ✅ · A✅F✅B✅C✅E✅T✅ · 悬空引用扫描（机制/映射/时间窗/集合）N 个引用全有定义 ✅ · 幂等有效性(键粒度)✅（矩阵有空格=有洞未问产品，不算过；结构性断点默认阻塞、可用户知情放行；细节项建议）
 - 放行授权：无 / 用户显式（若有 ② 断点未修即放行，结论行必须写"⚠️ 用户带风险放行"）
@@ -228,9 +237,34 @@ check_id | pass(✅/❌) | 严重度(P0/P1/P2/none,按本清单) | location | wh
 - 关键补强：<一句>
 - 适用域：<如"无推送/已声明无需埋点，相关域检查不适用">
 - 推断申报：<无推断 / N 条已产品拍板>
+- 复述自查（`02` 复述上限）：top 高频 保证/定性 短语 N 个，各出现 ≤2 处 ✅（任一 ≥3 → 先收敛再发布）
 ```
+**呈现两律（对齐审查器软化呈现，克制用，别改模板结构）**：
+- **就绪度档位领衔**：结论行先给档位，估算分跟在 ① 行里、不作唯一门面。**档位判据（与放行门槛一致，不另立标准）**：`可开工` = 门禁 P0=0 且无 ② 结构性断点（标准档还需 P1=0）；`基本可开工` = P0=0 但仍有 P1 / 断点待收敛；`建议完善后开工` = 有 P0 或有未放行的结构性断点。
+- **报告去重**：**同一问题被多个检查命中，只呈现最高优先级的一条**（其余在该条里带一句"另触发 X/Y 检查"即可），别把一个洞列成三条吓人——与步骤 3 的扣分去重同律。
+
 无 lark-cli 环境时：按 `00 §降级`「无 lark-cli 全程模式」交付**纯文本版 markdown（`07 §六` 格式）+ 本报告**，别卡在发布；模式A 本就支持粘贴读入、只回对话，全程不受影响。
 > 解读真门禁回写报告时注意：新版报告以「就绪度」档位领衔且措辞软化（可开工/基本可开工/建议完善后开工）——**以 P0 清单、硬互斥数和 decision 字段为准**，「基本可开工」不等于零阻塞项。
+
+---
+
+## 官方引擎软集成（装了就用，没装按现状）
+
+**探测**：`ls ~/.claude/skills/prd-review-skill/review_engine 2>/dev/null || ls "$CLAUDE_CONFIG_DIR/skills/prd-review-skill/review_engine" 2>/dev/null`。命中即本机装有 coast 官方 prd-review skill，**模式B 的评分改用官方引擎**（零三方依赖，只需 python3）；未命中 → 按 `references/checks/` 镜像自判打分（现状流程，一字不变）。
+
+**用法（三步，须在 skill 根目录跑——`review_engine` 是 python 包）**：
+
+```bash
+cd ~/.claude/skills/prd-review-skill
+python3 -m review_engine plan <prd.md> --complexity simple|medium|complex > plan.json   # ① 出本篇需判定的检查项 + 各自规则全文
+# ② agent 逐项自判，写 results.json：{"<check_id>": {"pass": bool, "issues": [{...}]}, ...}
+python3 -m review_engine score <prd.md> results.json --complexity <同上> --source-format ai|human   # ③ 官方分数 + 报告
+```
+
+- `plan` / `score` 的 stdout 是 JSON、状态信息走 stderr；`--complexity` 缺省 `medium`，引擎会自行套高风险护栏抬档并在 stderr 提示。
+- **以引擎输出为准**：score/verdict/decision/issue 严重度都取引擎结果，kit 的镜像自判退为 fallback 与交叉校验（两者结论打架时，报告写明分歧，按引擎结论定门禁、按 kit 从严项定发布）。
+- **不变的部分**：② 第二道门（`checks-logic` 六维 + 幂等有效性）**引擎不查、照跑不误**；kit 发布门槛（标准档 P0=0 且 P1=0）不因引擎出分而放宽。
+- 引擎用法细节以其自带 `review.skill.md` / `README.md` 为准；kit **不打包**引擎本体，命令跑不通就退回镜像自判，别去装、别改它。
 
 ## 与"升级现有草稿"配合
 `04-upgrade-draft.md` 映射进模板后必跑本 gate；缺口以"补强项"逐条补齐再发布。
