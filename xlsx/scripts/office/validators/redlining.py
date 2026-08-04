@@ -88,9 +88,9 @@ class RedliningValidator:
             return True
 
     def _tracked_change_elements(self, root):
-        ins_tag = f"{{{self.namespaces['w']}}}ins"
-        del_tag = f"{{{self.namespaces['w']}}}del"
-        return [elem for elem in root.iter() if elem.tag in (ins_tag, del_tag)]
+        w = self.namespaces["w"]
+        tags = (f"{{{w}}}ins", f"{{{w}}}del", f"{{{w}}}moveFrom", f"{{{w}}}moveTo")
+        return [elem for elem in root.iter() if elem.tag in tags]
 
     def _rendered_text(self, elem):
         preserve = elem.get("{http://www.w3.org/XML/1998/namespace}space") == "preserve"
@@ -250,24 +250,29 @@ class RedliningValidator:
         return None
 
     def _remove_tracked_changes(self, root, targets):
-        ins_tag = f"{{{self.namespaces['w']}}}ins"
-        del_tag = f"{{{self.namespaces['w']}}}del"
+        w = self.namespaces["w"]
+        ins_tag = f"{{{w}}}ins"
+        del_tag = f"{{{w}}}del"
+        move_from_tag = f"{{{w}}}moveFrom"
+        move_to_tag = f"{{{w}}}moveTo"
+
+        self._merge_split_paragraphs(root, targets)
 
         for parent in root.iter():
             to_remove = []
             for child in parent:
-                if child.tag == ins_tag and child in targets:
+                if child.tag in (ins_tag, move_to_tag) and child in targets:
                     to_remove.append(child)
             for elem in to_remove:
                 parent.remove(elem)
 
-        deltext_tag = f"{{{self.namespaces['w']}}}delText"
-        t_tag = f"{{{self.namespaces['w']}}}t"
+        deltext_tag = f"{{{w}}}delText"
+        t_tag = f"{{{w}}}t"
 
         for parent in root.iter():
             to_process = []
             for child in parent:
-                if child.tag == del_tag and child in targets:
+                if child.tag in (del_tag, move_from_tag) and child in targets:
                     to_process.append((child, list(parent).index(child)))
 
             for del_elem, del_index in reversed(to_process):
@@ -278,6 +283,43 @@ class RedliningValidator:
                 for child in reversed(list(del_elem)):
                     parent.insert(del_index, child)
                 parent.remove(del_elem)
+
+        range_tags = (
+            f"{{{w}}}moveFromRangeStart",
+            f"{{{w}}}moveFromRangeEnd",
+            f"{{{w}}}moveToRangeStart",
+            f"{{{w}}}moveToRangeEnd",
+        )
+        for parent in root.iter():
+            to_remove = [
+                c
+                for c in parent
+                if c.tag in range_tags and len(c) == 0 and not (c.text or "").strip()
+            ]
+            for elem in to_remove:
+                parent.remove(elem)
+
+    def _merge_split_paragraphs(self, root, targets):
+        w = self.namespaces["w"]
+        p_tag = f"{{{w}}}p"
+        ppr_tag = f"{{{w}}}pPr"
+        marker_path = f"{ppr_tag}/{{{w}}}rPr/{{{w}}}ins"
+
+        for parent in list(root.iter()):
+            for para in reversed([child for child in parent if child.tag == p_tag]):
+                if not any(m in targets for m in para.findall(marker_path)):
+                    continue
+                siblings = list(parent)
+                index = siblings.index(para)
+                following = siblings[index + 1] if index + 1 < len(siblings) else None
+                if following is None or following.tag != p_tag:
+                    continue
+                if any(self._text_elements(c) for c in para if c.tag == ppr_tag):
+                    continue
+                insert_at = 1 if len(following) and following[0].tag == ppr_tag else 0
+                for child in reversed([c for c in para if c.tag != ppr_tag]):
+                    following.insert(insert_at, child)
+                parent.remove(para)
 
     def _extract_text_content(self, root):
         p_tag = f"{{{self.namespaces['w']}}}p"
