@@ -5,7 +5,7 @@ description: "Guided Cowork setup — install role-matched plugins, connect your
 
 # Setup Cowork
 
-Help the user get Cowork configured for their work. Six steps — role, plugins, connectors, try a skill, writing voice, wrap.
+Help the user get Cowork configured for their work. The steps — role, plugins, connectors, try a skill, writing voice (only when available — Step 0 says when), wrap.
 
 ## Step 0 — Checklist
 
@@ -18,7 +18,9 @@ Before your first user-facing message, create a TODO list with these items so th
 5. Set up writing voice
 6. Wrap up
 
-Mark each one complete as you finish it. Keep it to these six — don't add sub-items.
+Include "5. Set up writing voice" only if `setup-writing-style` appears in the skills list in your system context. If it doesn't, use the five-item list — "5. Wrap up" is the last item — and never mention writing voice anywhere in the flow.
+
+Mark each one complete as you finish it. Keep it to this list — don't add sub-items.
 
 ## Step 1 — Role
 
@@ -60,13 +62,13 @@ If they wave it off at either point, that's fine — go to Step 5.
 
 ## Step 5 — Writing voice
 
+**Before doing anything in this step:** if `setup-writing-style` is not in the skills list in your system context, do not offer writing-voice setup and never call the Skill tool with `setup-writing-style` — mark this TODO done if it's on your list, and go straight to Step 6.
+
 Everything so far taught Cowork about the user's *tools*. This step teaches it about the *user*. This matters because so much of what Cowork produces is prose the user will send under their own name.
 
 **First, settle which opener you're writing — the skills list in your system context decides.** That list is the account's full skills list; any skill cards you showed at Step 4 covered one plugin and can't answer this. If `my-writing-style` is there (the saved profile — not `setup-writing-style`, the flow that creates it) — or the user says they've already set one up — your whole message is one line ("You've already got a voice profile, so anything I draft for you will use it") and you go to Step 6. Only if it's absent do you offer setup. Re-running the flow on someone who's already done it wastes their time and risks overwriting a profile they've tuned. If they *want* to update or redo it, that counts as a yes — invoke the skill the same way.
 
 If the user says they already have one, that settles it — a profile saved recently won't show in your skills list until their next session, so their word beats the list. Never tell a user they don't have a profile on the strength of a widget result; the widgets in this flow are plugin-filtered, and silence from one means nothing. Skipping a redundant offer costs a sentence; overwriting a tuned profile costs the user their work.
-
-If `setup-writing-style` itself isn't available in this session, skip the offer entirely: mark this TODO done and go to Step 6 — the wrap's closing clause covers it.
 
 Otherwise, offer it. Make the case in two or three sentences of prose — these are the beats to hit, not a list to reproduce — then ask. Don't just launch into it:
 
@@ -84,7 +86,7 @@ Phrase the ask so passing is obviously fine — "Want to do that now, or skip it
 
 Close short: "You're set. Start a new task from the sidebar anytime, or type `/` to see your skills."
 
-If they don't have a voice profile by the wrap, add one clause and no more: "…and whenever you want drafts to sound like you, just ask me to learn your writing voice."
+If `setup-writing-style` is in your skills list and they don't have a voice profile by the wrap, add one clause and no more: "…and whenever you want drafts to sound like you, just ask me to learn your writing voice."
 
 ## Ground rules
 
