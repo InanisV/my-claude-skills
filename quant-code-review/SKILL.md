@@ -12,6 +12,7 @@ description: |
   🔴 必查：4.5；P.4+2.13+4.5.2（"4/19 Cascade 三件套"，源自 2026-04 实盘
   -73.8% 事故）；1.5+4.6+6.5（源自 2026-05 codex R12-R15：bar 时间 1h 偏移、
   unknown-state double-fill、外部建议盲从）。任一维度发现问题按 🔴 关键问题上报。
+  ;2.15(Edge 证据链与声明权威性 — 源自 2026-08 SUPERSEDED 引用事故,红线 13-15)。
 
   触发时机：策略逻辑/实盘 bot/回测引擎改动后；用户说 "review"、"审查"、
   "检查一下"、"code review"、"改完了"、"提交了"、"commit 了"；Claude 自己
@@ -53,7 +54,7 @@ metadata:
 | `references/dim-6-ai-collab.md` | 维度 6 AI 协作质量（含 6.5 🔴外部 Review 纪律） | AI 参与编码/外部 review 后 |
 | `references/dim-7-supply-chain.md` | 维度 7 供应链与运行时安全（7.1-7.8） | 依赖/密钥/部署改动时；Full 必查 |
 | `references/report-template.md` | 审计报告完整模板（与全部维度同步） | 输出报告前 |
-| `references/lessons.md` | 59 条实战经验教训（事故复盘沉淀） | 写报告前对照；模式相似时引用 |
+| `references/lessons.md` | 63 条实战经验教训（事故复盘沉淀） | 写报告前对照；模式相似时引用 |
 
 ## 两种审计模式
 
@@ -129,6 +130,13 @@ CI/pre-commit 集成方式见 `scripts/README.md`。
     加权计费）（3.11/2.6）
 11. 实盘亏损排查未先确认"跑的是不是仓库里最好的那个策略"就深入执行层（1.4）
 12. 外部 review 的 preference 类建议未算账（EV math）就直接采纳（6.5）
+13. 已部署策略的泛化/OOS 验收门(如 k-fold generalization gate)处于失败状态,
+    却以"已留档接受偏差"等形式降级为 watch 项 — 泛化门失败必须作为常驻 🔴
+    出现在报告首屏,直到门通过或策略摘牌(2.15.3)
+14. 实盘运行中而仓库部署验收状态为 FAIL/SUPERSEDED,报告未将其翻译为操作者
+    人话并获得显式知情确认(2.15.1)
+15. 报告引用任何性能数字(CAGR/MaxDD/Sharpe)未附权威性标签【现行认证/研究
+    沿革/已撤销】,或已撤销数字以"认证值"口径出现(2.15.2)
 
 ## 输出格式
 
@@ -139,7 +147,7 @@ CI/pre-commit 集成方式见 `scripts/README.md`。
 
 ## 经验教训
 
-59 条实战经验（每条都来自真实事故或真实审计）存于 `references/lessons.md`。
+63 条实战经验（每条都来自真实事故或真实审计）存于 `references/lessons.md`。
 写最终报告前加载对照一遍：项目当前模式与某条教训相似时，直接引用编号并按
 该教训的验证方法复查。
 

@@ -1,6 +1,6 @@
 # 经验教训（从实际审计中总结）
 
-> quant-code-review · 实战经验库（59 条，全部来自真实项目审计/事故复盘）。
+> quant-code-review · 实战经验库（63 条，全部来自真实项目审计/事故复盘）。
 > 写最终审计报告前加载对照一遍；项目模式与某条教训相似时直接引用编号。
 > 注：原版存在两条 #50，本版已顺序重编为 1-59，内容一字未动。
 
@@ -71,3 +71,19 @@
 58. **OrderStateUnknownError 必须 hard latch，不能 continue** — codex R12 P1 抓到的真实坑：executor cancel-race 保护检测到 cancel response 缺 executedQty / re-query get_order 失败 → 抛 OrderStateUnknownError，run_bot 把 partial_results 存到 state，return rc=2 让 loop 继续。但 `consecutive_errors` 会被后续成功 cycle 重置，**孤儿 limit 单还挂在交易所上**。下个 cycle 看 positionRisk（看不到挂着的 limit），plan_orders 重新下一笔 → 孤儿 + 新单同时 fill = double-fill。修法：state 加 `unknown_state_symbols: List[str]`，下个 cycle 入口 **先检查这个字段**，非空就 halt rc=1 + telegram alert，**强制人工 reconcile** 后清空才能继续。Runbook 必须有 "Clearing the unknown-state latch" 流程：先 cancel-all on exchange → 对比 current pos vs target_weights × equity vs submitted_orders → 三者一致才能 clear。**绝对不能直接删字段重启** — 孤儿单还在。
 
 59. **外部 review 反馈是 raw findings，不是 spec** — 2026-05-14 R12-R15 codex 审计循环最后总结的元教训：Claude 在 4 轮审计中接受了 3 处 codex 的 "preferably / I would / tight operationally" 建议作为 must-fix，没有算账。其中 cron buffer 1s → 5s 的改动经 retrospective 测算是 **-2%/yr drag**（4s 额外延迟 × 30 positions × 0.045%/s vol × 20% turnover × 250 cycles/yr）vs 0.001%/yr benefit，明显应该拒绝。另外两处（shadow halt-by-default、funding 24h→12h）侥幸数学支持，但 process 同样错了。教训：(a) codex / lint / peer review / LLM critique 提的每条建议**先分类** — Bug（具体 invariant 违反，可被 grep/diff 验证）vs Preference（含 softening language）；(b) Preference **必须算账**才能动手，公式 `net = avoided_loss × freq - drag × cycles/yr`；(c) 用户已经表达过明确立场的参数，**默认保留用户选择**，除非 codex 给出 NEW FACT（不是 new opinion）；(d) PASS WITH FOLLOWUPS exit 不等于必须关闭每一条 follow-up，纯 preference 的 follow-up 可以 documented-reject；(e) 部署前必跑 audit-of-audits 回顾表，验证 deference rate ≤ 10%。**永远不要写 "codex said X, so I changed Y"**，必须写 "codex 提了 X，我分类为 Bug/Pref，算账 net=Z，所以接受/拒绝"。详见 codex-audit skill 的 `references/finding-triage.md`。
+
+60. 已部署策略的泛化门失败不允许 watch 化 — 2026-08 真实案例:V16 冠军 k-fold
+    泛化率 0.238-0.277 < 0.30,三轮审计均记为"已留档接受偏差",直到外部独立复核
+    才升级。门失败的正确呈现是首屏常驻 🔴 + 人话"收益预期不可信";"仓库自己
+    接受了"不是降级理由,操作者的知情必须每轮重新发生。
+61. 引用性能数字必须带权威性标签 — 同一事故:3010%/-24.9% 所在文档头部明写
+    SUPERSEDED/不得作为部署依据,审计仍以"认证值"口径引用,并把它用进了亏损
+    正常性尺子与修复认证门槛。规则:每个数字标【现行/沿革/已撤销】;读到撤销
+    横幅的那一刻就是升级时刻,不存在"先记下来"。
+62. 工程审计与 edge 证据之间不能留责任接缝 — "策略赚不赚钱归研究 skill 管"
+    的分工让三轮审计无人拥有"收益证据是否现行有效"。修复:审计不验证 edge,
+    但必须审计 edge 证据链的状态(现行/失败/已撤销)— 这是 2.15 存在的原因。
+63. 实盘证据永远优先于回测声明 — 终身 PnL vs 入金、历次 backtest-vs-live 对照,
+    两张表必须在任何涉及性能的审计报告首屏。案例中实盘三次对照(+504%/+218%/
+    +208.9% 回测 vs -8.8%/-8.8%/-4~+5% 实盘)早已在仓库文档里,却从未被审计
+    汇总呈现——数据不缺,缺的是"必须把它算出来放在最前面"的义务。
