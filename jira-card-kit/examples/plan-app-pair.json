@@ -1,0 +1,168 @@
+{
+  "meta": {
+    "requirement": "AI快讯弹窗展示优化",
+    "prd": "https://l7jipx1bfq.larksuite.com/wiki/ZdK8wIGEuiUOB3kWgyUu8txlsPh",
+    "biz_tag": "AI",
+    "beneficiary_confirmed_by": "Noah Zhan（产品，2026-08-13 对话确认）",
+    "beneficiary_rationale": "快讯弹窗是 AI 线自有功能、收益归 AI 线，Noah 确认挂 AI - Ealy（非照抄默认值）",
+    "_comment": "APP 双端标准包示例：4 卡 + 3 链接。字段形状见 references/02-field-model.md"
+  },
+  "cards": [
+    {
+      "ref": "ios_story",
+      "project": "APP",
+      "issuetype": "故事",
+      "summary": "【iOS】【AI】AI快讯弹窗展示优化",
+      "fields": {
+        "description": "https://l7jipx1bfq.larksuite.com/wiki/ZdK8wIGEuiUOB3kWgyUu8txlsPh",
+        "priority": {
+          "name": "P1+"
+        },
+        "components": [
+          {
+            "name": "iOS-公共模块-首页"
+          }
+        ],
+        "fixVersions": [
+          {
+            "name": "iOS_待评审 & 待排期"
+          }
+        ],
+        "customfield_10102": "APP-24564",
+        "customfield_11319": {
+          "value": "业务需求"
+        },
+        "customfield_12002": {
+          "value": "该需求是原生需求"
+        },
+        "customfield_11506": {
+          "value": "无需依赖"
+        },
+        "customfield_16301": {
+          "value": "否"
+        },
+        "customfield_11530": {
+          "value": "是"
+        },
+        "customfield_15401": {
+          "value": "否"
+        },
+        "customfield_11531": {
+          "value": "需要且英文文案已校对"
+        },
+        "customfield_12506": {
+          "value": "否"
+        },
+        "customfield_17100": {
+          "value": "已审核（APP产品选填）"
+        },
+        "customfield_16706": {
+          "value": "AI - Ealy"
+        }
+      }
+    },
+    {
+      "ref": "android_story",
+      "project": "APP",
+      "issuetype": "故事",
+      "summary": "【Android】【AI】AI快讯弹窗展示优化",
+      "fields": {
+        "description": "https://l7jipx1bfq.larksuite.com/wiki/ZdK8wIGEuiUOB3kWgyUu8txlsPh",
+        "priority": {
+          "name": "P1+"
+        },
+        "components": [
+          {
+            "name": "安卓-公共模块-首页"
+          }
+        ],
+        "fixVersions": [
+          {
+            "name": "安卓_待评审 & 待排期"
+          }
+        ],
+        "customfield_10102": "APP-24564",
+        "customfield_11319": {
+          "value": "业务需求"
+        },
+        "customfield_12002": {
+          "value": "该需求是原生需求"
+        },
+        "customfield_11506": {
+          "value": "无需依赖"
+        },
+        "customfield_16301": {
+          "value": "否"
+        },
+        "customfield_11530": {
+          "value": "是"
+        },
+        "customfield_15401": {
+          "value": "否"
+        },
+        "customfield_11531": {
+          "value": "需要且英文文案已校对"
+        },
+        "customfield_12506": {
+          "value": "否"
+        },
+        "customfield_17100": {
+          "value": "已审核（APP产品选填）"
+        },
+        "customfield_16706": {
+          "value": "AI - Ealy"
+        }
+      }
+    },
+    {
+      "ref": "ui_task",
+      "project": "APP",
+      "issuetype": "UI设计任务",
+      "parent_ref": "ios_story",
+      "summary": "【UI设计】【AI】AI快讯弹窗展示优化",
+      "fields": {
+        "assignee": {
+          "name": "Norman"
+        },
+        "customfield_10812": {
+          "name": "Norman"
+        },
+        "priority": {
+          "name": "P1+"
+        }
+      }
+    },
+    {
+      "ref": "i18n_task",
+      "project": "APP",
+      "issuetype": "国际化任务",
+      "parent_ref": "ios_story",
+      "summary": "【国际化】【AI】AI快讯弹窗展示优化",
+      "fields": {
+        "assignee": {
+          "name": "noah.zhan"
+        },
+        "priority": {
+          "name": "P1+"
+        }
+      }
+    }
+  ],
+  "links": [
+    {
+      "type": "Cloners",
+      "from_ref": "android_story",
+      "to_ref": "ios_story"
+    },
+    {
+      "type": "Relates",
+      "from_ref": "android_story",
+      "to_ref": "ui_task"
+    },
+    {
+      "type": "Relates",
+      "from_ref": "android_story",
+      "to_ref": "i18n_task"
+    }
+  ]
+}

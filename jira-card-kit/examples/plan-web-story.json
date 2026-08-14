@@ -1,0 +1,77 @@
+{
+  "meta": {
+    "requirement": "MEXC广场1.0",
+    "prd": "https://l7jipx1bfq.larksuite.com/wiki/MWcdwFPYqi4zh8kZvmAuOjk1sAg",
+    "biz_tag": "H5",
+    "beneficiary_confirmed_by": "Noah Zhan（产品，2026-08-13 对话确认）",
+    "beneficiary_rationale": "Noah 确认广场1.0 收益归 AI 线，挂 AI - Ealy（注意：主卡 WEB-18813 当时误填产品 - Ealy，本卡未照抄主卡而是重新确认）",
+    "_comment": "WEB/H5 故事示例：只建 1 张主卡（UI/国际化/埋点子任务全部自动生成），Blocks 连到已有 APP/AIL 卡"
+  },
+  "cards": [
+    {
+      "ref": "h5_story",
+      "project": "WEB",
+      "issuetype": "故事",
+      "summary": "【H5】MEXC广场1.0",
+      "fields": {
+        "description": "PRD 总则：[实时交易广场 · PRD 总则|https://l7jipx1bfq.larksuite.com/wiki/QZ7YwLY5ziEPTpknzY6uqiWvskA]\nAPP/H5 部分：[【H5】MEXC广场 1.0|https://l7jipx1bfq.larksuite.com/wiki/MWcdwFPYqi4zh8kZvmAuOjk1sAg]",
+        "priority": {
+          "name": "P1+"
+        },
+        "components": [
+          {
+            "name": "首页业务"
+          }
+        ],
+        "customfield_10102": "APP-24564",
+        "customfield_12002": {
+          "value": "该需求是派生需求"
+        },
+        "customfield_11319": {
+          "value": "业务需求"
+        },
+        "customfield_16706": {
+          "value": "AI - Ealy"
+        },
+        "customfield_11519": {
+          "value": "前端"
+        },
+        "customfield_11530": {
+          "value": "是"
+        },
+        "customfield_17200": {
+          "value": "否"
+        },
+        "customfield_15401": {
+          "value": "是"
+        },
+        "customfield_16301": {
+          "value": "是"
+        },
+        "customfield_15700": {
+          "value": "是"
+        },
+        "customfield_12902": {
+          "value": "无需SEO"
+        }
+      }
+    }
+  ],
+  "links": [
+    {
+      "type": "Blocks",
+      "from_ref": "h5_story",
+      "to": "APP-37283"
+    },
+    {
+      "type": "Blocks",
+      "from_ref": "h5_story",
+      "to": "APP-37293"
+    },
+    {
+      "type": "Blocks",
+      "from": "AIL-140",
+      "to_ref": "h5_story"
+    }
+  ]
+}
