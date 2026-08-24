@@ -21,10 +21,35 @@ plan.json 里 `fields` 直接写 Jira REST 原生 payload。形状规则：
 | 是否需要埋点 | customfield_16301 | 是 / 否 | 看 PRD 埋点章节 |
 | 是否需要UI | customfield_11530 | 是 / 否 | 有视觉改动=是 |
 | 是否涉及新页面 | customfield_15401 | 是 / 否 | 看 PRD |
-| 是否需要国际化 | customfield_11531 | 不需要 / 需要且英文文案已校对 / 需要但英文文案暂未校对 | 有文案=需要且英文文案已校对 |
+| 是否需要国际化 | customfield_11531 | `不需要␣`（⚠️**尾部有一个空格**，见下方）/ 需要且英文文案已校对 / 需要但英文文案暂未校对 | 有文案=需要且英文文案已校对 |
 | 是否涉及响应式 | customfield_12506 | 是 / 否 | 否（APP 需求几乎恒否） |
 | 是否需要APP端产品介入 | customfield_17100 | 需要（业务产品选填）/ 不需要（业务产品选填）/ 已审核（APP产品选填） | 已审核（本人即 APP 产品时）|
 | 业务板块（需求受益方）| customfield_16706 | 35 选项 | **无默认值，每次必须判断**，见下方红线 |
+
+### ⚠️ 选项值必须与 allowedValues **逐字一致**（含首尾空格）
+
+Jira 按字面文本匹配选项，差一个空格就报 `HTTP 400 {"errors":{"<cf>":"Option id 'null' is not valid"}}`，**apply 停在第一张卡**（好在不会建出半张卡，修完重跑即可）。已实测确认的两个坑：
+
+| 字段 | 看起来是 | 真身（逐字） | 备注 |
+|------|---------|-------------|------|
+| 是否需要国际化 cf_11531 | `不需要` | `不需要 ` | 尾部 1 个空格。2026-08-24 建 APP-39165/39166 时踩到 |
+| 业务板块（受益方）cf_16706 | `前台 - SEO - Jackie` | `前台  - SEO - Jackie` | 「前台」后面是 **2 个空格**（同组其余选项都是 1 个） |
+
+其余 APP/WEB 必填项的选项值均已于 2026-08-24 用 editmeta 全量比对，无空格异常。**新增/拿不准的选项值一律先查真身**：
+
+```bash
+# 读一张同项目同类型的已有卡，拿该字段的 allowedValues 原文（repr 能看出空格）
+python3 - <<'EOF'
+import json,os,urllib.request
+env=json.load(open(os.path.expanduser("~/.claude/settings.json")))["env"]
+r=urllib.request.Request(env["JIRA_URL"].rstrip('/')+"/rest/api/2/issue/APP-38357/editmeta",
+                         headers={"Authorization":"Bearer "+env["JIRA_PERSONAL_TOKEN"]})
+m=json.load(urllib.request.urlopen(r))["fields"]
+for a in m["customfield_11531"]["allowedValues"]: print(repr(a["value"]))
+EOF
+```
+
+执行器已内置这道软校验：plan 里的值 strip 后能匹配、原样匹配不上时，`validate` 会直接指出「首尾有空格」，不用等 apply 报 400。
 
 ### 🔴 红线：受益方（customfield_16706）不许想当然
 
@@ -61,7 +86,7 @@ plan.json 里 `fields` 直接写 Jira REST 原生 payload。形状规则：
 
 **别填**（机器人管，执行器黑名单）：开发者(cf_10400)、测试负责人(cf_10500)、UI负责人(cf_11402)、期望设计完成(cf_11941)、排优日期(cf_16102)、工作量(cf_12604/16404)、assignee（故事卡的 assignee 由 autotask 填）。
 
-## 组件表（APP，40 个允许值节选常用）
+## 组件表（APP，43 个允许值节选常用）
 
 | 业务线 | iOS | Android | Flutter |
 |--------|-----|---------|---------|
@@ -74,7 +99,7 @@ plan.json 里 `fields` 直接写 Jira REST 原生 payload。形状规则：
 | 个人中心 | iOS-公共模块-个人中心 | 安卓-公共模块-个人中心 | — |
 | 其他（红包/H5/推送等）| iOS-公共模块-其他（红包/H5/消息推送/小组件/商店管理）| 安卓-公共模块-其他（红包/H5/消息推送/小组件/商店管理）| — |
 
-\* 安卓资产组件在允许值表中不存在（安卓侧资产已迁 Flutter），资产类 Android 需求用 Flutter 卡。拿不准时用 `curl` 查 createmeta 或问用户；组件名必须与允许值逐字一致。
+\* `安卓-资产模块-资产` **在允许值表中是存在的**（2026-08-24 editmeta 复核，此前本表记为「不存在」有误）。但安卓侧资产已迁 Flutter，实际该用哪个组件按需求落在哪套代码上定，拿不准就问研发/用户。组件名必须与允许值逐字一致。
 
 ## 子任务：UI设计任务 / 国际化任务（挂 iOS 主卡）
 

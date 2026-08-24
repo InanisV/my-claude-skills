@@ -12,6 +12,9 @@
   validate <plan.json>      校验计划并打印建单计划表（不创建任何东西）
   apply <plan.json>         执行创建；结果写 <plan>.result.json；中断后重跑自动续传
   show-result <plan.json>   重新打印上次 apply 的结果清单
+  discard <key...> --reason "去向说明" [--apply]
+                            把卡转为「废弃」并留评论（团队惯例：不删卡，废弃留痕）。
+                            默认只预览；--reason 必填，防止无声废弃。
   set-beneficiary <值> <key...> [--apply]
                             修正已建卡的受益方(cf_16706)。默认只预览 before→after，
                             加 --apply 才写入。这是本工具唯一的改卡能力（受益方错填
@@ -55,6 +58,64 @@ BOT_FIELDS = {
     "customfield_12604": "前端工作量(testting自动填)",
     "customfield_16404": "前端AI提效人天(testting自动填)",
 }
+
+# ---- 选项值真身表（2026-08-24 editmeta 全量比对 APP-38357 / WEB-19342）----
+# Jira 按字面文本匹配选项，差一个空格就报 Option id 'null' is not valid 并让 apply 停在第一张卡。
+# ⚠️ 下面两处的空格不是笔误，是 Jira 里的真身：
+#     cf_11531 的 "不需要 " 尾部有 1 个空格；cf_16706 的 "前台  - SEO - Jackie" 中间是 2 个空格。
+ENUM_ALLOWED = {
+    "customfield_11506": ["无需依赖", "依赖已交付", "依赖未交付"],
+    "customfield_16301": ["是", "否"],
+    "customfield_11530": ["是", "否"],
+    "customfield_15401": ["是", "否"],
+    "customfield_11531": ["不需要 ", "需要且英文文案已校对", "需要但英文文案暂未校对"],
+    "customfield_12506": ["是", "否"],
+    "customfield_17100": ["需要（业务产品选填）", "不需要（业务产品选填）", "已审核（APP产品选填）"],
+    "customfield_11319": ["业务需求", "支撑需求", "客服需求", "技术需求", "质量需求",
+                          "跨团队配合需求", "公司平台需求（含流动性，财务&OSS，平台风控，数据平台）"],
+    "customfield_12002": ["待确认", "该需求是原生需求", "该需求是派生需求"],
+    "customfield_11519": ["前端", "后端", "前后端", "配置变更"],
+    "customfield_17200": ["是", "否"],
+    "customfield_15700": ["是", "否"],
+    "customfield_12902": ["无需SEO", "需SEO判断", "有公开落地页"],
+    "customfield_16706": [
+        "现货业务（交易/Dex+）- Marvin", "合约业务（交易/活动/跟单）- Jess", "理财 - Jackie",
+        "AI - Ealy", "前台 - 直客 - App - Jackie", "前台 - 直客 - Web - Jackie",
+        "前台  - SEO - Jackie", "前台 - 付费 - Jackie", "前台 - 代理 - Jackie",
+        "前台 - 国家增长 - Jackie", "产品 - Ealy", "中台 - 现货活动 - Marvin",
+        "中台 - 活动中台 - Jackie", "中台 - 营销中心 / 运营中台 - Jackie",
+        "中台 - 内容中心 / 国际化流程 - Quinn", "中台 - UJ - Jackie",
+        "后台 - 数据产品 - Jackie", "后台 - 消息产品 - Jackie", "后台 - 风控 - Marvin",
+        "后台 - 合规中心 - Marvin", "后台 - KYC - Marvin", "后台 - 财务 / 薪酬 / EHR - Marvin",
+        "后台 - 薪酬 / EHR - Marvin", "后台 - 财务 - Marvin", "后台 - 客服 - Ealy",
+        "后台 - 技术底盘 - Ealy", "GoPerp/合规站建设 - Luke", "OTC - Sato", "P2P - Sato",
+        "钱包 - Leo", "平面/设计/文案 - Quinn", "市场部 - Yvonne", "预测市场 - Roger Z",
+        "战略需求 - 需立项 & 增长委员会投票", "其它",
+    ],
+}
+ENUM_LABELS = {
+    "customfield_11506": "依赖交付情况", "customfield_16301": "是否需要埋点",
+    "customfield_11530": "是否需要UI", "customfield_15401": "是否涉及新页面",
+    "customfield_11531": "是否需要国际化", "customfield_12506": "是否涉及响应式",
+    "customfield_17100": "是否需要APP端产品介入", "customfield_11319": "需求类别",
+    "customfield_12002": "是否为原生需求", "customfield_11519": "需求归属端",
+    "customfield_17200": "是否是合规站", "customfield_15700": "是否涉及运营配置",
+    "customfield_12902": "是否需要SEO", "customfield_16706": "业务板块（受益方）",
+}
+
+
+def whitespace_hint(real):
+    """描述真身值里的空白差异，让人一眼看出该补哪儿的空格。"""
+    bits = []
+    lead = len(real) - len(real.lstrip())
+    trail = len(real) - len(real.rstrip())
+    if lead:
+        bits.append(f"首部 {lead} 个空格")
+    if trail:
+        bits.append(f"尾部 {trail} 个空格")
+    if "  " in real.strip():
+        bits.append("中间有连续空格")
+    return "、".join(bits) or "空白字符不同"
 
 
 def die(msg):
@@ -133,6 +194,25 @@ def validate_plan(plan):
         if c.get("summary") and not SUMMARY_RE.match(c["summary"]):
             errors.append(f"{tag}: summary 不符合「【端/类型】【业务线】需求名」格式: {c['summary']}")
         fields = c.get("fields", {})
+        for cf, allowed in ENUM_ALLOWED.items():
+            v = fields.get(cf)
+            if not isinstance(v, dict) or "value" not in v:
+                continue
+            val = v["value"]
+            if val in allowed:
+                continue
+            label = ENUM_LABELS.get(cf, cf)
+            # 空白归一后比对：既抓首尾空格，也抓中间的连续空格（如 cf_16706 的「前台  - SEO」）
+            norm = " ".join(str(val).split())
+            hit = next((a for a in allowed if " ".join(a.split()) == norm), None)
+            if hit:
+                errors.append(f"{tag}: {label}({cf}) 填「{val}」空格对不上，真身是「{hit}」"
+                              f"（{whitespace_hint(hit)}）。Jira 按字面匹配，原样 apply 会报 "
+                              "Option id 'null' is not valid 并停在这张卡。")
+            else:
+                warnings.append(f"{tag}: {label}({cf}) 的「{val}」不在 kit 已知允许值里"
+                                "（kit 表为 2026-08-24 快照，Jira 可能新增了选项）；"
+                                "apply 以 Jira 为准，建议先查 editmeta 的 allowedValues 核对。")
         if c.get("issuetype") == "故事":
             need = STORY_REQUIRED_CF.get(c.get("project"), [])
             missing = [cf for cf in need if cf not in fields]
@@ -390,6 +470,41 @@ def cmd_set_beneficiary(value, keys, apply_it):
             print(f"  {k}: FAILED {e}", file=sys.stderr)
 
 
+def cmd_discard(keys, reason, apply_it):
+    """把卡转为「废弃」并留评论说明去向。团队惯例：不删卡，废弃留痕可回溯。"""
+    print(f"## 废弃 {len(keys)} 张卡{'（执行）' if apply_it else '（预览，加 --apply 才写入）'}")
+    print(f"评论内容：{reason}")
+    todo = []
+    for k in keys:
+        f = api("GET", f"/rest/api/2/issue/{k}", params={"fields": "summary,status"})["fields"]
+        st = f["status"]["name"]
+        if st == "废弃":
+            print(f"  {k:12s} 已是废弃，跳过        {f['summary'][:38]}")
+            continue
+        trans = api("GET", f"/rest/api/2/issue/{k}/transitions")["transitions"]
+        t = next((x for x in trans if x["to"]["name"] == "废弃"), None)
+        if not t:
+            print(f"  {k:12s} 无废弃流转! 可用: {[x['to']['name'] for x in trans]}")
+            continue
+        print(f"  {k:12s} {st} → 废弃{'':10s}{f['summary'][:38]}")
+        todo.append((k, t["id"]))
+    if not todo:
+        print("\n没有需要废弃的卡。")
+        return
+    if not apply_it:
+        print(f"\n待废弃 {len(todo)} 张。确认后加 --apply 重跑。")
+        return
+    print()
+    for k, tid in todo:
+        try:
+            api("POST", f"/rest/api/2/issue/{k}/comment", {"body": reason})
+            api("POST", f"/rest/api/2/issue/{k}/transitions", {"transition": {"id": tid}})
+            st = api("GET", f"/rest/api/2/issue/{k}", params={"fields": "status"})["fields"]["status"]["name"]
+            print(f"  {k}: 已评论+废弃，读回状态={st}")
+        except RuntimeError as e:
+            print(f"  {k}: FAILED {e}", file=sys.stderr)
+
+
 def main():
     args = sys.argv[1:]
     if not args:
@@ -423,13 +538,29 @@ def main():
         if len(args) < 2:
             die("用法: show-result <plan.json>")
         print_result(args[1])
+    elif cmd == "discard":
+        rest = args[1:]
+        reason = None
+        if "--reason" in rest:
+            i = rest.index("--reason")
+            if i + 1 >= len(rest):
+                die("--reason 后面要跟说明文字")
+            reason = rest[i + 1]
+            rest = rest[:i] + rest[i + 2:]
+        keys = [a for a in rest if a != "--apply"]
+        if not keys:
+            die('用法: discard <issue-key...> --reason "去向说明" [--apply]')
+        if not reason:
+            die("必须给 --reason：废弃要留评论说明去向，不允许无声废弃")
+        cmd_discard(keys, reason, "--apply" in args)
     elif cmd == "set-beneficiary":
         rest = [a for a in args[1:] if a != "--apply"]
         if len(rest) < 2:
             die("用法: set-beneficiary <受益方值> <issue-key...> [--apply]")
         cmd_set_beneficiary(rest[0], rest[1:], "--apply" in args)
     else:
-        die(f"未知命令 {cmd}。可用: whoami / user-search / validate / apply / show-result / set-beneficiary")
+        die(f"未知命令 {cmd}。可用: whoami / user-search / validate / apply / show-result / "
+            f"set-beneficiary / discard")
 
 
 if __name__ == "__main__":
