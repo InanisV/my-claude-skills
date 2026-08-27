@@ -648,6 +648,38 @@ body {
 }
 ```
 
+### 截图标注（实物截图 + 编号圆标 + 说明条）
+
+用于在真实设计稿/产品截图上钉编号讲落点（见 SKILL.md「实物优先原则」）。图片用 base64 内嵌保持单文件；圆标用百分比定位，改图不用改坐标系。
+
+```css
+.shots-row{display:flex;gap:var(--space-md);align-items:flex-start}
+.shotbox{position:relative;flex:1;border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--border-card);background:#000}
+.shot{display:block;width:100%}
+.shotbadge{position:absolute;width:24px;height:24px;border-radius:50%;background:var(--color-up);color:#0B0E11;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(0,184,122,.4);transform:translate(-50%,-50%);z-index:2}
+.shot-cap{margin-top:6px;text-align:center;font-size:11px;color:var(--text-tertiary)}
+.callout-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-sm);margin-top:var(--space-md)}
+.callout{display:flex;align-items:flex-start;gap:var(--space-sm);background:var(--bg-card);border:1px solid var(--border-card);border-radius:var(--radius-md);padding:8px 12px}
+.co-num{width:20px;height:20px;border-radius:50%;background:var(--color-up);color:#0B0E11;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+.co-title{font-size:14.5px;font-weight:700}
+.co-desc{font-size:12px;color:var(--text-secondary);line-height:1.5}
+```
+
+```html
+<div class="shots-row">
+  <div class="shotbox">
+    <img class="shot" src="data:image/png;base64,...">
+    <span class="shotbadge" style="left:6%;top:60%">1</span>
+  </div>
+</div>
+<div class="shot-cap">××卡 · UI 设计稿实图</div>
+<div class="callout-row">
+  <div class="callout"><span class="co-num">1</span><div><div class="co-title">名称</div><div class="co-desc">一句说明</div></div></div>
+</div>
+```
+
+使用注意：截图里的假数据（重复文案、错价格）投老板屏前先让设计导干净的图；圆标位置渲染 PNG 后肉眼校一遍再交付。
+
 ### 底栏
 
 ```css
