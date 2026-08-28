@@ -3,9 +3,9 @@
     "requirement": "MEXC广场1.0",
     "prd": "https://l7jipx1bfq.larksuite.com/wiki/MWcdwFPYqi4zh8kZvmAuOjk1sAg",
     "biz_tag": "H5",
-    "beneficiary_confirmed_by": "Noah Zhan（产品，2026-08-13 对话确认）",
-    "beneficiary_rationale": "Noah 确认广场1.0 收益归 AI 线，挂 AI - Ealy（注意：主卡 WEB-18813 当时误填产品 - Ealy，本卡未照抄主卡而是重新确认）",
-    "_comment": "WEB/H5 故事示例：只建 1 张主卡（UI/国际化/埋点子任务全部自动生成），Blocks 连到已有 APP/AIL 卡"
+    "beneficiary_confirmed_by": "<确认人姓名>（产品本人，YYYY-MM-DD 对话确认）",
+    "beneficiary_rationale": "<产品给出的判定依据，原话浓缩>（真实案例的教训：主卡 WEB-18813 当时填错了一条线，拆分卡未照抄主卡而是重新问产品确认，才没把同一个错误复制 7 遍）",
+    "_comment": "WEB/H5 故事示例：只建 1 张主卡（UI/国际化/埋点子任务全部自动生成），Blocks 连到已有 APP/AIL 卡。⚠️ 尖括号占位一律要替换：受益方(cf_16706)先跑 `beneficiary-options WEB` 拉线上选项、由产品本人亲选后逐字填；史诗链接(cf_10102)每批向产品要卡号。summary 恒用**一层**全角前缀 `【端】需求名`（Noah 2026-08-27 拍板）。**WEB 不填 fixVersions**——项目里根本没有版本字段（2026-08-27 复核 versions 接口返回 0 条），填了 validate 直接报错。"
   },
   "cards": [
     {
@@ -18,12 +18,15 @@
         "priority": {
           "name": "P1+"
         },
+        "assignee": {
+          "name": "<建卡人自己·whoami 的 name；WEB 故事房规是自己认领，抽样 26/28>"
+        },
         "components": [
           {
             "name": "首页业务"
           }
         ],
-        "customfield_10102": "APP-24564",
+        "customfield_10102": "<Epic卡号·每批向产品确认，形如 XXX-12345；常挂在别的项目下，不限 WEB->",
         "customfield_12002": {
           "value": "该需求是派生需求"
         },
@@ -31,7 +34,7 @@
           "value": "业务需求"
         },
         "customfield_16706": {
-          "value": "AI - Ealy"
+          "value": "<受益方·从线上选项中经产品确认后逐字填入>"
         },
         "customfield_11519": {
           "value": "前端"

@@ -1,0 +1,12 @@
+{
+  "_comment": "复制成 ~/.jira-card-kit/config.json 后**由你本人**按团队实际填。kit 首跑若读不到某个键会问一次，再用 `python3 scripts/jira_cards.py config-set <键> <值>` 写进来（每次只合并那一个键，不覆盖文件里其它配置），之后不再问。🔴 AI 只经工具读写本文件（config-show / config-set），不会也不允许直接 cat 或编辑 ~/.jira-card-kit/ 下的任何文件。🔴 这里**没有也不要加 token 字段**——Jira token 单独放 ~/.jira-card-kit/token（权限 600，由 setup-token 写入），免得把本配置转发给同事时连凭据一起发出去；config-set 也会拒收凭据类键。",
+  "_comment_role": "product_role = 你在组织里的身份，只影响「是否需要APP端产品介入」(cf_17100)：app → 已审核（APP产品选填）；business → 不需要（业务产品选填）。2026-08 抽样 7 位产品证实这个字段跟需求内容无关、只跟填卡人身份有关（详见 references/04-field-survey.md）。取值：app | business",
+  "product_role": "<app 或 business>",
+  "_comment_tracking": "tracking_assignees = 埋点两件套经办人，按【任务类型】分（方案审核/验收各一人，iOS/Android 两端共用同一对）。",
+  "tracking_assignees": {
+    "review": "<【埋点方案审核任务】经办人 username>",
+    "acceptance": "<【埋点验收任务】经办人 username>"
+  },
+  "_comment_epic": "last_epic = 上次用过的 Epic 卡号，**仅作下次提问时的候选展示**；每批仍必须向产品确认（「这批卡挂哪个 Epic？给卡号；不挂也可以」），禁止沿用不问、禁止从主卡或需求名推断。Epic 常挂在别的项目下（CONTRACT/SPOT/OPT/WEB…），项目前缀不限于 APP。",
+  "last_epic": "<上次用过的 Epic 卡号，如 XXX-12345>"
+}

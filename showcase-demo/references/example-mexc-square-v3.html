@@ -1,0 +1,1490 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MEXC 广场 · 一键演示 Demo v3（1.0 + 二期预览）</title>
+<style>
+  :root {
+    --bg-0: #000000;
+    --bg-1: #101214;
+    --bg-2: #1C2127;
+    --bg-3: #2B3139;
+    --bg-panel: #14171A;
+    --bg-mask: rgba(0,0,0,.72);
+    --line: #1E2329;
+    --line-2: #2B3139;
+    --text-0: #FFFFFF;
+    --text-1: #C7CCD4;
+    --text-2: #848E9C;
+    --text-3: #5E6673;
+    --up: #0ECB81;
+    --down: #F6465D;
+    --blue: #4A80FF;
+    --fab: #2B5FF1;
+    --warning: #F0B90B;
+    --brand-1: #00C9A7;
+    --ai-1: #7E96FF;
+    --ai-grad: linear-gradient(92deg, #7E96FF, #00C9A7);
+  }
+  * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+  html, body {
+    margin:0; padding:0; height:100%;
+    background:#0B0E11; color: var(--text-0);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Microsoft YaHei", Roboto, sans-serif;
+    font-size:14px; line-height:1.5; overflow:hidden;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+  button { font-family: inherit; }
+  svg { display:block; }
+
+  .shell { display:grid; grid-template-columns: 380px 1fr; height:100vh; }
+
+  /* ============ 左栏 ============ */
+  .panel { background: var(--bg-panel); border-right:1px solid var(--line); padding:18px 18px 14px; overflow-y:auto; }
+  .panel h1 { font-size:15px; margin:0 0 2px; font-weight:700; }
+  .panel h1 .accent { color: var(--brand-1); }
+  .panel .sub { font-size:11px; color:var(--text-2); margin-bottom:14px; line-height:1.6; }
+  .sec { margin-bottom:14px; }
+  .sec > .label { font-size:11px; color:var(--text-2); letter-spacing:.6px; margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+  .sec > .label .dot { width:5px; height:5px; border-radius:50%; background:var(--brand-1); }
+
+  .playbtn {
+    width:100%; border:0; border-radius:10px; padding:13px 0; font-size:14px; font-weight:800; cursor:pointer;
+    background:linear-gradient(92deg, #2B5FF1, #00C9A7); color:#fff; letter-spacing:.5px;
+    box-shadow:0 6px 20px rgba(43,95,241,.35); transition:transform .12s;
+  }
+  .playbtn:hover { transform:translateY(-1px); }
+  .playrow { display:flex; gap:8px; margin-top:8px; }
+  .pctl {
+    flex:1; background:var(--bg-2); border:1px solid var(--line-2); color:var(--text-1);
+    border-radius:8px; padding:7px 0; font-size:11.5px; cursor:pointer;
+  }
+  .pctl:hover { color:#fff; border-color:var(--text-3); }
+  .pctl:disabled { opacity:.35; cursor:not-allowed; }
+  .seg { display:flex; background:var(--bg-2); border-radius:7px; padding:2px; gap:2px; }
+  .seg button { border:0; background:transparent; color:var(--text-2); font-size:11px; padding:5px 10px; border-radius:5px; cursor:pointer; font-weight:500; }
+  .seg button.on { background:var(--bg-3); color:#fff; }
+  .ctl-row { display:flex; align-items:center; justify-content:space-between; margin-top:10px; gap:8px; }
+  .ctl-row .name { font-size:12px; color:var(--text-1); }
+  .ctl-row .name .tip { font-size:10px; color:var(--text-3); }
+
+  .preset-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .preset { background:var(--bg-2); border:1px solid var(--line); border-radius:9px; padding:9px 10px; cursor:pointer; text-align:left; transition:all .15s; color:var(--text-0); position:relative; }
+  .preset:hover { border-color:var(--brand-1); transform:translateY(-1px); }
+  .preset.on { border-color:var(--brand-1); background:rgba(0,201,167,.06); }
+  .preset.done::after { content:'✓'; position:absolute; top:7px; right:9px; color:var(--brand-1); font-size:11px; font-weight:800; }
+  .preset .tag { font-size:9px; color:var(--brand-1); display:block; }
+  .preset .tag.ai { background:var(--ai-grad); -webkit-background-clip:text; background-clip:text; color:transparent; font-weight:700; }
+  .preset .t { font-size:12px; font-weight:600; display:block; margin:2px 0 1px; }
+  .preset .d { font-size:9.5px; color:var(--text-2); line-height:1.4; display:block; }
+
+  .narr {
+    background:rgba(240,185,11,.06); border:1px solid rgba(240,185,11,.28); border-radius:9px;
+    padding:9px 11px; font-size:12px; color:#EFD98B; line-height:1.6; min-height:56px; margin-bottom:12px;
+  }
+  .narr b { color:var(--warning); }
+  .narr .ch { font-size:10px; color:var(--text-3); display:block; margin-bottom:2px; letter-spacing:.5px; }
+
+  .log { background:#0B0E11; border:1px solid var(--line); border-radius:10px; height:158px; overflow-y:auto; padding:9px 11px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size:10.5px; line-height:1.7; }
+  .log .ln { color:var(--text-2); word-break:break-all; }
+  .log .ln .ts { color:var(--text-3); margin-right:6px; }
+  .log .ln.api { color:#7E96FF; }
+  .log .ln.agent { color:#00C9A7; }
+  .log .ln.ops { color:#E8CE7A; }
+  .log .ln.ok { color:var(--up); }
+  .log-clear { float:right; background:none; border:0; color:var(--text-3); font-size:10px; cursor:pointer; }
+  .legend { display:flex; gap:10px; margin-top:6px; font-size:9.5px; color:var(--text-3); }
+  .legend i { font-style:normal; display:flex; align-items:center; gap:4px; }
+  .legend i::before { content:''; width:6px; height:6px; border-radius:2px; }
+  .legend .l-api::before { background:#7E96FF; }
+  .legend .l-agent::before { background:#00C9A7; }
+  .legend .l-ops::before { background:#E8CE7A; }
+
+  .foot { margin-top:12px; padding-top:11px; border-top:1px dashed var(--line-2); font-size:10.5px; color:var(--text-3); line-height:1.8; }
+  .foot b { color:var(--text-2); }
+
+  /* ============ 画布 ============ */
+  .canvas { position:relative; overflow:auto; padding:14px 28px 24px;
+    background: radial-gradient(ellipse at top, #14181E 0%, #0B0E11 60%);
+    display:flex; flex-direction:column; align-items:center; }
+  .plat-bar { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex:none; }
+  .plat-bar .pl { font-size:11px; color:var(--text-2); }
+  .view-badge { display:flex; align-items:center; gap:6px; background:var(--bg-2); border:1px solid var(--line-2); border-radius:9px; padding:6px 13px; font-size:12px; font-weight:600; }
+  .view-badge .vdot { width:7px; height:7px; border-radius:50%; background:var(--up); }
+  .view-badge.guest .vdot { background:var(--warning); }
+  .plat-bar .note { font-size:10px; color:var(--text-3); }
+
+  .phone { width:375px; height:780px; background:#000; border-radius:46px; padding:11px;
+    box-shadow:0 24px 70px rgba(0,0,0,.65), 0 0 0 1px #25282E; position:relative; flex:none; }
+  .screen { width:100%; height:100%; background:var(--bg-0); border-radius:36px; overflow:hidden; position:relative; }
+  .notch { position:absolute; top:8px; left:50%; transform:translateX(-50%); width:108px; height:27px; background:#000; border-radius:15px; z-index:50; }
+  .statusbar { height:44px; display:flex; justify-content:space-between; align-items:flex-end; padding:0 24px 6px; font-size:14px; font-weight:600; }
+  .statusbar .icons { display:flex; gap:6px; align-items:center; }
+  .homebar { position:absolute; bottom:7px; left:50%; transform:translateX(-50%); width:130px; height:4px; border-radius:2px; background:#3A3F45; z-index:60; }
+
+  .page { position:absolute; top:44px; bottom:14px; left:0; right:0; overflow-y:auto; display:none; background:var(--bg-0); }
+  .page.on { display:block; }
+  .page::-webkit-scrollbar { display:none; }
+  .page.has-tabbar { bottom:70px; }
+
+  /* ============ APP 首页头部（设计稿） ============ */
+  .apphead { display:flex; align-items:center; gap:14px; padding:10px 16px 2px; }
+  .apphead .aic { color:#EAECEF; cursor:pointer; flex:none; }
+  .apphead .search { flex:1; height:36px; background:#1C2127; border-radius:18px; display:flex; align-items:center; gap:8px; padding:0 13px; color:var(--text-2); font-size:14px; min-width:0; }
+  .apphead .search span { overflow:hidden; white-space:nowrap; }
+  .navtabs { display:flex; gap:18px; padding:12px 16px 0; overflow:hidden; align-items:baseline; }
+  .navtab { font-size:16px; color:var(--text-2); font-weight:500; white-space:nowrap; }
+  .navtab.on { color:#fff; font-weight:800; font-size:17px; }
+  .subrow { display:flex; align-items:center; gap:6px; padding:12px 16px 8px; }
+  .pillTab { font-size:14px; font-weight:600; color:var(--text-2); padding:6px 14px; border-radius:16px; cursor:pointer; }
+  .pillTab.on { background:#26292E; color:#fff; }
+  .subrow .mini { margin-left:auto; }
+  .subrow .mini .avx { width:26px; height:26px; border-radius:50%; }
+
+  /* ============ 卡片（设计稿） ============ */
+  .card { padding:12px 16px 6px; border-bottom:1px solid #16191D; position:relative; }
+  .crow { display:flex; gap:10px; }
+  .avx { width:40px; height:40px; border-radius:50%; flex:none; display:grid; place-items:center; font-weight:800; color:#fff; font-size:15px; position:relative; overflow:hidden; cursor:pointer; }
+  .avx.s28 { width:28px; height:28px; font-size:11px; }
+  .avx.s24 { width:24px; height:24px; font-size:10px; }
+  .avx.s56 { width:56px; height:56px; font-size:22px; }
+  .avx.s84 { width:84px; height:84px; font-size:32px; }
+  .avx .ring { position:absolute; inset:0; border-radius:50%; box-shadow:inset 0 0 0 1px rgba(255,255,255,.14); }
+  .cmain { flex:1; min-width:0; }
+  .cauthor { display:flex; align-items:center; gap:6px; }
+  .cauthor .nick { font-size:15.5px; font-weight:700; cursor:pointer; }
+  .cauthor .tdot { color:var(--text-3); font-size:13px; }
+  .cauthor .time { color:var(--text-2); font-size:13px; }
+  .cauthor .more { margin-left:auto; color:var(--text-2); letter-spacing:2px; font-weight:700; cursor:pointer; }
+  .csub { font-size:12.5px; color:var(--text-2); margin-top:1px; }
+  .cbody { font-size:15.5px; line-height:1.5; margin-top:3px; color:#EDEFF2; cursor:pointer; word-break:break-word; }
+  .cbody .tk { color:var(--blue); font-weight:500; }
+  .cimg { margin-top:10px; width:246px; height:246px; border-radius:14px; overflow:hidden; position:relative; cursor:pointer; }
+  .cimg.wide { width:100%; height:150px; }
+  .img-eth { width:100%; height:100%; background:radial-gradient(circle at 50% 42%, #23272E 0%, #0A0C0F 75%); display:grid; place-items:center; }
+  .img-chart { width:100%; height:100%; background:linear-gradient(165deg,#0E1B14,#0A0C0F 70%); position:relative; }
+  .img-chart svg { position:absolute; inset:0; width:100%; height:100%; }
+  .coinpill { display:inline-flex; align-items:center; gap:7px; margin-top:10px; background:#1C2127; border-radius:8px; padding:6px 11px; font-size:13px; font-weight:600; cursor:pointer; }
+  .coinpill .cico { width:17px; height:17px; border-radius:50%; display:grid; place-items:center; font-size:9px; font-weight:800; color:#0B0E11; flex:none; }
+  .coinpill .pct { font-weight:600; }
+  .coinpill .pct.up { color:var(--up); } .coinpill .pct.down { color:var(--down); }
+  .cacts { display:flex; align-items:center; margin-top:9px; padding:2px 0 6px; color:var(--text-2); }
+  .cact { display:flex; align-items:center; gap:6px; font-size:13.5px; cursor:pointer; color:var(--text-2); }
+  .cact.c1 { width:118px; } .cact.c2 { flex:1; }
+  .cact:hover { color:var(--text-1); }
+  .cact.liked { color:var(--blue); }
+  .cact.share { margin-left:auto; }
+
+  /* 状态提示行（审核） */
+  .notice { display:flex; gap:9px; padding:13px 16px; border-bottom:1px solid #16191D; color:var(--text-2); font-size:13px; line-height:1.5; align-items:flex-start; }
+  .notice .nico { flex:none; margin-top:1px; }
+  .notice.okc { color:var(--up); }
+
+  /* 反馈卡 */
+  .fbcard { padding:13px 16px 15px; border-bottom:1px solid #16191D; }
+  .fbq { font-size:14.5px; font-weight:600; margin:8px 0 11px; }
+  .fbops { display:flex; gap:10px; }
+  .fbop { flex:1; border:1px solid #363D47; background:transparent; color:var(--text-1); border-radius:20px; padding:9px 0; font-size:13.5px; cursor:pointer; font-weight:600; }
+  .fbop.sel { border-color:var(--brand-1); color:var(--brand-1); background:rgba(0,201,167,.07); }
+  .fbdone { color:var(--up); font-size:13px; padding:4px 0; }
+
+  .newpill { position:absolute; top:150px; left:50%; transform:translateX(-50%); z-index:20;
+    background:var(--fab); color:#fff; font-size:12.5px; font-weight:600; padding:7px 15px; border-radius:16px;
+    cursor:pointer; display:none; align-items:center; gap:5px; box-shadow:0 4px 14px rgba(43,95,241,.45); animation:drop .25s ease-out; }
+  .newpill.on { display:flex; }
+  @keyframes drop { from { transform:translate(-50%,-8px); opacity:0; } to { transform:translate(-50%,0); opacity:1; } }
+
+  .fostrip { display:flex; gap:14px; padding:6px 16px 12px; overflow-x:auto; border-bottom:1px solid #16191D; }
+  .fostrip::-webkit-scrollbar { display:none; }
+  .fostrip .fo { display:flex; flex-direction:column; align-items:center; gap:5px; font-size:11.5px; color:var(--text-1); flex:none; cursor:pointer; width:64px; }
+  .fostrip .fo .nm { max-width:64px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  .fab { position:absolute; right:16px; bottom:92px; width:52px; height:52px; border-radius:50%; background:var(--fab);
+    display:grid; place-items:center; cursor:pointer; box-shadow:0 8px 22px rgba(43,95,241,.5); z-index:6; }
+  .tabbar { position:absolute; bottom:14px; left:0; right:0; height:56px; display:none; background:var(--bg-0); z-index:5; border-top:1px solid #14171B; }
+  .tabbar.on { display:flex; }
+  .tabbar .ti { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-size:10.5px; color:var(--text-3); cursor:pointer; }
+  .tabbar .ti.on { color:#fff; }
+
+  /* ============ 详情页 ============ */
+  .dhead { display:flex; align-items:center; padding:10px 16px; gap:18px; position:sticky; top:0; background:var(--bg-0); z-index:5; }
+  .dhead .spacer { flex:1; }
+  .dhead .aic { cursor:pointer; color:#EAECEF; }
+  .dt-author { display:flex; align-items:center; gap:10px; padding:4px 16px 2px; }
+  .dt-author .am { flex:1; min-width:0; }
+  .dt-author .nick { font-size:16px; font-weight:700; }
+  .dt-author .sub { font-size:12px; color:var(--text-2); margin-top:1px; }
+  .followbtn { border:0; background:#fff; color:#0B0E11; font-size:13.5px; font-weight:700; border-radius:17px; padding:7px 18px; cursor:pointer; transition:all .15s; }
+  .followbtn.on { background:transparent; color:var(--text-2); border:1px solid #363D47; }
+  .dt-body { padding:10px 16px 0; font-size:16.5px; line-height:1.55; color:#F2F4F7; white-space:pre-line; word-break:break-word; }
+  .dt-body .tk { color:var(--blue); }
+  .translink { display:inline-flex; align-items:center; gap:5px; margin:10px 16px 0; font-size:14px; color:var(--blue); cursor:pointer; }
+  .dt-time { padding:12px 16px 12px; color:var(--text-2); font-size:13.5px; border-bottom:1px solid #16191D; }
+  .dt-disc { padding:10px 16px; color:#3F464F; font-size:12px; line-height:1.55; border-bottom:1px solid #16191D; }
+  .dt-disc u { cursor:pointer; }
+  .cm { display:flex; gap:9px; padding:11px 16px 4px; position:relative; }
+  .cm .cmm { flex:1; min-width:0; }
+  .cm .cmau { display:flex; align-items:center; gap:6px; font-size:13.5px; }
+  .cm .cmau .n2 { font-weight:700; }
+  .cm .cmau .more { margin-left:auto; color:var(--text-3); letter-spacing:2px; }
+  .chip-author { background:#2B3139; color:var(--text-1); font-size:10.5px; padding:2px 7px; border-radius:5px; font-weight:600; }
+  .cm .cmtx { font-size:14.5px; line-height:1.5; margin-top:3px; color:#E8EAEE; }
+  .cm .cmft { display:flex; align-items:center; gap:5px; margin-top:5px; font-size:12px; color:var(--text-3); }
+  .cm .cmft .rgt { margin-left:auto; display:flex; gap:14px; align-items:center; color:var(--text-2); }
+  .cm .cmft .rgt span { display:flex; gap:4px; align-items:center; cursor:pointer; }
+  .cm.reply { padding-left:52px; }
+  .cm.hl { background:rgba(126,150,255,.08); }
+  .cm.hl::before { content:''; position:absolute; left:0; top:6px; bottom:2px; width:2.5px; background:var(--ai-1); border-radius:2px; }
+  .showmore { padding:4px 16px 8px 64px; color:var(--text-2); font-size:12.5px; cursor:pointer; }
+  .showmore i { font-style:normal; color:var(--text-3); margin-right:8px; }
+  .replybar { position:sticky; bottom:0; display:flex; gap:12px; padding:9px 16px 10px; background:var(--bg-0); border-top:1px solid #16191D; align-items:center; }
+  .replybar .rin { flex:1; background:#1C2127; border-radius:19px; height:38px; display:flex; align-items:center; padding:0 15px; color:var(--text-3); font-size:13.5px; cursor:text; }
+  .replybar .ric { display:flex; align-items:center; gap:5px; color:var(--text-1); font-size:13.5px; font-weight:600; cursor:pointer; }
+  .replybar .ric.liked { color:var(--blue); }
+
+  /* ============ 发布器 ============ */
+  .ed-head { display:flex; align-items:center; padding:12px 16px; }
+  .ed-head .x { cursor:pointer; color:#EAECEF; }
+  .ed-head .spacer { flex:1; }
+  .postbtn { border:0; background:#2B3139; color:#6A737F; font-size:14px; font-weight:700; border-radius:18px; padding:8px 22px; cursor:pointer; transition:all .2s; }
+  .postbtn.rdy { background:var(--fab); color:#fff; }
+  .ed-body { display:flex; gap:11px; padding:8px 16px; }
+  .ed-text { flex:1; min-height:120px; font-size:16.5px; line-height:1.55; color:#F2F4F7; word-break:break-word; }
+  .ed-text .ph { color:#4A515B; }
+  .ed-text .tk { color:var(--blue); }
+  .caret { display:inline-block; width:2px; height:19px; background:var(--blue); vertical-align:-3px; animation:blink 1s step-end infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+  .ed-attach { padding:0 16px 6px 66px; }
+  .coinsug { border-top:1px solid #1A1E23; }
+  .coinsug .sr { display:flex; align-items:center; gap:12px; padding:12px 16px; cursor:pointer; }
+  .coinsug .sr:hover { background:var(--bg-1); }
+  .coinsug .cico2 { width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font-weight:800; font-size:13px; color:#fff; }
+  .coinsug .tkr { font-size:15.5px; font-weight:700; flex:1; }
+  .coinsug .fn { color:var(--text-2); font-size:14px; }
+  .ed-tools { position:absolute; left:0; right:0; bottom:216px; display:flex; align-items:center; gap:22px; padding:11px 16px; background:var(--bg-0); border-top:1px solid #16191D; z-index:4; }
+  .ed-tools .tl { display:flex; align-items:center; gap:7px; font-size:14.5px; color:#DDE1E7; cursor:pointer; }
+  .ed-tools .cnt { margin-left:auto; font-size:14px; color:var(--text-2); }
+  /* 键盘 */
+  .kb { position:absolute; left:0; right:0; bottom:14px; height:202px; background:#1B1D1F; z-index:4; padding:7px 3px 0; display:none; }
+  .kb.on { display:block; }
+  .kb .sugrow { display:flex; justify-content:space-around; align-items:center; padding:2px 10px 8px; color:#EAECEF; font-size:15px; }
+  .kb .sugrow span { opacity:.9; }
+  .kb .krow { display:flex; justify-content:center; gap:5px; margin-bottom:7px; }
+  .kb .k { background:#434649; color:#fff; border-radius:6px; height:38px; min-width:30px; flex:1; max-width:34px; display:grid; place-items:center; font-size:16.5px; box-shadow:0 1px 0 #000; }
+  .kb .k.fn { background:#2E3134; font-size:12px; flex:1.4; max-width:48px; }
+  .kb .k.sp { max-width:170px; flex:6; }
+  .kb .brow { display:flex; justify-content:space-between; padding:4px 22px 0; color:#9AA2AC; font-size:17px; }
+
+  /* ============ 个人主页 ============ */
+  .pf-head { display:flex; align-items:center; padding:10px 16px; gap:18px; }
+  .pf-top { padding:4px 16px 2px; }
+  .pf-name { font-size:22px; font-weight:800; margin-top:10px; }
+  .pf-bio { font-size:13.5px; color:var(--text-2); margin-top:7px; line-height:1.55; }
+  .pf-chip { display:inline-flex; margin-top:10px; background:#1C2127; color:#C7CCD4; font-size:12px; font-weight:600; border-radius:6px; padding:5px 10px; }
+  .pf-stats { display:flex; gap:18px; margin-top:12px; font-size:14px; color:var(--text-2); }
+  .pf-stats b { color:#fff; font-weight:800; margin-right:4px; }
+  .pf-tab { display:flex; padding:14px 16px 0; border-bottom:1px solid #16191D; }
+  .pf-tab span { font-size:15px; font-weight:800; padding-bottom:9px; border-bottom:2.5px solid #fff; }
+
+  /* ============ 通知 ============ */
+  .nthead { display:flex; align-items:center; padding:10px 16px; gap:14px; }
+  .nthead .t { font-size:16px; font-weight:700; flex:1; text-align:center; }
+  .nt { display:flex; gap:10px; padding:13px 16px; cursor:pointer; position:relative; border-bottom:1px solid #131619; }
+  .nt .nico { flex:none; width:20px; padding-top:2px; color:var(--text-2); }
+  .nt .nm { flex:1; min-width:0; }
+  .nt .n1 { font-size:13.5px; color:var(--text-1); }
+  .nt .n1 b { color:#fff; font-weight:700; }
+  .nt .n2 { font-size:12.5px; color:var(--text-3); margin-top:3px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .nt .ntime { font-size:11px; color:var(--text-3); flex:none; }
+  .nt .bdot2 { position:absolute; left:7px; top:19px; width:6px; height:6px; border-radius:50%; background:var(--down); }
+  .nt.read .bdot2 { display:none; }
+  .reddot { position:absolute; top:-2px; right:-3px; width:8px; height:8px; border-radius:50%; background:var(--down); border:1.5px solid #000; display:none; }
+  .reddot.on { display:block; }
+
+  /* ============ 端外 ============ */
+  .webbar { display:flex; align-items:center; gap:10px; padding:9px 14px; background:#101214; border-bottom:1px solid var(--line); }
+  .webbar .url { flex:1; background:#1C2127; border-radius:9px; padding:7px 12px; font-size:10.5px; color:var(--text-2);
+    font-family:ui-monospace,Menlo,monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .openbar { position:sticky; bottom:0; display:flex; align-items:center; gap:10px; padding:11px 16px;
+    background:rgba(0,0,0,.94); border-top:1px solid var(--line); backdrop-filter:blur(6px); }
+  .openbar .om { flex:1; font-size:12px; color:var(--text-1); line-height:1.45; }
+  .openbar .ob { border:0; background:var(--fab); color:#fff; font-size:13px; font-weight:700; border-radius:9px; padding:9px 16px; cursor:pointer; }
+
+  /* ============ 分享面板（设计稿版） ============ */
+  .sheet-mask { position:absolute; inset:0; background:var(--bg-mask); z-index:30; display:none; }
+  .sheet-mask.on { display:block; }
+  .share-sheet { position:absolute; left:0; right:0; bottom:0; top:64px; z-index:31; background:#101214;
+    border-radius:18px 18px 0 0; display:none; flex-direction:column; }
+  .share-sheet.on { display:flex; }
+  .share-sheet .grab { width:44px; height:5px; border-radius:3px; background:#3A3F45; margin:9px auto 6px; flex:none; }
+  .poster { flex:1; overflow-y:auto; margin:6px 18px 10px; background:linear-gradient(175deg,#101317,#0A0C0E);
+    border:1px solid #1E2329; border-radius:14px; padding:18px 18px 20px; }
+  .poster::-webkit-scrollbar { display:none; }
+  .poster .mlogo { display:flex; align-items:center; gap:7px; margin-bottom:16px; }
+  .poster .mlogo .wm { font-size:19px; font-weight:900; letter-spacing:.5px; }
+  .poster .pa { display:flex; align-items:center; gap:9px; font-size:15px; font-weight:700; margin-bottom:12px; }
+  .poster .pt { font-size:15px; line-height:1.7; color:#E4E7EB; white-space:pre-line; }
+  .poster .pt .tk { color:var(--blue); }
+  .poster .pqr { display:flex; align-items:center; justify-content:space-between; border-top:1px dashed #2B3139; margin-top:16px; padding-top:14px; }
+  .poster .qr { width:52px; height:52px; border-radius:8px; background:
+    repeating-linear-gradient(0deg,#EAECEF 0 4px,transparent 4px 8px),
+    repeating-linear-gradient(90deg,#EAECEF 0 4px,#101317 4px 8px); opacity:.9; }
+  .poster .qt { font-size:10.5px; color:var(--text-3); text-align:right; line-height:1.6; }
+  .chrow { display:flex; justify-content:space-around; padding:6px 18px 18px; flex:none; }
+  .chx { display:flex; flex-direction:column; align-items:center; gap:7px; font-size:11.5px; color:var(--text-1); cursor:pointer; }
+  .chx .ic { width:48px; height:48px; border-radius:50%; background:#26292E; display:grid; place-items:center; }
+  .chx .ic.tg { background:#2AABEE; }
+  .chx .ic.xx { background:#000; border:1px solid #2B3139; font-weight:800; font-size:19px; color:#fff; }
+
+  /* ============ 登录 / 弹窗 / toast ============ */
+  .login-sheet { position:absolute; left:0; right:0; bottom:0; z-index:41; background:#14171A; border-radius:18px 18px 0 0; padding:22px 20px 24px; display:none; text-align:center; }
+  .login-sheet.on { display:block; }
+  .login-sheet .lt { font-size:17px; font-weight:800; margin-bottom:7px; }
+  .login-sheet .ld { font-size:12px; color:var(--text-2); line-height:1.65; margin-bottom:16px; }
+  .login-sheet .lb { width:100%; border:0; border-radius:11px; padding:13px 0; font-size:15px; font-weight:700; background:var(--fab); color:#fff; cursor:pointer; }
+  .login-sheet .lc { margin-top:12px; font-size:13px; color:var(--text-3); cursor:pointer; }
+  .toast { position:absolute; bottom:96px; left:50%; transform:translateX(-50%); z-index:60; background:rgba(43,49,57,.97);
+    color:#fff; font-size:12.5px; padding:10px 17px; border-radius:10px; white-space:nowrap; display:none; box-shadow:0 6px 20px rgba(0,0,0,.4); }
+  .toast.on { display:block; animation:drop .2s ease-out; }
+
+  /* ============ 虚拟手指 ============ */
+  .ghost { position:absolute; z-index:80; width:34px; height:34px; border-radius:50%; pointer-events:none;
+    background:rgba(255,255,255,.22); border:1.5px solid rgba(255,255,255,.75);
+    box-shadow:0 2px 12px rgba(0,0,0,.5); opacity:0; transform:translate(-50%,-50%);
+    transition:left .5s cubic-bezier(.3,.9,.4,1), top .5s cubic-bezier(.3,.9,.4,1), opacity .25s; }
+  .ghost.show { opacity:1; }
+  .ghost.tapping { animation:tapping .38s ease-out; }
+  @keyframes tapping { 0%{transform:translate(-50%,-50%) scale(1)} 35%{transform:translate(-50%,-50%) scale(.62)} 100%{transform:translate(-50%,-50%) scale(1)} }
+  .flash { animation:cardflash 1.6s ease-out; }
+  @keyframes cardflash { 0%{background:rgba(126,150,255,.16)} 100%{background:transparent} }
+  .likepop { animation:likepop .4s ease-out; }
+  @keyframes likepop { 30%{transform:scale(1.35)} 100%{transform:scale(1)} }
+  .empty { text-align:center; padding:36px 20px 10px; color:var(--text-3); font-size:12.5px; }
+
+  /* ============ APP 首页 ============ */
+  .hm-pull { display:flex; flex-direction:column; align-items:center; gap:7px; padding:26px 0 30px; color:var(--text-2); font-size:12px; }
+  .hm-pull .mx { color:#2B5FF1; opacity:.95; }
+  .hm-asset { padding:14px 16px 4px; }
+  .hm-asset .k { font-size:13px; color:var(--text-2); }
+  .hm-asset .row { display:flex; align-items:flex-end; gap:12px; }
+  .hm-asset .v { font-size:34px; font-weight:800; letter-spacing:.3px; }
+  .hm-asset .u { font-size:12px; color:var(--text-1); font-weight:700; margin-bottom:7px; }
+  .hm-asset .spark { margin-left:auto; margin-bottom:4px; }
+  .hm-btns { display:flex; gap:10px; padding:12px 16px 6px; }
+  .hm-btns button { flex:1; border:0; border-radius:22px; padding:12px 0; font-size:15px; font-weight:700; cursor:pointer; }
+  .hm-btns .dep { background:#1C2127; color:#fff; }
+  .hm-btns .trd { background:#fff; color:#0B0E11; }
+  .hm-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px 6px; padding:14px 12px 4px; }
+  .hm-grid .g { display:flex; flex-direction:column; align-items:center; gap:7px; font-size:11.5px; color:var(--text-1); }
+  .hm-grid .g .gic { width:46px; height:46px; border-radius:14px; background:#16191D; display:grid; place-items:center; color:#EAECEF; }
+  .hm-pgdots { display:flex; justify-content:center; gap:4px; padding:8px 0 2px; }
+  .hm-pgdots i { width:10px; height:3px; border-radius:2px; background:#2B3139; }
+  .hm-pgdots i.on { background:#5E6673; }
+  .hm-stock { margin:10px 16px; background:linear-gradient(160deg,#14181D,#0E1114); border:1px solid #1E2329; border-radius:14px; padding:12px 14px; }
+  .hm-stock .sh { display:flex; align-items:center; gap:6px; font-size:14px; font-weight:700; }
+  .hm-stock .r1 { display:flex; align-items:center; gap:8px; margin-top:9px; font-size:13px; }
+  .hm-stock .r1 .nv { width:22px; height:22px; border-radius:50%; background:#76B900; display:grid; place-items:center; font-size:10px; font-weight:800; color:#0B0E11; }
+  .hm-stock .gau { margin-left:auto; text-align:right; font-size:10px; color:var(--text-2); }
+  .hm-stock .gau b { color:var(--up); font-size:13px; }
+  .hm-stock .r2 { display:flex; margin-top:10px; }
+  .hm-stock .r2 .c { flex:1; }
+  .hm-stock .r2 .c .k2 { font-size:11px; color:var(--text-2); }
+  .hm-stock .r2 .c .n2 { font-size:12.5px; font-weight:700; margin-top:2px; }
+  .hm-stock .r2 .c .p2 { font-size:11.5px; font-weight:600; margin-top:1px; }
+  .hm-strip { display:flex; align-items:center; gap:16px; padding:12px 16px 8px; border-bottom:1px solid #16191D; position:relative; }
+  .hm-strip .st { font-size:15px; color:var(--text-2); font-weight:600; white-space:nowrap; cursor:pointer; }
+  .hm-strip .st.on { color:#fff; font-weight:800; }
+  .hm-strip .chev { margin-left:auto; color:var(--text-2); }
+  .hm-pager { position:absolute; right:16px; top:-14px; font-size:10px; color:var(--text-3); }
+
+  /* ============ Square 独立页头 ============ */
+  .sqhead { display:flex; align-items:center; gap:14px; padding:10px 16px 4px; }
+  .sqhead .sqtitle { font-size:21px; font-weight:800; }
+  .sqhead .spacer { flex:1; }
+  .ultabs { display:flex; gap:20px; padding:10px 16px 0; border-bottom:1px solid #16191D; }
+  .ultab { font-size:16.5px; color:var(--text-2); font-weight:600; padding-bottom:9px; cursor:pointer; position:relative; }
+  .ultab.on { color:#fff; font-weight:800; }
+  .ultab.on::after { content:''; position:absolute; bottom:-1px; left:6%; right:6%; height:3px; border-radius:2px; background:#fff; }
+
+  /* ============ 二期概念 ============ */
+  .futchip { display:inline-flex; align-items:center; gap:4px; font-size:9px; font-weight:800; padding:2.5px 7px; border-radius:5px; color:var(--warning); background:rgba(240,185,11,.1); border:1px solid rgba(240,185,11,.35); letter-spacing:.3px; }
+  .topics { display:flex; gap:8px; padding:12px 16px 4px; overflow-x:auto; }
+  .topics::-webkit-scrollbar { display:none; }
+  .topic { flex:none; background:#16191D; border:1px solid #22272D; border-radius:10px; padding:8px 12px; cursor:pointer; }
+  .topic .tn { font-size:13px; font-weight:700; color:var(--blue); }
+  .topic .tc { font-size:10px; color:var(--text-3); margin-top:2px; }
+  .pollbox { margin-top:10px; border:1px solid #22272D; border-radius:12px; padding:12px; }
+  .pollq { font-size:14.5px; font-weight:700; }
+  .pollopt { position:relative; margin-top:9px; border:1px solid #2B3139; border-radius:9px; padding:9px 12px; font-size:13px; font-weight:600; cursor:pointer; overflow:hidden; }
+  .pollopt .fill { position:absolute; inset:0; width:0; transition:width .8s ease; }
+  .pollopt.up .fill { background:rgba(14,203,129,.16); }
+  .pollopt.dn .fill { background:rgba(246,70,93,.14); }
+  .pollopt .lab { position:relative; display:flex; justify-content:space-between; }
+  .pollopt .pctv { opacity:0; transition:opacity .5s; }
+  .pollbox.voted .pctv { opacity:1; }
+  .pollbox.voted .pollopt { cursor:default; }
+  .pollmeta { display:flex; gap:10px; margin-top:9px; font-size:10.5px; color:var(--text-3); flex-wrap:wrap; }
+  .vbadge { display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:700; padding:3px 8px; border-radius:6px; color:var(--up); background:rgba(14,203,129,.1); border:1px solid rgba(14,203,129,.3); }
+  .lockchip { display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:600; padding:3px 8px; border-radius:6px; color:var(--text-1); background:#1C2127; border:1px solid #2B3139; }
+  .setup { margin-top:10px; border:1px solid rgba(74,128,255,.35); background:rgba(74,128,255,.06); border-radius:12px; padding:11px 12px; }
+  .setup .sh2 { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:800; color:#A8C0FF; }
+  .setup .rows { display:flex; margin-top:8px; }
+  .setup .rows .c { flex:1; }
+  .setup .rows .k { font-size:10px; color:var(--text-3); }
+  .setup .rows .v { font-size:13.5px; font-weight:700; margin-top:2px; }
+  .setup .go { width:100%; margin-top:10px; border:0; border-radius:9px; padding:10px 0; font-size:13px; font-weight:800; background:var(--fab); color:#fff; cursor:pointer; }
+  .whyc { margin-top:10px; border:1px solid rgba(0,201,167,.3); background:linear-gradient(150deg, rgba(0,201,167,.07), rgba(126,150,255,.05)); border-radius:12px; padding:12px; }
+  .whyc .wh { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:800; }
+  .whyc .wh .azt { background:var(--ai-grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .whyc .evs { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:9px; }
+  .whyc .ev { background:rgba(0,0,0,.25); border-radius:8px; padding:8px 9px; }
+  .whyc .ev .ek { font-size:9.5px; color:var(--text-3); }
+  .whyc .ev .evv { font-size:11.5px; font-weight:600; margin-top:2px; line-height:1.45; }
+  .whyc .acts2 { display:flex; gap:8px; margin-top:10px; }
+  .whyc .acts2 button { flex:1; border:1px solid #2B3139; background:#16191D; color:#fff; border-radius:8px; padding:8px 0; font-size:12px; font-weight:700; cursor:pointer; }
+  .whyc .acts2 .pri { background:var(--fab); border-color:transparent; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ============ 左栏 ============ -->
+  <aside class="panel">
+    <h1>MEXC 广场 · <span class="accent">一键演示 v3</span></h1>
+    <div class="sub">《【H5】广场 1.0》v1.6 + 后台 PRD v1.9 + 最新入口设计 + 二期概念（依据 X 征集 255 条回帖用研）· 全自动播放</div>
+
+    <div class="sec">
+      <button class="playbtn" id="btn-master" onclick="playAll()">▶ 一键完整演示（8 章 · 约 3.5 分钟）</button>
+      <div class="playrow">
+        <button class="pctl" id="btn-pause" onclick="togglePause()" disabled>⏸ 暂停（空格）</button>
+        <button class="pctl" id="btn-stop" onclick="stopPlay()" disabled>■ 停止</button>
+      </div>
+      <div class="ctl-row">
+        <span class="name">播放速度</span>
+        <div class="seg" id="seg-speed">
+          <button data-v="1" class="on">标准</button><button data-v="0.55">加速</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="label"><span class="dot"></span>章节（点击可单独播放）</div>
+      <div class="preset-grid">
+        <button class="preset" data-sc="ENTRY"><span class="tag">① 入口 · 最新设计</span><span class="t">首页下拉进广场</span><span class="d">下拉直达 + 首页内容流 Square 页签 双入口</span></button>
+        <button class="preset" data-sc="A"><span class="tag">② 基础盘 · US1</span><span class="t">双 Feed 与反馈卡</span><span class="d">For You/关注 · 快照 · 30s 轮询 · 盲评</span></button>
+        <button class="preset" data-sc="B"><span class="tag ai">③ ✦AI · 冷启动</span><span class="t">Persona 内容供给</span><span class="d">热点 → Agent 生成 → 双审 → 进流</span></button>
+        <button class="preset" data-sc="C"><span class="tag">④ 创作闭环 · US3</span><span class="t">发布 → 审核 → 上线</span><span class="d">$ 币种联想 · request_id · 审核可见性</span></button>
+        <button class="preset" data-sc="D"><span class="tag">⑤ 互动 · US2</span><span class="t">详情互动与翻译</span><span class="d">点赞乐观更新 · 评论 · 关注 · 机翻</span></button>
+        <button class="preset" data-sc="E"><span class="tag ai">⑥ ✦AI · 回应</span><span class="t">优质判定 + Persona 回应</span><span class="d">Agent 判优 → 草稿 → 运营确认 → 通知</span></button>
+        <button class="preset" data-sc="F"><span class="tag">⑦ 增长闭环 · US1-R4</span><span class="t">分享 → 端外 → 拉登录</span><span class="d">海报 · 归因链接 · 只读落地 · 登录引导</span></button>
+        <button class="preset" data-sc="FUT"><span class="tag" style="color:var(--warning)">⑧ 二期 · 概念预览</span><span class="t">话题 · 投票 · 战绩 · 一键下单</span><span class="d">依据 X 征集 255 条回帖用研 P0/P1 机会点</span></button>
+      </div>
+    </div>
+
+    <div class="narr" id="narr"><span class="ch">旁白</span>点上方 <b>▶ 一键完整演示</b>，从头到尾自动播放：虚拟手指会替你完成所有点击和输入，你只管讲。也可点任意章节单独播放。</div>
+
+    <div class="sec">
+      <div class="label"><span class="dot"></span>事件日志（接口 / Agent / 审核 / 运营）<button class="log-clear" onclick="clearLog()">清空</button></div>
+      <div class="log" id="log"></div>
+      <div class="legend"><i class="l-api">To C 接口</i><i class="l-agent">Agent / 算法</i><i class="l-ops">审核 / 运营</i></div>
+    </div>
+
+    <div class="foot">
+      <b>数据依据与口径（两份 PRD）</b><br>
+      ① 行情观点讨论需求外溢 X 等站外 → 站内建广场承接<br>
+      ② Binance Square 已验证「行情+观点+互动」形态<br>
+      ③ 冷启动 = Persona（Agent 生成）+ 真实用户共同供给<br>
+      ④ 内容满意度盲评 ≥4.0 分 · 人工审核 24h 处置率 ≥90%<br>
+      ⑤ 分享量 / 分享归因 DAU / 归因交易额 = 核心观察指标<br>
+      ⑥ H5 不自行计算状态与可见性，一切以服务端返回为准
+    </div>
+  </aside>
+
+  <!-- ============ 右侧 ============ -->
+  <main class="canvas">
+    <div class="plat-bar">
+      <span class="pl">演示视角</span>
+      <div class="view-badge" id="view-badge"><span class="vdot"></span><span id="view-label">APP 端内 · 已登录</span></div>
+      <span class="note">UED 设计稿还原 · 深浅色随 APP（Demo 固定深色）</span>
+    </div>
+
+    <div class="stage">
+      <div class="phone">
+        <div class="screen" id="screen">
+          <div class="notch"></div>
+          <div class="statusbar"><span>9:41</span><span class="icons" id="sb-icons"></span></div>
+
+          <!-- APP 首页（最新入口设计：下拉进广场 + 内容流 Square 页签） -->
+          <div class="page has-tabbar on" id="pg-home"></div>
+
+          <!-- 广场（独立页） -->
+          <div class="page" id="pg-feed">
+            <div class="sqhead">
+              <span class="aic" id="sq-back" onclick="goHome()" data-ic="back"></span>
+              <span class="sqtitle">广场</span>
+              <span class="spacer"></span>
+              <span class="avx" data-av="me" onclick="openMyProfile()" style="width:28px;height:28px;font-size:11px;cursor:pointer"></span>
+              <span class="aic" style="position:relative" id="msg-entry" onclick="openNotif()"><span data-ic="bell"></span><span class="reddot" id="notif-dot"></span></span>
+            </div>
+            <div class="ultabs">
+              <span class="ultab on" id="ptab-rec" onclick="switchTab('rec')">推荐</span>
+              <span class="ultab" id="ptab-fo" onclick="switchTab('fo')">关注</span>
+            </div>
+            <div id="feed-body"></div>
+          </div>
+
+          <!-- 二期概念预览 -->
+          <div class="page" id="pg-future"></div>
+          <div class="newpill" id="newpill" onclick="consumeNew()">↑ 有新内容</div>
+
+          <!-- 详情 -->
+          <div class="page" id="pg-detail"></div>
+
+          <!-- 发布器 -->
+          <div class="page" id="pg-composer">
+            <div class="ed-head">
+              <span class="x aic" data-ic="close" onclick="closeComposer()"></span>
+              <span class="spacer"></span>
+              <button class="postbtn" id="btn-post">发布</button>
+            </div>
+            <div class="ed-body">
+              <span class="avx" data-av="me"></span>
+              <div class="ed-text" id="ed-text"><span class="ph">分享你的观点…</span></div>
+            </div>
+            <div class="ed-attach" id="ed-attach"></div>
+            <div class="coinsug" id="coinsug" style="display:none"></div>
+            <div class="ed-tools">
+              <span class="tl"><span data-ic="pic"></span>图片</span>
+              <span class="tl"><span data-ic="coin"></span>币种</span>
+              <span class="cnt" id="ed-cnt">500</span>
+            </div>
+            <div class="kb on" id="kb"></div>
+          </div>
+
+          <!-- 我的主页 -->
+          <div class="page" id="pg-me"></div>
+
+          <!-- 通知 -->
+          <div class="page" id="pg-notif"></div>
+
+          <!-- 端外 -->
+          <div class="page" id="pg-outside"></div>
+
+          <!-- 底部导航 + FAB -->
+          <div class="tabbar on" id="tabbar">
+            <span class="ti on"><span data-ic="mexc"></span>首页</span>
+            <span class="ti"><span data-ic="markets"></span>行情</span>
+            <span class="ti"><span data-ic="trade"></span>交易</span>
+            <span class="ti"><span data-ic="futures"></span>合约</span>
+            <span class="ti"><span data-ic="wallet"></span>资产</span>
+          </div>
+          <div class="fab" id="fab" onclick="openComposer()"><span data-ic="plus"></span></div>
+
+          <!-- 分享面板 -->
+          <div class="sheet-mask" id="share-mask"></div>
+          <div class="share-sheet" id="share-sheet">
+            <div class="grab"></div>
+            <div class="poster" id="poster"></div>
+            <div class="chrow">
+              <span class="chx" id="ch-save"><span class="ic"><span data-ic="dl"></span></span>保存</span>
+              <span class="chx" id="ch-tg"><span class="ic tg"><span data-ic="tg"></span></span>Telegram</span>
+              <span class="chx" id="ch-x"><span class="ic xx">𝕏</span>X</span>
+              <span class="chx" id="ch-more"><span class="ic"><span data-ic="dots"></span></span>更多</span>
+            </div>
+          </div>
+
+          <!-- 登录引导 -->
+          <div class="sheet-mask" id="login-mask"></div>
+          <div class="login-sheet" id="login-sheet">
+            <div class="lt">登录 MEXC 继续互动</div>
+            <div class="ld">端外仅支持只读浏览。登录后将回到当前页面并保留上下文，不会自动执行你刚才的操作。</div>
+            <button class="lb" id="btn-login">登录 / 注册</button>
+            <div class="lc" onclick="cancelLogin()">取消，继续浏览</div>
+          </div>
+
+          <div class="toast" id="toast"></div>
+          <div class="ghost" id="ghost"></div>
+        </div>
+        <div class="homebar"></div>
+      </div>
+    </div>
+  </main>
+</div>
+<script>
+/* ====================== SVG 图标库 ====================== */
+function ic(n, s, sw){
+  s = s || 22; sw = sw || 1.6;
+  const P = {
+    person:'<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1.6-3.4 4.4-5 7.5-5s5.9 1.6 7.5 5"/>',
+    scan:'<path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16M5 12h14"/>',
+    mag:'<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.2-4.2"/>',
+    headset:'<path d="M4.5 13a7.5 7.5 0 0 1 15 0"/><rect x="3.2" y="12.5" width="4" height="6.5" rx="2"/><rect x="16.8" y="12.5" width="4" height="6.5" rx="2"/>',
+    msg:'<path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H9.2L5 20.4c-.5.4-1 .1-1-.5z"/><path d="M8 9.5h8M8 13h5"/>',
+    close:'<path d="M6 6l12 12M18 6L6 18"/>',
+    back:'<path d="M14.5 4.5 7 12l7.5 7.5"/>',
+    redo:'<path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20.2 3.8v4.6h-4.6"/>',
+    dots:'<circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/>',
+    cmt:'<path d="M20 11.6a7.6 7.6 0 0 1-7.6 7.6c-1.2 0-2.4-.3-3.4-.8l-4.6 1.3 1.4-4.2a7.6 7.6 0 1 1 14.2-3.9z"/>',
+    thumb:'<path d="M7 11v9M7 20h9.4a2 2 0 0 0 2-1.6l1.1-5.6a2 2 0 0 0-2-2.4h-4.2l.8-4a1.7 1.7 0 0 0-3.2-1.1L7 11H4.5v9H7z"/>',
+    pic:'<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M4.5 17l4.5-4.5 3 3 3.5-3.5 4 4"/>',
+    coin:'<circle cx="12" cy="12" r="8"/><path d="M12 7.2v9.6M14.6 9.3c-.5-.8-1.5-1.3-2.6-1.3-1.6 0-2.9.9-2.9 2.1 0 2.8 5.6 1.4 5.6 4.2 0 1.2-1.3 2.1-2.9 2.1-1.1 0-2.1-.5-2.7-1.3"/>',
+    plus:'<path d="M12 5.5v13M5.5 12h13"/>',
+    mexc:'<path d="M3.2 17.5 7.8 7l4.2 6.8L16.2 7l4.6 10.5h-4.6l-1.4-3.4-2.6 3.4-2.6-3.4-1.4 3.4z" fill="currentColor" stroke="none"/>',
+    markets:'<path d="M4.5 19v-8M9.5 19V5.5M14.5 19v-6M19.5 19V9"/>',
+    trade:'<path d="M7.5 4.5V17M7.5 4.5 4.5 7.7M7.5 4.5l3 3.2M16.5 19.5V7M16.5 19.5l-3-3.2M16.5 19.5l3-3.2"/>',
+    futures:'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M7.5 15l3-3 2.2 2 3.8-4"/>',
+    wallet:'<path d="M4.5 7.5A2.5 2.5 0 0 1 7 5h11v3.2"/><rect x="4.5" y="8.2" width="15.5" height="10.8" rx="2.4"/><circle cx="16" cy="13.6" r="1.2" fill="currentColor" stroke="none"/>',
+    dl:'<path d="M12 4.5v10.5M12 15l-4-4M12 15l4-4M5 19.5h14"/>',
+    tg:'<path d="M20.8 4.2 3.9 10.9c-.8.3-.8 1.1.1 1.4l4.2 1.3 1.6 4.7c.3.8 1 .9 1.5.2l2.2-2.7 4.3 3.1c.6.4 1.3.1 1.5-.7l2.6-12.6c.2-.9-.5-1.6-1.1-1.4z" fill="#fff" stroke="none"/>',
+    edit:'<path d="M4.5 19.5H9L20 8.5a2.1 2.1 0 0 0-3-3l-11 11z"/><path d="M14.6 7 17 9.4"/>',
+    info:'<circle cx="12" cy="12" r="8.5"/><path d="M12 11.2V16M12 8v.4"/>',
+    globe:'<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.3 3.8 5.1 3.8 8.5s-1.3 6.2-3.8 8.5c-2.5-2.3-3.8-5.1-3.8-8.5s1.3-6.2 3.8-8.5z"/>',
+    reply:'<path d="M9.5 16.5 4.5 12l5-4.5"/><path d="M4.8 12h8.7a6 6 0 0 1 6 6v.8"/>',
+    bell:'<path d="M6.2 16v-5.2a5.8 5.8 0 1 1 11.6 0V16l1.6 2.6H4.6z"/><path d="M10.2 20.5a2 2 0 0 0 3.6 0"/>',
+    gift:'<rect x="4" y="9.5" width="16" height="10.5" rx="2"/><path d="M4 13.5h16M12 9.5V20M12 9.5C8.8 9.5 7.6 8 7.6 6.9c0-1.2 1-1.9 2-1.6 1.6.5 2.4 4.2 2.4 4.2s.8-3.7 2.4-4.2c1-.3 2 .4 2 1.6 0 1.1-1.2 2.6-4.4 2.6z"/>',
+    crown:'<path d="M4.5 8.5 8.4 12l3.6-5.3L15.6 12l3.9-3.5-1.5 8.8H6z"/><path d="M6.5 20h11"/>',
+    ingot:'<path d="M8.4 5.5h7.2l1.5 3.6H6.9zM4.9 12.6h7.2l1.5 3.6H3.4zM13.9 12.6h7.2l1.5 3.6h-10.2z"/>',
+    uplus:'<circle cx="9.5" cy="8.5" r="3.3"/><path d="M3.5 19.5c1.3-3 3.6-4.5 6-4.5s4.7 1.5 6 4.5M17.5 8.5h5M20 6v5"/>',
+    hexa:'<path d="M12 3.5 19.2 7.8v8.4L12 20.5 4.8 16.2V7.8z"/><path d="M12 8.2l3.3 1.9v3.8L12 15.8l-3.3-1.9v-3.8z"/>',
+    chute:'<path d="M4.5 10.2a7.5 7.5 0 0 1 15 0c-2.5-1.2-5-1.2-7.5 0-2.5-1.2-5-1.2-7.5 0z"/><path d="M4.5 10.2 12 19.5l7.5-9.3M12 19.5v-8"/>',
+    rocket:'<path d="M12 3.5c2.9 2 4.4 5.4 4.4 8.8l-2 2.2H9.6l-2-2.2c0-3.4 1.5-6.8 4.4-8.8z"/><circle cx="12" cy="9.6" r="1.6"/><path d="M8.2 16.5 6.8 20M15.8 16.5 17.2 20"/>',
+    grid4:'<circle cx="8" cy="8" r="1.9" fill="currentColor" stroke="none"/><circle cx="16" cy="8" r="1.9" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.9" fill="currentColor" stroke="none"/><circle cx="16" cy="16" r="1.9" fill="currentColor" stroke="none"/>',
+    chevdown:'<path d="M6 9.5l6 6 6-6"/>',
+    check:'<path d="M5 12.5l4.3 4.3L19 7.5"/>'
+  };
+  return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+sw+'" stroke-linecap="round" stroke-linejoin="round">'+(P[n]||'')+'</svg>';
+}
+function hydrate(root){
+  (root||document).querySelectorAll('[data-ic]').forEach(el=>{
+    if (el.dataset.done) return;
+    const size = {mexc:23, markets:21, trade:21, futures:21, wallet:21, plus:26, mag:16, tg:22, dl:20, dots:20}[el.dataset.ic];
+    el.innerHTML = ic(el.dataset.ic, size);
+    el.dataset.done = 1;
+  });
+  (root||document).querySelectorAll('[data-av]').forEach(el=>{
+    if (el.dataset.done) return;
+    fillAv(el, el.dataset.av); el.dataset.done = 1;
+  });
+}
+/* 头像 */
+const AV = {
+  me:{g:['#2F6D7E','#12333D'], t:'T'},
+  bb:{g:['#7A2E4C','#251019'], t:'B'},
+  cp:{g:['#5B3B8E','#1B1133'], t:'C'},
+  lc:{g:['#7A5A2C','#26180B'], t:'陈'},
+  ob:'logo', mexc:'mexc'
+};
+function fillAv(el, uid){
+  const a = AV[uid];
+  el.classList.add('avx');
+  if (a==='logo'){
+    el.style.background = '#fff';
+    el.innerHTML = '<svg width="60%" height="60%" viewBox="0 0 24 24"><g fill="#2B5FF1"><rect x="4" y="7" width="2.6" height="10" rx="1.3"/><rect x="8.2" y="4" width="2.6" height="13" rx="1.3"/><rect x="12.4" y="8" width="2.6" height="12" rx="1.3"/><rect x="16.6" y="6" width="2.6" height="9" rx="1.3"/></g></svg><span class="ring"></span>';
+  } else if (a==='mexc'){
+    el.style.background = '#0B0E11';
+    el.style.border = '1px solid #2B5FF1';
+    el.innerHTML = '<span style="color:#2B5FF1">'+ic('mexc',16)+'</span><span class="ring"></span>';
+  } else {
+    el.style.background = 'radial-gradient(circle at 32% 28%, '+a.g[0]+', '+a.g[1]+' 78%)';
+    el.innerHTML = '<span>'+a.t+'</span><span class="ring"></span>';
+  }
+}
+function avx(uid, cls){ const e=document.createElement('span'); e.className='avx '+(cls||''); fillAv(e, uid); return e.outerHTML; }
+
+/* ====================== 数据 ====================== */
+const USERS = {
+  bb:{id:'bb', nick:'BullishBanter', type:'persona', fans:5221, bio:'专注主流币趋势与资金面复盘。观点仅供参考。'},
+  cp:{id:'cp', nick:'CryptoPainter', type:'persona', fans:3180, bio:'大家叫我"画家"，技术分析 + 量化视角。'},
+  ob:{id:'ob', nick:'链讯社', type:'persona', fans:8934, bio:'每天盯链上数据与 ETF 资金流。'},
+  lc:{id:'lc', nick:'老陈的合约日记', type:'real', years:3, fans:412, bio:'合约七年，记录每一笔交易。'},
+  me:{id:'me', nick:'Crypto_Tom', type:'real', years:3, fans:56, bio:'广场新用户，记录我的网格实盘。'}
+};
+const POSTS = {
+  p1:{id:'p1', au:'bb', time:'1小时前', en:true,
+    text:'$LAB empty! The market maker withdrew 8 million LAB shares in advance, smashing the board to unload; in just a few hours, it plunged 26% directly. Watch the funding rate before you catch the knife.',
+    zh:'$LAB 危险！做市商提前撤走 800 万枚 LAB 挂单，砸盘出货，几小时内直接暴跌 26%。想抄底的先看看资金费率再动手。',
+    coin:{s:'LAB', pct:'-3.26%', dir:'down', ico:'#9FE870'}, likes:231, cmts:1284, imgs:[]},
+  p2:{id:'p2', au:'ob', time:'1小时前',
+    text:'以太坊现货 ETF 昨日净流入 $72.7M，连续第 5 天净流入。机构在 $3,600 下方持续加仓，关注周线收盘位置。',
+    coin:{s:'ETH', pct:'+3.26%', dir:'up', ico:'#8C9EFF'}, likes:231, cmts:231, imgs:['eth']},
+  p3:{id:'p3', au:'lc', time:'3小时前',
+    text:'BTC 4 小时级别缩量整理，我把杠杆从 10x 降到 5x。行情没走出来之前，活着比什么都重要。',
+    coin:{s:'BTC', pct:'-0.64%', dir:'down', ico:'#F7931A'}, likes:208, cmts:44, imgs:[]},
+  p4:{id:'p4', au:'cp', time:'6小时前',
+    text:'$SOL 周线三连阳，但 RSI 顶背离初现。我的处理：现货拿住，合约仓位减半，等回踩 5 日线再补。',
+    coin:{s:'SOL', pct:'+5.47%', dir:'up', ico:'#B57BFF'}, likes:356, cmts:71, imgs:['chart']},
+  pNew:{id:'pNew', au:'bb', time:'刚刚',
+    text:'【热点】美国 7 月 CPI 同比 2.9% 低于预期，降息交易重启：$BTC 短时拉升 2.3%，山寨普涨。注意 21:30 初请数据前的回踩风险，不追高。',
+    coin:{s:'BTC', pct:'+2.31%', dir:'up', ico:'#F7931A'}, likes:12, cmts:3, imgs:[]},
+  pMine:{id:'pMine', au:'me', time:'刚刚', text:'',
+    coin:{s:'SOL', pct:'+5.47%', dir:'up', ico:'#B57BFF'}, likes:0, cmts:0, imgs:[]}
+};
+const MINE_TEXT = '今天 $SOL 网格第 17 次触发止盈，累计 +8.4%。把交易心得记在广场，比发推方便多了';
+const CMTS_P1 = [
+  {au:'lc', text:'做市商这波太狠了，我盯的另外两个小币也是同款走势。', time:'1小时前', likes:36, cmts:3},
+  {au:'bb', text:'祝好运，记得设好止损。', time:'48分钟前', likes:21, cmts:0, reply:true, author:true}
+];
+const SUGCOINS = [
+  {s:'SOL', full:'Solana', ico:'#B57BFF'}, {s:'BTC', full:'Bitcoin', ico:'#F7931A'},
+  {s:'ETH', full:'Ethereum', ico:'#8C9EFF'}, {s:'XRP', full:'Ripple', ico:'#4AA8FF'}, {s:'ADA', full:'Cardano', ico:'#4CC2FF'}
+];
+
+/* ====================== 状态 ====================== */
+const S = {
+  page:'feed', tab:'rec', view:'in', speed:1,
+  likes:new Set(), follows:new Set(['ob','cp']),
+  newInjected:false, published:false, mineState:null, personaReplied:false,
+  trans:{}, myCmts:{}, notifs:[], fb:{sel:null, done:false, closed:false},
+  detail:'p1', composer:{text:'', coin:null}, playing:false
+};
+const $ = id => document.getElementById(id);
+const fmt = n => n>=1000 ? '999+' : String(n);
+function tokenize(t){ return t.replace(/\$[A-Z]{2,6}/g, m=>'<span class="tk">'+m+'</span>'); }
+
+/* ====================== 日志 / 旁白 / toast ====================== */
+function log(msg, cls){
+  const d = new Date();
+  const ts = [d.getHours(),d.getMinutes(),d.getSeconds()].map(x=>String(x).padStart(2,'0')).join(':');
+  const ln = document.createElement('div');
+  ln.className = 'ln' + (cls?' '+cls:'');
+  ln.innerHTML = '<span class="ts">'+ts+'</span>'+msg;
+  $('log').appendChild(ln); $('log').scrollTop = 99999;
+}
+function clearLog(){ $('log').innerHTML=''; }
+function narr(ch, h){ $('narr').innerHTML = '<span class="ch">'+ch+'</span>'+h; }
+function toast(msg){
+  const t=$('toast'); t.textContent=msg; t.classList.add('on');
+  clearTimeout(t._tm); t._tm=setTimeout(()=>t.classList.remove('on'), 2400);
+}
+
+/* ====================== 页面切换 ====================== */
+function show(page){
+  ['home','feed','detail','composer','me','notif','outside','future'].forEach(p=>$('pg-'+p).classList.toggle('on', p===page));
+  S.page = page;
+  $('tabbar').classList.toggle('on', page==='home');
+  $('fab').style.display = (page==='feed' && S.view==='in') ? 'grid' : 'none';
+  if (page!=='feed') $('newpill').classList.remove('on');
+}
+function setView(v){
+  S.view = v;
+  $('view-badge').classList.toggle('guest', v==='out');
+  $('view-label').textContent = v==='in' ? 'APP 端内 · 已登录' : '端外浏览器 · 未登录访客';
+  if (v==='out'){ renderOutside(S.detail); show('outside'); }
+}
+
+/* ====================== Feed ====================== */
+function actIcons(p, pid){
+  const liked = S.likes.has(pid);
+  return '<div class="cacts">'
+    + '<span class="cact c1" onclick="event.stopPropagation();openDetail(\''+pid+'\')">'+ic('cmt',18)+' <span class="num">'+fmt(p.cmts + (S.myCmts[pid]?S.myCmts[pid].length:0) + ((pid==='pMine'&&S.personaReplied)?1:0))+'</span></span>'
+    + '<span class="cact c2 '+(liked?'liked':'')+'" onclick="event.stopPropagation();toggleLike(\''+pid+'\',this)">'+ic('thumb',18)+' <span class="num">'+fmt(p.likes+(liked?1:0))+'</span></span>'
+    + '<span class="cact share" onclick="event.stopPropagation();openShare(\''+pid+'\')">'+ic('redo',18)+'</span>'
+    + '</div>';
+}
+function imgEl(p){
+  if (!p.imgs.length) return '';
+  if (p.imgs[0]==='eth') return '<div class="cimg"><div class="img-eth"><svg width="92" height="92" viewBox="0 0 24 24"><g fill="#C9CED6"><path d="M12 2.5 6.2 12l5.8 3.4L17.8 12z" opacity=".95"/><path d="M12 16.6 6.2 13.2 12 21.5l5.8-8.3z" opacity=".7"/></g></svg></div></div>';
+  if (p.imgs[0]==='chart') return '<div class="cimg wide"><div class="img-chart"><svg viewBox="0 0 240 140" preserveAspectRatio="none"><polyline points="0,108 30,96 55,102 80,74 105,82 130,56 160,64 190,38 215,46 240,22" fill="none" stroke="#0ECB81" stroke-width="2.4"/><polyline points="0,108 30,96 55,102 80,74 105,82 130,56 160,64 190,38 215,46 240,22 240,140 0,140" fill="rgba(14,203,129,.10)" stroke="none"/></svg></div></div>';
+  return '';
+}
+function coinPill(c, pid){
+  return '<span class="coinpill" onclick="event.stopPropagation();gotoMarket(\''+c.s+'\')"><span class="cico" style="background:'+c.ico+'">'+c.s[0]+'</span>'+c.s+' <span class="pct '+c.dir+'">'+c.pct+'</span></span>';
+}
+function cardEl(pid){
+  const p = POSTS[pid], u = USERS[p.au];
+  const text = pid==='pMine' ? (p.text||MINE_TEXT) : p.text;
+  return '<div class="card" id="card-'+pid+'"><div class="crow">'+avx(p.au)
+    + '<div class="cmain">'
+    + '<div class="cauthor"><span class="nick">'+u.nick+'</span><span class="tdot">·</span><span class="time">'+p.time+'</span><span class="more">···</span></div>'
+    + '<div class="cbody" onclick="openDetail(\''+pid+'\')">'+tokenize(text)+'</div>'
+    + imgEl(p) + '<div>'+coinPill(p.coin,pid)+'</div>'
+    + actIcons(p, pid)
+    + '</div></div></div>';
+}
+function fbCardEl(){
+  if (S.fb.closed) return '';
+  const inner = S.fb.done
+    ? '<div class="fbdone">✓ 感谢反馈 · 7×24 小时内不再展示反馈卡</div>'
+    : '<div class="fbq">这些内容对你有帮助吗？</div>'
+      + '<div class="fbops"><button class="fbop'+(S.fb.sel==='y'?' sel':'')+'" id="fb-y" onclick="fbSel(\'y\')">'+ic('thumb',15)+'&nbsp;有帮助</button>'
+      + '<button class="fbop'+(S.fb.sel==='n'?' sel':'')+'" id="fb-n" onclick="fbSel(\'n\')"><span style="display:inline-block;transform:rotate(180deg)">'+ic('thumb',15)+'</span>&nbsp;没帮助</button></div>';
+  return '<div class="fbcard" id="fbcard"><div class="cauthor">'+avx('mexc','s28')+'<span class="nick" style="font-size:13.5px">MEXC</span><span class="tdot">·</span><span class="time" style="font-size:12px">内容满意度盲评</span><span class="more" onclick="fbClose()" style="letter-spacing:0">✕</span></div>'+inner+'</div>';
+}
+function renderFeed(){
+  const body = $('feed-body');
+  if (S.tab==='rec'){
+    let ids = [];
+    if (S.newInjected) ids.push('pNew');
+    if (S.published && S.mineState==='pub') ids.push('pMine');
+    ids = ids.concat(['p1','p2','p3','p4']);
+    let html = '';
+    ids.forEach((pid,i)=>{ html += cardEl(pid); if (i===1) html += fbCardEl(); });
+    html += '<div class="empty">— 快照 '+(S.newInjected?'snap_b2e4':'snap_a1f3')+' · cursor 分页 · 反馈卡 Demo 压缩为第 2 条后插入（PRD：每 15 条 1 张）—</div>';
+    body.innerHTML = html;
+  } else {
+    const fids = ['p1','p2','p4'].filter(pid=>S.follows.has(POSTS[pid].au));
+    let html = '<div class="fostrip">'
+      + [...S.follows].map(uid=>'<span class="fo">'+avx(uid,'s56')+'<span class="nm">'+USERS[uid].nick+'</span></span>').join('')
+      + '<span class="fo"><span class="avx s56" style="background:#1C2127">'+ic('dots',20)+'</span><span class="nm">管理</span></span></div>';
+    html += fids.length ? fids.map(cardEl).join('') : '<div class="empty">还没有关注的作者发帖</div>';
+    html += '<div class="empty">— 关注流按 submitted_at 倒序 · 仅已关注作者可见内容 —</div>';
+    body.innerHTML = html;
+  }
+  hydrate(body);
+}
+function switchTab(t){
+  S.tab = t;
+  $('ptab-rec').classList.toggle('on', t==='rec');
+  $('ptab-fo').classList.toggle('on', t==='fo');
+  log('GET /square/feed?tab='+(t==='rec'?'recommend':'following')+'&snapshot_id='+(t==='rec'?'snap_a1f3':'snap_f291')+'&cursor=0 → 200 ('+(t==='rec'?'86':'74')+'ms)', 'api');
+  renderFeed();
+}
+function consumeNew(){
+  $('newpill').classList.remove('on');
+  if (!S.newInjected && S._pendingNew){
+    S.newInjected = true; S._pendingNew = false;
+    log('点击提示 → 请求新快照 snap_b2e4 → 200 · Persona 新帖入流并回到顶部', 'api');
+    renderFeed(); $('pg-feed').scrollTop = 0;
+    const c = $('card-pNew'); if (c) c.classList.add('flash');
+  } else {
+    log('点击提示 → 替换新快照并回到顶部，重新起算 30s 轮询', 'api');
+    renderFeed(); $('pg-feed').scrollTop = 0; toast('已更新到最新内容');
+  }
+}
+function fbSel(v){ S.fb.sel = v; renderFeed(); }
+function fbClose(){ S.fb.closed = true; renderFeed(); log('反馈卡关闭：记录 feedback_closed_at，7×24h 内不再插入（H5 本地维护）', 'api'); }
+function fbSubmit(){
+  S.fb.done = true; renderFeed();
+  log('反馈 SDK：POST /feedback/submit {question_id:q_301, option_id:'+(S.fb.sel==='y'?'opt_yes':'opt_no')+'} → 200', 'api');
+  log('盲评口径：每类内容抽 30 条 × ≥2 名评审/周 · 目标综合分 ≥4.0', 'ops');
+}
+function gotoMarket(s){
+  log('跳转 '+s+' 行情页（复用 APP 既有行情能力，广场不自建行情）', 'api');
+  toast('→ 跳转 '+s+'/USDT 行情页（示意）');
+}
+function toggleLike(pid, el){
+  const on = !S.likes.has(pid);
+  on ? S.likes.add(pid) : S.likes.delete(pid);
+  log('POST /square/likes {content_id:'+pid+', action:'+(on?'like':'unlike')+'} → 乐观更新'+(on?'+1':'-1')+'，失败回滚（幂等）', 'api');
+  if (S.page==='detail') renderDetail(); else renderFeed();
+  const t = $(S.page==='detail'?'d-like':'card-'+pid);
+  if (t){ const icn = t.querySelector('.liked') || t; icn.classList.add('likepop'); }
+}
+
+/* ====================== 详情 ====================== */
+function openDetail(pid){
+  S.detail = pid; renderDetail(); show('detail');
+  log('GET /square/posts/'+pid+' → 200 · 正文/作者快照/互动计数', 'api');
+  log('GET /market/quote?symbol_id='+POSTS[pid].coin.s+' → 24h '+POSTS[pid].coin.pct+'（详情页调既有行情能力）', 'api');
+  log('GET /square/comments?post='+pid+'&cursor=0 → 200（独立游标分页）', 'api');
+}
+function renderDetail(){
+  const p = POSTS[S.detail], u = USERS[p.au];
+  const followed = S.follows.has(u.id);
+  const translated = !!S.trans[S.detail];
+  const text = S.detail==='pMine' ? (p.text||MINE_TEXT) : (p.en && translated ? p.zh : p.text);
+  const liked = S.likes.has(p.id);
+  let cms = '';
+  if (S.detail==='p1'){
+    cms = CMTS_P1.map((c,i)=>{
+      const cu = USERS[c.au];
+      return '<div class="cm'+(c.reply?' reply':'')+'">'+avx(c.au, c.reply?'s24':'s28')
+        + '<div class="cmm"><div class="cmau"><span class="n2">'+cu.nick+'</span>'+(c.author?'<span class="chip-author">作者</span>':'')+'<span class="more">···</span></div>'
+        + '<div class="cmtx">'+c.text+'</div>'
+        + '<div class="cmft"><span>'+c.time+'</span><span style="color:var(--blue);margin-left:8px">查看翻译</span><span class="rgt"><span>'+ic('cmt',14)+' '+(c.cmts||'')+'</span><span>'+ic('thumb',14)+' '+c.likes+'</span></span></div>'
+        + '</div></div>'
+        + (c.author ? '<div class="showmore"><i>──</i>展开 118 条回复</div>' : '');
+    }).join('');
+  }
+  if (S.detail==='pMine' && S.personaReplied){
+    cms += '<div class="cm hl" id="persona-reply">'+avx('bb','s28')
+      + '<div class="cmm"><div class="cmau"><span class="n2">BullishBanter</span><span class="more">···</span></div>'
+      + '<div class="cmtx">网格在震荡市确实香。提醒一句：$SOL 波动率抬升时记得把区间上移，别让单边行情把你甩下车 👍</div>'
+      + '<div class="cmft"><span>刚刚</span><span class="rgt"><span>'+ic('cmt',14)+'</span><span>'+ic('thumb',14)+' 2</span></span></div></div></div>';
+  }
+  (S.myCmts[S.detail]||[]).forEach(c=>{
+    cms += '<div class="cm">'+avx('me','s28')
+      + '<div class="cmm"><div class="cmau"><span class="n2">Crypto_Tom</span><span class="more">···</span></div>'
+      + '<div class="cmtx">'+c+'</div>'
+      + '<div class="cmft"><span>刚刚</span><span class="rgt"><span>'+ic('cmt',14)+'</span><span>'+ic('thumb',14)+' 0</span></span></div></div></div>';
+  });
+  const cmCount = p.cmts + (S.myCmts[S.detail]?S.myCmts[S.detail].length:0) + ((S.detail==='pMine'&&S.personaReplied)?1:0);
+  $('pg-detail').innerHTML =
+    '<div class="dhead"><span class="aic" onclick="backToFeed()">'+ic('back')+'</span><span class="spacer"></span><span class="aic" id="d-share" onclick="openShare(\''+p.id+'\')">'+ic('redo',21)+'</span><span class="aic">'+ic('dots',21)+'</span></div>'
+    + '<div class="dt-author">'+avx(p.au)+'<div class="am"><div class="nick">'+u.nick+'</div><div class="sub">'+fmt(u.fans+(followed&&u.type==='persona'&&u.id==='bb'?1:0))+' 粉丝</div></div>'
+    + (u.id!=='me' ? '<button class="followbtn'+(followed?' on':'')+'" id="d-follow" onclick="toggleFollow(\''+u.id+'\')">'+(followed?'已关注':'关注')+'</button>' : '')
+    + '</div>'
+    + '<div class="dt-body">'+tokenize(text)+'</div>'
+    + (p.en ? '<span class="translink" id="d-trans" onclick="toggleTrans()">'+ic('globe',16)+(translated?'查看原文':'查看翻译')+'</span>' : '')
+    + '<div style="padding:2px 16px 0">'+coinPill(p.coin,p.id)+'</div>'
+    + '<div class="dt-time num">19:40 · 2026/08/13</div>'
+    + '<div class="dt-disc">免责声明：以上内容为用户观点，不构成任何投资建议。数字资产价格波动较大，请审慎评估风险。<u>查看条款</u></div>'
+    + (cms || '<div class="empty">暂无评论，来抢沙发</div>')
+    + '<div style="height:8px"></div>'
+    + '<div class="replybar"><span class="rin" id="d-reply">回复…</span>'
+    + '<span class="ric '+(liked?'liked':'')+'" id="d-like" onclick="toggleLike(\''+p.id+'\')">'+ic('thumb',19)+' <span class="num">'+fmt(p.likes+(liked?1:0))+'</span></span>'
+    + '<span class="ric">'+ic('cmt',19)+' <span class="num">'+fmt(cmCount)+'</span></span></div>';
+  hydrate($('pg-detail'));
+}
+function backToFeed(){ show('feed'); renderFeed(); log('返回来源页：恢复页签、滚动位置与已加载页数（H5 页面级临时态）', 'api'); }
+function toggleTrans(){
+  const pid = S.detail;
+  if (!S.trans[pid]){
+    log('POST /content/translate {content_id:'+pid+', target:zh} → 200（机翻能力方 · 仅手动触发，不保存偏好）', 'api');
+    S.trans[pid] = true;
+  } else S.trans[pid] = false;
+  renderDetail();
+}
+function toggleFollow(uid){
+  const on = !S.follows.has(uid);
+  on ? S.follows.add(uid) : S.follows.delete(uid);
+  log('POST /square/relations {target:'+uid+', action:'+(on?'follow':'unfollow')+'} → 200 · 关系变更从下一次首屏请求生效', 'api');
+  toast(on ? '已关注，TA 的内容将进入你的关注流' : '已取消关注');
+  renderDetail();
+}
+function addComment(pid, text){
+  (S.myCmts[pid] = S.myCmts[pid] || []).push(text);
+  log('POST /square/comments {post:'+pid+', request_id:req_'+Math.random().toString(16).slice(2,6)+'} → 201 · 状态=已发布', 'api');
+  if (S.page==='detail') renderDetail();
+  toast('发送成功');
+}
+
+/* ====================== 发布器 ====================== */
+function openComposer(){
+  show('composer'); S.composer = {text:'', coin:null};
+  renderEd(); $('coinsug').style.display='none';
+  log('进入发布器：正文 1–500 字形簇 · 币种 ≤3 · 图片 ≤4（单张 ≤10MB）', 'api');
+}
+function closeComposer(){ show('feed'); renderFeed(); }
+function renderEd(){
+  const t = S.composer.text;
+  $('ed-text').innerHTML = t ? tokenize(t)+'<span class="caret"></span>' : '<span class="ph">分享你的观点…</span><span class="caret"></span>';
+  $('ed-cnt').textContent = 500 - [...t].length;
+  $('btn-post').classList.toggle('rdy', !!t.trim());
+  $('ed-attach').innerHTML = S.composer.coin ? coinPill(S.composer.coin, '') : '';
+}
+function showCoinSug(){
+  $('coinsug').innerHTML = SUGCOINS.map(c=>
+    '<div class="sr" id="sug-'+c.s+'" onclick="pickSug(\''+c.s+'\')"><span class="cico2" style="background:'+c.ico+'">'+c.s[0]+'</span><span class="tkr">$'+c.s+'</span><span class="fn">'+c.full+'</span></div>').join('');
+  $('coinsug').style.display='block';
+}
+function pickSug(s){
+  const c = SUGCOINS.find(x=>x.s===s);
+  S.composer.text = S.composer.text.replace(/\$$/, '$'+s+' ');
+  S.composer.coin = {s:s, pct: s==='SOL'?'+5.47%':'+0.00%', dir:'up', ico:c.ico};
+  $('coinsug').style.display='none';
+  renderEd();
+  log('币种关联：$'+s+'（提交稳定 symbol_id 列表，≤3 个）', 'api');
+}
+function submitPost(){
+  if (!S.composer.text.trim()) return;
+  POSTS.pMine.text = S.composer.text.trim();
+  S.published = true; S.mineState = 'pending';
+  log('POST /square/posts {request_id:req_7b2c} → 201 · 状态=待发布审核（重复点击复用同一 request_id，幂等）', 'api');
+  toast('发布成功，审核后展示');
+}
+function buildKb(){
+  const rows = [['q','w','e','r','t','y','u','i','o','p'],['a','s','d','f','g','h','j','k','l']];
+  let h = '<div class="sugrow"><span>我</span><span style="color:#5E6673">|</span><span>的</span><span style="color:#5E6673">|</span><span>是</span></div>';
+  rows.forEach(r=>{ h += '<div class="krow">'+r.map(k=>'<span class="k">'+k+'</span>').join('')+'</div>'; });
+  h += '<div class="krow"><span class="k fn">⇧</span>'+['z','x','c','v','b','n','m'].map(k=>'<span class="k">'+k+'</span>').join('')+'<span class="k fn">⌫</span></div>';
+  h += '<div class="krow"><span class="k fn">123</span><span class="k sp">空格</span><span class="k fn">换行</span></div>';
+  h += '<div class="brow"><span>😊</span><span>🎤</span></div>';
+  $('kb').innerHTML = h;
+}
+
+/* ====================== 我的主页 ====================== */
+function openMyProfile(){
+  show('me'); renderMe();
+  log('GET /square/users/me → 200 · 资料来自 UC（头像/昵称/简介，本人视角含审核中内容）', 'api');
+}
+function renderMe(){
+  const u = USERS.me;
+  let postArea = '';
+  if (S.published){
+    postArea = cardEl('pMine');
+    if (S.mineState==='pending')
+      postArea += '<div class="notice" id="me-notice"><span class="nico">'+ic('info',17)+'</span>内容审核中，当前仅你自己可见。通过后将对所有人展示（状态由服务端返回）。</div>';
+  } else {
+    postArea = '<div class="empty">暂无内容，点右下角 ＋ 发布第一条帖子</div>';
+  }
+  $('pg-me').innerHTML =
+    '<div class="pf-head"><span class="aic" onclick="backToFeed()">'+ic('back')+'</span><span class="spacer" style="flex:1"></span><span class="aic">'+ic('edit',21)+'</span></div>'
+    + '<div class="pf-top">'+avx('me','s84')
+    + '<div class="pf-name">'+u.nick+'</div>'
+    + '<div class="pf-bio">'+u.bio+'</div>'
+    + '<div class="pf-chip">已加入 MEXC '+u.years+' 年</div>'
+    + '<div class="pf-stats"><span><b>12</b>关注</span><span><b>'+u.fans+'</b>粉丝</span></div></div>'
+    + '<div class="pf-tab"><span>帖子</span></div>'
+    + postArea;
+  hydrate($('pg-me'));
+}
+
+/* ====================== 通知 ====================== */
+function pushNotif(n){
+  S.notifs.unshift(n);
+  $('notif-dot').classList.add('on');
+  log('GET /square/notifications?snapshot_id=snap_n77 → 未读 '+S.notifs.filter(x=>!x.read).length+'（结构化通知 · 红点）', 'api');
+}
+function openNotif(){
+  show('notif'); renderNotif();
+  log('进入通知列表：快照批量已读，红点按快照口径消失', 'api');
+}
+function renderNotif(){
+  let items = S.notifs.map((n,i)=>'<div class="nt'+(n.read?' read':'')+'" id="nt-'+i+'" onclick="clickNotif('+i+')"><span class="bdot2"></span>'
+    + '<span class="nico">'+ic(n.icon||'cmt',18)+'</span>'
+    + '<div class="nm"><div class="n1"><b>'+USERS[n.au].nick+'</b> '+n.act+'</div><div class="n2">'+n.preview+'</div></div>'
+    + '<span class="ntime">'+n.time+'</span></div>').join('');
+  if (!items) items = '<div class="empty">暂无通知</div>';
+  $('pg-notif').innerHTML = '<div class="nthead"><span class="aic" onclick="backToFeed()">'+ic('back')+'</span><span class="t">通知</span><span style="font-size:10.5px;color:var(--text-3)">快照批量已读</span></div>' + items;
+  hydrate($('pg-notif'));
+}
+function clickNotif(i){
+  const n = S.notifs[i]; n.read = true;
+  if (!S.notifs.some(x=>!x.read)) $('notif-dot').classList.remove('on');
+  log('通知跳转 → 目标内容定位（'+n.target+'）', 'api');
+  openDetail(n.target);
+  setTimeout(()=>{ const el=$('persona-reply'); if(el) el.scrollIntoView({behavior:'smooth', block:'center'}); }, 250);
+}
+
+/* ====================== APP 首页（最新入口设计） ====================== */
+function renderHome(){
+  $('pg-home').innerHTML =
+    '<div class="hm-pull" id="hm-pull"><span class="mx">'+ic('mexc',30)+'</span><span>下拉进入广场 Square</span><span style="color:var(--text-3)">'+ic('chevdown',15)+'</span></div>'
+    + '<div class="apphead"><span class="aic">'+ic('person')+'</span><span class="aic">'+ic('scan')+'</span><div class="search">'+ic('mag',16)+'<span>PUNT</span></div><span class="aic">'+ic('headset')+'</span><span class="aic">'+ic('msg')+'</span></div>'
+    + '<div class="hm-asset"><div class="k">总资产 ⌃</div><div class="row"><span class="v num">510.21</span><span class="u">USDT ▾</span><span class="spark"><svg width="96" height="30" viewBox="0 0 96 30"><polyline points="0,22 10,18 18,20 26,12 34,15 44,8 54,12 64,6 74,10 84,4 96,7" fill="none" stroke="#4A80FF" stroke-width="1.8"/></svg></span></div></div>'
+    + '<div class="hm-btns"><button class="dep">充值</button><button class="trd">交易</button></div>'
+    + '<div class="hm-grid">'+[['gift','$8000'],['crown','VIP'],['ingot','TradFi'],['uplus','邀请返佣'],['hexa','MX 专区'],['chute','AirDrop+'],['rocket','Kickstarter'],['grid4','更多']].map(g=>'<span class="g"><span class="gic">'+ic(g[0],22)+'</span>'+g[1]+'</span>').join('')+'</div>'
+    + '<div class="hm-pgdots"><i class="on"></i><i></i></div>'
+    + '<div class="hm-stock"><div class="sh">股票 🔥</div><div class="r1"><span class="nv">N</span><b>NVDA</b><span style="color:var(--up);font-weight:700">+4.28%</span><svg width="46" height="16" viewBox="0 0 46 16"><polyline points="0,12 8,9 15,11 22,6 30,8 38,3 46,5" fill="none" stroke="#0ECB81" stroke-width="1.5"/></svg><span class="gau"><b>64%</b><br>看多情绪</span></div>'
+    + '<div class="r2"><div class="c"><div class="k2">原油</div><div class="n2">OIL(WTI)</div><div class="p2" style="color:var(--up)">+2.01%</div></div><div class="c"><div class="k2">加密货币</div><div class="n2">BTC</div><div class="p2" style="color:var(--down)">-1.35%</div></div><div class="c"><div class="k2">贵金属</div><div class="n2">GOLD(XAUT)</div><div class="p2" style="color:var(--up)">+11.02%</div></div></div></div>'
+    + '<div class="hm-strip"><span class="hm-pager">1/7</span><span class="st">要闻 ✦</span><span class="st on" id="strip-square" onclick="enterSquare()">Square</span><span class="st">智选</span><span class="st">活动</span><span class="st">公…</span><span class="chev">'+ic('chevdown',15)+'</span></div>'
+    + '<div style="padding:10px 16px 20px; color:var(--text-3); font-size:11.5px">↑ 入口二：首页内容流 Square 页签 · 入口一：顶部下拉手势</div>';
+  hydrate($('pg-home'));
+}
+function goHome(){ show('home'); }
+function enterSquare(){ show('feed'); renderFeed(); log('首页内容流 Square 页签 → 进入广场（入口二）', 'api'); }
+function pullToSquare(){
+  const g = $('ghost'), home = $('pg-home');
+  g.style.left = '187px'; g.style.top = '110px'; g.classList.add('show');
+  home.style.transition = 'transform .5s ease';
+  setTimeout(()=>{ g.style.top = '320px'; home.style.transform = 'translateY(64px)'; }, T(260));
+  setTimeout(()=>{
+    hideGhost(); home.style.transform = ''; home.style.transition = '';
+    show('feed'); renderFeed(); $('pg-feed').scrollTop = 0;
+    log('下拉手势 → 直达广场（入口一 · Square 独立页）', 'api');
+    log('GET /square/feed?tab=recommend&snapshot_id=snap_a1f3&cursor=0 → 200 · 8 帖（86ms）', 'api');
+  }, T(1150));
+}
+
+/* ====================== 二期概念预览 ====================== */
+function renderFuture(){
+  $('pg-future').innerHTML =
+    '<div class="sqhead"><span class="aic" onclick="show(\'feed\');renderFeed()">'+ic('back')+'</span><span class="sqtitle">广场</span><span class="futchip">2.0 概念预览</span><span class="spacer"></span></div>'
+    + '<div class="topics">'+[['#美股合约夜','1.2万 讨论'],['#SOL生态','8,432 讨论'],['#CPI数据','6,210 讨论'],['#新币首发','4,087 讨论']].map((t,i)=>'<span class="topic" id="topic-'+i+'" onclick="toast(\'→ 话题聚合页（示意）\')"><span class="tn">'+t[0]+'</span><div class="tc">'+t[1]+'</div></span>').join('')+'</div>'
+    + '<div class="card" id="fut-poll"><div class="crow">'+avx('ob')+'<div class="cmain">'
+    +   '<div class="cauthor"><span class="nick">链讯社</span><span class="tdot">·</span><span class="time">刚刚</span><span class="futchip" style="margin-left:auto">2.0</span></div>'
+    +   '<div class="cbody">今晚 CPI 落地，'+tokenize('$BTC')+' 能否守住 $118,000？亮出你的观点：</div>'
+    +   '<div class="pollbox" id="pollbox"><div class="pollq">BTC 24h 收盘 ≥ $118,000？</div>'
+    +     '<div class="pollopt up" id="poll-up" onclick="votePoll(\'up\')"><div class="fill"></div><div class="lab"><span>看涨 Yes</span><span class="pctv">62%</span></div></div>'
+    +     '<div class="pollopt dn" onclick="votePoll(\'dn\')"><div class="fill"></div><div class="lab"><span>看跌 No</span><span class="pctv">38%</span></div></div>'
+    +     '<div class="pollmeta"><span id="pvn">3,427 人已投</span><span>· 08:00 UTC 自动结算</span><span>· 预测不可撤回</span><span>· 计入准确率</span></div></div>'
+    + '</div></div></div>'
+    + '<div class="card" id="fut-verify"><div class="crow">'+avx('lc')+'<div class="cmain">'
+    +   '<div class="cauthor"><span class="nick">老陈的合约日记</span><span class="vbadge">'+ic('check',11)+'近30日预测准确率 68%</span><span class="futchip" style="margin-left:auto">2.0</span></div>'
+    +   '<div class="cbody">预测：'+tokenize('$ETH')+' 本周收上 $3,800。理由：ETF 连续净流入 + 周线站稳 5 周均线。</div>'
+    +   '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><span class="lockchip">🔒 已锁仓 · 周日 24:00 自动开封</span><span class="lockchip">42 次预测 · 平台真实成交数据背书</span></div>'
+    + '</div></div></div>'
+    + '<div class="card" id="fut-setup"><div class="crow">'+avx('bb')+'<div class="cmain">'
+    +   '<div class="cauthor"><span class="nick">BullishBanter</span><span class="tdot">·</span><span class="time">5分钟前</span><span class="futchip" style="margin-left:auto">2.0</span></div>'
+    +   '<div class="cbody">'+tokenize('$SOL')+' 回踩 5 日线企稳，波段多单计划如下，仓位 ≤10%：</div>'
+    +   '<div class="setup"><div class="sh2">⚡ Trade Setup · 做多 $SOL</div>'
+    +     '<div class="rows"><div class="c"><div class="k">入场</div><div class="v num">185.20</div></div><div class="c"><div class="k">止盈 TP</div><div class="v num" style="color:var(--up)">198.00</div></div><div class="c"><div class="k">止损 SL</div><div class="v num" style="color:var(--down)">178.50</div></div><div class="c"><div class="k">杠杆</div><div class="v num">3x</div></div></div>'
+    +     '<button class="go" id="setup-go" onclick="copySetup()">一键复制下单</button></div>'
+    + '</div></div></div>'
+    + '<div class="card" id="fut-why"><div class="crow">'+avx('mexc')+'<div class="cmain">'
+    +   '<div class="cauthor"><span class="nick">MEXC</span><span class="tdot">·</span><span class="time">30分钟前</span><span class="futchip" style="margin-left:auto">2.0</span></div>'
+    +   '<div class="whyc"><div class="wh"><span class="azt">✦ 为什么在动</span><span style="color:var(--text-2);font-size:11px;font-weight:400">$BTC +2.31% 自动触发</span></div>'
+    +     '<div class="evs"><div class="ev"><div class="ek">📰 新闻</div><div class="evv">美 7 月 CPI 低于预期，降息预期升温</div></div><div class="ev"><div class="ek">🐋 巨鲸</div><div class="evv">1h 净流入 $41M（链上监测）</div></div><div class="ev"><div class="ek">🌡 情绪</div><div class="evv">贪婪指数 72（+9），资金费率转正</div></div><div class="ev"><div class="ek">📍 关键位</div><div class="evv">突破 $118,000 前高压力位</div></div></div>'
+    +     '<div style="font-size:12px;color:var(--text-1);margin-top:9px">一句话：宏观利好 + 巨鲸吸筹共振，短线动能偏多，注意 21:30 数据前回踩。</div>'
+    +     '<div class="acts2"><button onclick="toast(\'已加自选（示意）\')">加自选</button><button class="pri" onclick="toast(\'→ 跳转 BTC/USDT 下单（示意）\')">交易 BTC</button></div></div>'
+    + '</div></div></div>'
+    + '<div class="empty">— 二期概念示意 · 依据《广场 X 回帖用户研究报告》P0/P1 机会点 · 非 1.0 交付范围 —</div>';
+  hydrate($('pg-future'));
+}
+function votePoll(v){
+  const box = $('pollbox'); if (!box || box.classList.contains('voted')) return;
+  box.classList.add('voted');
+  box.querySelector('.pollopt.up .fill').style.width = '62%';
+  box.querySelector('.pollopt.dn .fill').style.width = '38%';
+  $('pvn').textContent = '3,428 人已投（含你）';
+  log('POST /square/polls/vote {option:'+v+'} → 200 · 到期自动结算并计入个人准确率（概念示意）', 'api');
+  toast('已投票 · 08:00 UTC 自动结算');
+}
+function copySetup(){
+  log('Copy Setup → 入场/TP/SL/杠杆预填至下单面板（概念示意 · 北极星：内容→下单转化）', 'api');
+  toast('参数已预填至 SOL/USDT 下单面板（示意）');
+}
+
+/* ====================== 分享 / 端外 ====================== */
+let sharePid = 'p1';
+function openShare(pid){
+  sharePid = pid;
+  const p = POSTS[pid], u = USERS[p.au];
+  const text = pid==='pMine' ? (p.text||MINE_TEXT) : p.text;
+  $('poster').innerHTML = '<div class="mlogo"><span style="color:#2B5FF1">'+ic('mexc',26)+'</span><span class="wm">MEXC</span></div>'
+    + '<div class="pa">'+avx(p.au,'s28')+u.nick+'</div>'
+    + '<div class="pt">'+tokenize(text)+'</div>'
+    + '<div class="pqr"><div class="qr"></div><div class="qt">长按识别二维码<br>查看帖子详情与更多观点</div></div>';
+  hydrate($('poster'));
+  $('share-mask').classList.add('on'); $('share-sheet').classList.add('on');
+  log('打开分享面板：海报复用已审核正文与作者快照，无分享写接口（本地生成）', 'api');
+}
+function closeShare(){ $('share-mask').classList.remove('on'); $('share-sheet').classList.remove('on'); }
+function shareTo(ch){
+  closeShare();
+  log('调用容器分享 → '+ch+' · 链接 mexc.com/square/post/'+sharePid+'?share_id=sh_9f2c&utm=square_share（归因参数 → 分享归因 DAU/交易额）', 'api');
+  toast('已通过 '+ch+' 分享（链接携带归因参数）');
+}
+function renderOutside(pid){
+  const p = POSTS[pid], u = USERS[p.au];
+  const text = pid==='pMine' ? (p.text||MINE_TEXT) : p.text;
+  $('pg-outside').innerHTML =
+    '<div class="webbar"><span class="aic" style="color:var(--text-3)">'+ic('back',18)+'</span><span class="url">mexc.com/square/post/'+pid+'?share_id=sh_9f2c&utm=square_share</span><span class="aic" style="color:var(--text-3)">'+ic('redo',16)+'</span></div>'
+    + '<div class="dt-author" style="margin-top:6px">'+avx(p.au)+'<div class="am"><div class="nick">'+u.nick+'</div><div class="sub">'+p.time+'</div></div></div>'
+    + '<div class="dt-body">'+tokenize(text)+'</div>'
+    + '<div style="padding:2px 16px 0">'+coinPill(p.coin,pid)+'</div>'
+    + '<div class="dt-disc" style="margin-top:10px">免责声明：以上内容为用户观点，不构成任何投资建议。</div>'
+    + '<div class="cacts" style="padding:6px 16px" id="out-acts">'
+    + '<span class="cact c1" id="out-cmt" onclick="guestBlock(\'评论\')">'+ic('cmt',18)+' <span class="num">'+fmt(p.cmts)+'</span></span>'
+    + '<span class="cact c2" id="out-like" onclick="guestBlock(\'点赞\')">'+ic('thumb',18)+' <span class="num">'+fmt(p.likes)+'</span></span>'
+    + '<span class="cact share" onclick="guestBlock(\'关注\')">＋ 关注作者</span></div>'
+    + (pid==='p1' ? CMTS_P1.map(c=>'<div class="cm">'+avx(c.au,'s28')+'<div class="cmm"><div class="cmau"><span class="n2">'+USERS[c.au].nick+'</span></div><div class="cmtx">'+c.text+'</div></div></div>').join('') : '')
+    + '<div style="height:20px"></div>'
+    + '<div class="openbar">'+avx('mexc','s28')+'<span class="om">打开 MEXC App<br>查看完整广场与实时行情</span><button class="ob" onclick="guestBlock(\'打开App\')">在 App 中打开</button></div>';
+  hydrate($('pg-outside'));
+}
+function guestBlock(act){
+  log('端外互动拦截：'+act+' → NOT_LOGIN，拉起登录（不创建任何记录）', 'api');
+  $('login-mask').classList.add('on'); $('login-sheet').classList.add('on');
+}
+function doLogin(){
+  $('login-mask').classList.remove('on'); $('login-sheet').classList.remove('on');
+  log('登录成功 → 回到原目标页并保留上下文，不自动执行原动作', 'ok');
+  S.view='in'; $('view-badge').classList.remove('guest'); $('view-label').textContent='APP 端内 · 已登录';
+  openDetail(sharePid);
+  toast('已登录，回到帖子详情');
+}
+function cancelLogin(){
+  $('login-mask').classList.remove('on'); $('login-sheet').classList.remove('on');
+  log('取消登录 → 保持端外只读浏览', 'api');
+}
+$('btn-login').onclick = doLogin;
+$('ch-tg').onclick = ()=>shareTo('Telegram');
+$('ch-x').onclick = ()=>shareTo('X');
+$('ch-save').onclick = ()=>{ closeShare(); toast('海报已保存到相册（示意）'); };
+$('ch-more').onclick = ()=>shareTo('系统分享');
+$('btn-post').onclick = ()=>{ if($('btn-post').classList.contains('rdy')){ submitPost(); setTimeout(()=>{openMyProfile();},600); } };
+$('share-mask').onclick = closeShare;
+/* ====================== 反馈卡：点选即提交（设计稿无独立提交钮） ====================== */
+function fbSel(v){
+  S.fb.sel = v; renderFeed();
+  setTimeout(()=>{
+    S.fb.done = true; renderFeed();
+    log('反馈 SDK：POST /feedback/submit {question_id:q_301, option_id:'+(v==='y'?'opt_yes':'opt_no')+'} → 200', 'api');
+    log('盲评口径：每类内容抽 30 条 × ≥2 名评审/周 · 目标综合分 ≥4.0', 'ops');
+  }, 550);
+}
+
+/* ====================== 虚拟手指 + 播放引擎 ====================== */
+const AP = {on:false, paused:false, timer:null, queue:[], idx:0, done:null, chLabel:'旁白', master:false};
+function T(ms){ return Math.max(50, Math.round(ms * S.speed)); }
+function ghostTo(el, cb){
+  const g = $('ghost'), scr = $('screen');
+  if (!el){ cb && cb(); return; }
+  const r = el.getBoundingClientRect(), sr = scr.getBoundingClientRect();
+  g.style.left = (r.left - sr.left + r.width/2) + 'px';
+  g.style.top = (r.top - sr.top + Math.min(r.height/2, 40)) + 'px';
+  g.classList.add('show');
+  AP.timer = setTimeout(()=>{ g.classList.remove('tapping'); void g.offsetWidth; g.classList.add('tapping'); cb && cb(); }, T(560));
+}
+function hideGhost(){ $('ghost').classList.remove('show'); }
+
+function runSteps(steps, onDone){
+  clearTimeout(AP.timer);
+  AP.queue = steps; AP.idx = 0; AP.on = true; AP.paused = false; AP.done = onDone || null;
+  setPlayUI(true); stepNext();
+}
+function stepNext(){
+  if (!AP.on || AP.paused) return;
+  if (AP.idx >= AP.queue.length){
+    AP.on = false; hideGhost();
+    if (AP.done) AP.done(); else setPlayUI(false);
+    return;
+  }
+  const s = AP.queue[AP.idx];
+  if (s.narr) narr(AP.chLabel, s.narr);
+  const go = ()=>{
+    if (AP.idx < AP.queue.length && AP.queue[AP.idx] === s) AP.idx++;
+    if (s.log) s.log.forEach(l=>log(l[0], l[1]));
+    if (s.do) s.do();
+    AP.timer = setTimeout(stepNext, T(s.wait||1000));
+  };
+  if (s.tap){
+    const el = typeof s.tap==='function' ? s.tap() : $(s.tap);
+    if (el && el.scrollIntoView) try{ el.scrollIntoView({behavior:'smooth', block:'nearest'}); }catch(e){}
+    setTimeout(()=>ghostTo(el, go), 120);
+  } else go();
+}
+function togglePause(){
+  if (!AP.on) return;
+  if (!AP.paused){ AP.paused = true; clearTimeout(AP.timer); $('btn-pause').innerHTML = '▶ 继续（空格）'; narr(AP.chLabel, '<b>已暂停</b> — 讲到位了再按空格继续。'); }
+  else { AP.paused = false; $('btn-pause').innerHTML = '⏸ 暂停（空格）'; stepNext(); }
+}
+function stopPlay(){
+  AP.on = false; AP.paused = false; AP.master = false; clearTimeout(AP.timer); hideGhost(); setPlayUI(false);
+  narr('旁白', '已停止。点 <b>▶ 一键完整演示</b> 重新开始，或点任意章节卡单独播放。');
+}
+function setPlayUI(on){
+  $('btn-pause').disabled = !on; $('btn-stop').disabled = !on; $('btn-master').disabled = on;
+  if (!on){ $('btn-pause').innerHTML = '⏸ 暂停（空格）'; }
+  S.playing = on;
+}
+document.addEventListener('keydown', e=>{
+  if (e.code==='Space' && AP.on){ e.preventDefault(); togglePause(); }
+});
+
+/* 打字机 */
+function typeText(full, done){
+  let i = 0;
+  const iv = setInterval(()=>{
+    if (!AP.on || AP.paused){ clearInterval(iv); return; }
+    i++;
+    S.composer.text = full.slice(0, i);
+    renderEd();
+    if (full[i-1]==='$'){ clearInterval(iv); showCoinSug(); return; }
+    if (i>=full.length){ clearInterval(iv); done && done(); }
+  }, T(60));
+}
+function typeAppend(rest){
+  let i = 0; const base = S.composer.text;
+  const iv = setInterval(()=>{
+    if (!AP.on || AP.paused){ clearInterval(iv); return; }
+    i++;
+    S.composer.text = base + rest.slice(0, i);
+    renderEd();
+    if (i>=rest.length) clearInterval(iv);
+  }, T(60));
+}
+
+/* ====================== 重置 ====================== */
+function resetFeedState(){
+  S.tab='rec'; $('ptab-rec').classList.add('on'); $('ptab-fo').classList.remove('on');
+  S.view='in'; $('view-badge').classList.remove('guest'); $('view-label').textContent='APP 端内 · 已登录';
+  $('newpill').classList.remove('on');
+  ['share-mask','share-sheet','login-mask','login-sheet'].forEach(id=>$(id).classList.remove('on'));
+  show('feed'); renderFeed();
+}
+function fullReset(){
+  S.likes = new Set(); S.follows = new Set(['ob','cp']);
+  S.newInjected = false; S._pendingNew = false;
+  S.published = false; S.mineState = null; S.personaReplied = false;
+  S.trans = {}; S.myCmts = {}; S.notifs = []; $('notif-dot').classList.remove('on');
+  S.fb = {sel:null, done:false, closed:false};
+  S.composer = {text:'', coin:null};
+  POSTS.pMine.text = '';
+  document.querySelectorAll('.preset').forEach(x=>x.classList.remove('on','done'));
+  resetFeedState();
+}
+
+/* ====================== 六个章节剧本 ====================== */
+function chA(){
+  return [
+    {narr:'进入广场默认落在 <b>For You 推荐流</b>——由服务端按「可见·已发布·可推荐」返回快照，H5 只消费结果。',
+     log:[['—— ② 双 Feed 浏览 + 反馈卡 ——','ok'],['入口准入：广场服务端调用受众标签 SDK 决定入口显隐（H5 不接人群 SDK）','api'],['GET /square/feed?tab=recommend&snapshot_id=snap_a1f3&cursor=0 → 200 · 8 帖（86ms）','api'],['行情字段：Feed 的 change_24h 由广场接口聚合返回，H5 不自行计算','api']],
+     do:()=>{ S.fb={sel:null,done:false,closed:false}; S.trans={}; resetFeedState(); }, wait:3400},
+    {narr:'切到<b>关注流</b>：仅已关注作者内容，按 submitted_at 倒序；顶部是关注作者速览与管理入口。', tap:'ptab-fo', do:()=>switchTab('fo'), wait:2800},
+    {narr:'回到推荐流。', tap:'ptab-rec', do:()=>switchTab('rec'), wait:1600},
+    {narr:'列表里穿插 <b>MEXC 官方反馈卡</b>——对应成功指标「内容满意度盲评 ≥4.0」。点选即提交，7×24 小时内不再打扰。',
+     do:()=>{ const el=$('fbcard'); if(el) el.scrollIntoView({behavior:'smooth', block:'center'}); }, wait:2000},
+    {tap:'fb-y', do:()=>fbSel('y'), wait:2200},
+    {narr:'首屏成功后每 <b>30 秒轮询</b> has_new，只报有无、不报数量；命中后出现单枚提示，不叠加、不自动刷新。',
+     log:[['30s 轮询：GET /square/feed/has_new → true','api']],
+     do:()=>{ $('pg-feed').scrollTop=0; $('newpill').classList.add('on'); }, wait:2400},
+    {tap:'newpill', do:()=>consumeNew(), wait:2000},
+  ];
+}
+function chB(){
+  return [
+    {narr:'<b>AI 冷启动链路</b>：大数据把热点/推文素材写入内容池 → Agent 选题并以 Persona 人设生成内容。看左侧日志。',
+     log:[['—— ③ AI 冷启动 · Persona 内容供给 ——','ok'],['[大数据 → 内容池] 热点素材入池：「美 7 月 CPI 低于预期」（推文源+行情异动，已打标签，含有效期）','agent']],
+     do:()=>{ S.newInjected=false; S._pendingNew=false; resetFeedState(); }, wait:2800},
+    {log:[['[Agent] 选题命中 → persona=BullishBanter（按人设/兴趣标签匹配）→ 生成中文草稿','agent']], wait:2200},
+    {narr:'生成后进<b>双重审核</b>：Agent 机审全量过滤，存疑才入人工队列（24h 处置率 ≥90%）。', log:[['[Agent] 机审：文本合规 ✓（敏感词/涉政/夸大收益过滤，213ms）','agent']], wait:2200},
+    {log:[['[人审] 抽检放行 ✓（存疑才入人工队列 · 24h 处置率 ≥90%）','ops']], wait:2000},
+    {log:[['POST /square/posts (persona) → 201 · 已发布 · 进入推荐流候选','api'],['30s 轮询：has_new → true','api']],
+     do:()=>{ S._pendingNew=true; $('newpill').classList.add('on'); }, narr:'Persona 新帖已发布，Feed 收到新内容提示。', wait:2200},
+    {tap:'newpill', do:()=>consumeNew(), narr:'置顶这条就是 <b>Agent 生成、双审通过后进流</b>的 Persona 帖。冷启动期 Persona 与真实用户共同供给内容。', wait:3000},
+  ];
+}
+function chC(){
+  return [
+    {narr:'<b>创作闭环</b>：点右下角 ＋ 进入发布器。', log:[['—— ④ 发布 → 审核 → 上线 ——','ok']],
+     do:()=>{ S.published=false; S.mineState=null; S.personaReplied=false; POSTS.pMine.text=''; resetFeedState(); }, wait:1400},
+    {tap:'fab', do:()=>openComposer(), wait:1800},
+    {narr:'自动输入中——输入 <b>$</b> 即触发币种联想（设计稿交互），正文上限 500 字实时计数。',
+     do:()=>typeText('今天 $'), wait:2200},
+    {tap:()=>$('sug-SOL'), do:()=>pickSug('SOL'), wait:1800},
+    {do:()=>typeAppend('网格第 17 次触发止盈，累计 +8.4%。把交易心得记在广场，比发推方便多了'), wait:3400},
+    {narr:'点<b>发布</b>：生成 request_id 幂等提交，重复点击不会发两条；未保存离开会有确认弹窗。', tap:'btn-post',
+     do:()=>submitPost(), wait:2000},
+    {do:()=>openMyProfile(), narr:'发布后进入<b>待发布审核</b>：我的主页可见状态提示，其他人看不到——「审核中仅自己可见」。', wait:2600},
+    {log:[['[Agent] 机审：文本合规 ✓ 图片合规 ✓（213ms）','agent']], wait:2000},
+    {log:[['[人审] 存疑抽检入队 → 人工放行 ✓（口径：24h 处置率 ≥90%，Demo 压缩为秒级）','ops']], wait:2000},
+    {narr:'审核通过 → <b>已发布</b>，下一次 Feed 首屏快照对所有人可见。创作闭环完成。',
+     log:[['状态流转：待发布审核 → 已发布 · 下一次 Feed 首屏快照可见','api']],
+     do:()=>{ S.mineState='pub'; renderMe(); toast('✓ 你的帖子已通过审核'); }, wait:2800},
+  ];
+}
+function chD(){
+  return [
+    {narr:'<b>详情互动</b>：打开一条英文帖。', log:[['—— ⑤ 详情互动 + 手动翻译 ——','ok']],
+     do:()=>{ S.trans={}; S.likes.delete('p1'); S.follows.delete('bb'); S.myCmts.p1=[]; resetFeedState(); }, wait:1600},
+    {tap:()=>$('card-p1'), do:()=>openDetail('p1'), wait:2400},
+    {narr:'<b>手动翻译</b>：仅用户点击才请求机翻能力方，不做自动翻译、不保存偏好。', tap:'d-trans', do:()=>toggleTrans(), wait:2600},
+    {narr:'<b>点赞乐观更新</b>：先变态再等接口，失败回滚；同对象请求中锁定防连点。', tap:'d-like', do:()=>toggleLike('p1'), wait:2200},
+    {narr:'评论走 request_id 幂等，发送成功插入可见位置；若待审核则仅自己可见。', tap:'d-reply',
+     do:()=>addComment('p1','感谢提醒，刚把杠杆降下来了'), wait:2400},
+    {narr:'<b>关注作者</b>：关系变更从下一次首屏请求生效——马上回关注流验证。', tap:'d-follow', do:()=>toggleFollow('bb'), wait:2200},
+    {tap:()=>document.querySelector('#pg-detail .dhead .aic'), do:()=>backToFeed(), wait:1500},
+    {tap:'ptab-fo', do:()=>switchTab('fo'), narr:'BullishBanter 已进入你的<b>关注流</b>和关注速览，闭环验证 ✓', wait:2800},
+    {tap:'ptab-rec', do:()=>switchTab('rec'), wait:1200},
+  ];
+}
+function chE(){
+  return [
+    {narr:'<b>AI 回应链路</b>：你刚发布的帖子，Agent 发布后自动创建<b>优质判定</b>任务。',
+     log:[['—— ⑥ AI 优质判定 + Persona 回应 ——','ok']],
+     do:()=>{
+       if (!S.published){ POSTS.pMine.text = MINE_TEXT; S.published = true; S.mineState='pub'; log('（前置：自动完成 ③ 的发帖并过审）','ops'); }
+       S.mineState='pub'; S.personaReplied=false;
+       if (S.notifs.length && S.notifs[0].target==='pMine') S.notifs.shift();
+       openDetail('pMine');
+     }, wait:2400},
+    {log:[['[Agent] 优质判定：post_mine 待判定 → 优质（决定进推荐流 + 是否触发回应）','agent']], wait:2400},
+    {log:[['[Agent] 回应任务创建 PENDING · persona=BullishBanter · 回应草稿已生成','agent']], narr:'判定<b>优质</b> → Agent 以匹配的 Persona 人设生成<b>回应草稿</b>。', wait:2400},
+    {log:[['[运营] 待确认回应队列 → 运营确认发布（24h 时效内有效，过期转 EXPIRED）','ops']], narr:'草稿进<b>运营待确认队列</b>——AI 不直接说话，运营确认后才发布。', wait:2400},
+    {do:()=>{
+       S.personaReplied = true; renderDetail();
+       log('POST /square/comments (persona 回应) → 201 · 通知任务生成','api');
+       pushNotif({au:'bb', act:'评论了你的帖子', preview:'网格在震荡市确实香。提醒一句：$SOL 波动率抬升时记得把区间上移…', time:'刚刚', target:'pMine', icon:'cmt'});
+       toast('BullishBanter 评论了你的帖子');
+       setTimeout(()=>{ const el=$('persona-reply'); if(el) el.scrollIntoView({behavior:'smooth', block:'center'}); }, 300);
+     },
+     narr:'Persona 回应落地（高亮评论）+ 右上角消息<b>红点</b>。冷启动期真实用户也能获得高质量互动。', wait:3200},
+    {tap:()=>document.querySelector('#pg-detail .dhead .aic'), do:()=>backToFeed(), wait:1500},
+    {tap:'msg-entry', do:()=>openNotif(), narr:'<b>结构化通知</b>：未读红点、快照批量已读。', wait:2400},
+    {tap:'nt-0', do:()=>clickNotif(0), narr:'点通知<b>直达目标内容</b>——定位到 Persona 的回应。⑤ 完成。', wait:3000},
+  ];
+}
+function chF(){
+  return [
+    {narr:'<b>增长闭环</b>：从帖子发起分享。', log:[['—— ⑦ 分享 → 端外 → 拉登录 ——','ok']],
+     do:()=>{ S.view='in'; openDetail('p1'); }, wait:1800},
+    {tap:'d-share', do:()=>openShare('p1'), narr:'分享海报复用<b>已审核正文</b>与作者快照 + 二维码；渠道走容器既有分享能力。', wait:3000},
+    {tap:'ch-tg', do:()=>shareTo('Telegram'), narr:'链接自动携带<b>归因参数</b>（share_id/utm）→ 支撑「分享归因 DAU / 归因交易额」两个观察指标。', wait:2800},
+    {do:()=>{ setView('out'); log('GET /square/public/posts/p1 → 200 · 未登录仅返回公开帖子与已发布评论（只读）','api'); },
+     narr:'被分享者<b>端外打开</b>：只读落地页，正文/评论可看，底部常驻「在 App 中打开」。', wait:3000},
+    {tap:'out-like', do:()=>guestBlock('点赞'), narr:'端外任何互动 → <b>NOT_LOGIN 拦截</b>，拉起登录；不创建任何记录。', wait:2600},
+    {tap:'btn-login', do:()=>doLogin(), narr:'登录成功回到原页面、保留上下文、<b>不自动补发操作</b>。分享→端外→登录的增长闭环 ✓', wait:3000},
+  ];
+}
+
+function chENTRY(){
+  return [
+    {narr:'最新入口方案：广场升级为<b>首页级流量入口</b>——① 首页顶部<b>下拉直达广场</b>；② 首页内容流的 <b>Square 页签</b>。双入口，取代原行情页签方案。',
+     log:[['—— ① 入口 · 首页下拉进广场（最新设计稿口径） ——','ok'],['APP 容器：入口显隐与登录态透传 · 受众标签 SDK 决定灰度人群','api']],
+     do:()=>{ show('home'); $('pg-home').scrollTop = 0; }, wait:3600},
+    {narr:'虚拟手指<b>下拉</b>——从首页一个手势直达广场，路径最短、心智最像「刷内容」。', do:()=>pullToSquare(), wait:3200},
+    {narr:'广场为<b>独立页</b>：左上返回首页，右上头像=我的主页、铃铛=通知；推荐/关注为下划线页签。入口讲完，进入功能主线。', wait:2800},
+  ];
+}
+function chFUT(){
+  return [
+    {narr:'最后是<b>二期概念预览</b>（非 1.0 范围）。方向不拍脑袋——来自 X 征集贴 <b>255 条回帖</b>的全量用研：投票/竞猜 53 条、归因卡 43 条、可验证战绩 21 条。',
+     log:[['—— ⑧ 二期 · 概念预览（依据用研 P0/P1 机会点） ——','ok'],['[用研] X #MEXCVoice 征集贴 255 条回帖 · 去噪后 206 条有效想法','ops']],
+     do:()=>{ renderFuture(); show('future'); $('pg-future').scrollTop = 0; }, wait:3600},
+    {narr:'<b>话题聚合</b>：#话题 把讨论从时间流升级为事件流，运营可围绕热点造节；复用内容池已有标签词表，增量主要在前端。',
+     tap:()=>$('topic-0'), do:()=>{},
+     log:[['话题：复用后台内容标签词表 · 聚合页 = 标签检索 + 热度排序','api']], wait:3000},
+    {narr:'<b>帖内投票 / 涨跌竞猜</b>：观点亮出来、到期自动结算、准确率累计——只做积分与声誉，不涉真金对赌，控住合规边界。',
+     tap:'poll-up', do:()=>votePoll('up'),
+     log:[['投票：预测不可撤回 + 自动结算 + 准确率累计（用研 53 条 · 最普及的互动想象）','ops']], wait:3400},
+    {narr:'<b>可验证战绩</b>：预测锁仓 + 平台真实成交数据背书，治「截图党」。这是纯社交平台做不出的壁垒，也是用研里唯一带负面情绪的诉求。',
+     do:()=>{ const el=$('fut-verify'); if(el) el.scrollIntoView({behavior:'smooth', block:'center'}); },
+     log:[['战绩：预测锁仓 / 准确率徽章 · MEXC 独有真实成交数据（用研 21 条）','ops']], wait:3400},
+    {narr:'<b>帖内一键复制下单</b>：入场/TP/SL 结构化、一键预填下单面板——内容到交易一步直达。广场的北极星指标：<b>内容 → 下单转化</b>。',
+     tap:'setup-go', do:()=>copySetup(),
+     log:[['Copy Setup：帖内参数结构化 → 预填下单框（用研 22 条 · 全部与归因绑定出现）','api']], wait:3400},
+    {narr:'<b>「为什么在动」归因卡</b>：新闻/巨鲸/情绪/关键位四证据 + 一句话 + 顺手下单，可分享进广场——复用智能 K 线、AI 快讯既有 AI 能力，成本低、确定性高。二期故事收尾 ✓',
+     do:()=>{ const el=$('fut-why'); if(el) el.scrollIntoView({behavior:'smooth', block:'center'}); },
+     log:[['归因卡：复用智能K线/AI快讯/发现2.0 既有 AI 能力搬进广场语境（用研 43 条）','agent']], wait:4000},
+  ];
+}
+
+/* ====================== 章节调度 ====================== */
+const CHAPTERS = {ENTRY:chENTRY, A:chA, B:chB, C:chC, D:chD, E:chE, F:chF, FUT:chFUT};
+const CH_LABELS = {ENTRY:'章节① · 入口：首页下拉进广场', A:'章节② · 双 Feed 与反馈卡', B:'章节③ · AI 冷启动供给', C:'章节④ · 发布审核闭环', D:'章节⑤ · 详情互动与翻译', E:'章节⑥ · AI 优质判定与回应', F:'章节⑦ · 分享增长闭环', FUT:'章节⑧ · 二期概念预览'};
+function playChapter(sc, then){
+  document.querySelectorAll('.preset').forEach(x=>x.classList.toggle('on', x.dataset.sc===sc));
+  AP.chLabel = CH_LABELS[sc];
+  runSteps(CHAPTERS[sc](), ()=>{
+    const el = document.querySelector('.preset[data-sc="'+sc+'"]');
+    if (el) el.classList.add('done');
+    if (then) then();
+    else { setPlayUI(false); narr(AP.chLabel, '本章播放完毕 ✓ 可点其他章节，或点 <b>▶ 一键完整演示</b> 完整过一遍。'); }
+  });
+}
+function playAll(){
+  fullReset(); clearLog();
+  log('════ 一键完整演示开始（8 章：入口 → 1.0 六大主线 → 二期预览） ════', 'ok');
+  AP.master = true;
+  const order = ['ENTRY','A','B','C','D','E','F','FUT'];
+  let i = 0;
+  const next = ()=>{
+    if (!AP.master) return;
+    if (i >= order.length){
+      AP.master = false; setPlayUI(false);
+      narr('演示完毕', '八章跑完：<b>入口</b>（首页下拉双入口）→ <b>1.0 六大主线</b>（设计稿还原）→ <b>二期概念</b>（话题/投票/战绩/一键下单，依据 255 条回帖用研）。底层取数链路全程滚动在事件日志里，可任意单章重放。');
+      log('════ 一键完整演示结束 ════', 'ok');
+      return;
+    }
+    playChapter(order[i++], ()=>{ AP.timer = setTimeout(next, T(900)); });
+  };
+  next();
+}
+document.querySelectorAll('.preset').forEach(b=>{
+  b.onclick = ()=>{ stopPlay(); playChapter(b.dataset.sc, null); };
+});
+document.querySelectorAll('#seg-speed button').forEach(b=>{
+  b.onclick = ()=>{ document.querySelectorAll('#seg-speed button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); S.speed = parseFloat(b.dataset.v); };
+});
+
+/* ====================== 启动 ====================== */
+document.head.insertAdjacentHTML('beforeend', '<style>#pg-composer .kb{bottom:0}#pg-composer .ed-tools{bottom:202px}</style>');
+$('sb-icons').innerHTML =
+  '<svg width="18" height="11" viewBox="0 0 18 11" fill="#fff"><rect x="0" y="7" width="3" height="4" rx="0.8"/><rect x="4.7" y="5" width="3" height="6" rx="0.8"/><rect x="9.4" y="2.5" width="3" height="8.5" rx="0.8"/><rect x="14.1" y="0" width="3" height="11" rx="0.8"/></svg>'
+  + '<svg width="16" height="12" viewBox="0 0 16 12" fill="#fff"><path d="M8 10.8 5.8 8.4a3.2 3.2 0 0 1 4.4 0z"/><path d="M8 4.9c1.6 0 3 .6 4.1 1.7L10.9 7.9a4 4 0 0 0-5.8 0L3.9 6.6A5.9 5.9 0 0 1 8 4.9z"/><path d="M8 1c2.7 0 5.2 1 7.1 2.8l-1.2 1.3A8.3 8.3 0 0 0 8 2.9a8.3 8.3 0 0 0-5.9 2.2L.9 3.8A10.2 10.2 0 0 1 8 1z"/></svg>'
+  + '<svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="21" height="11" rx="3.2" stroke="rgba(255,255,255,.45)" fill="none"/><rect x="2.2" y="2.2" width="17.6" height="7.6" rx="2" fill="#fff"/><path d="M23 4v4c1-.3 1.7-1 1.7-2S24 4.3 23 4z" fill="rgba(255,255,255,.45)"/></svg>';
+buildKb();
+hydrate(document);
+renderFeed();
+renderHome();
+show('home');
+log('Demo v3 就绪 · 前端 PRD v1.6 + 后台 PRD v1.9 + 最新入口设计 + 二期概念（X 用研 255 条回帖）', 'ok');
+log('口径：H5 不自行计算状态/排序/可见性，全部消费服务端返回', 'api');
+</script>
+</body>
+</html>

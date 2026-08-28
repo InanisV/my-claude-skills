@@ -7,21 +7,119 @@ description: 把产品需求（PRD 链接或口头描述）按 MEXC 房规拆成
 
 把一个需求变成一组符合房规的 Jira 卡。**铁律：先出建单计划表 → 用户明确确认 → 才执行创建；绝不静默建卡，绝不删卡，绝不碰机器人管的字段。**
 
-执行器：`scripts/jira_cards.py`（零依赖，读 `~/.claude/settings.json` env 里的 `JIRA_URL`/`JIRA_PERSONAL_TOKEN`，或同名环境变量）。
+执行器：`scripts/jira_cards.py`（零依赖）。token 读取顺序：环境变量 `JIRA_PAT`（旧名 `JIRA_PERSONAL_TOKEN` 同样识别）→ `~/.jira-card-kit/token` 文件（权限 600，由 `setup-token` 写入）→ `~/.claude/settings.json` 的 `env` 块（**已降级的兼容位，只为不打断老配置**：读到就打 WARN 催迁移，别再往那儿放新 token；AI 禁止打开该文件，见下方禁令①）。
+
+## 🔴 职责分离契约（先读这条，它管住下面所有步骤）
+
+**skill = 行动规划与需求匹配；`scripts/jira_cards.py` = 唯一的认证与 Jira 通道。**
+你（AI）负责判断"这个需求该建哪几张卡、该问哪些问题、该跑哪条命令"；凡是**取密钥、存密钥、带着密钥说话**的事一律交给工具——你不需要、也不允许看到密钥。
+
+### 三重禁令（AI 绝对禁止 · 无例外、无"就这一次"）
+
+1. **禁止读 / 写 / `ls` / `cat` `~/.jira-card-kit/` 目录下的任何文件**——`token` 和 `config.json` **都算**。
+   配置的读写也经工具：读用 `config-show`、写用 `config-set <键> <值>`（只合并那一个键）；工具跑不动就**引导用户自己去改那个文件**，不许你代劳。
+   **也禁止以排查 jira 为目的读 `~/.claude/settings.json`**——那是老配置的兼容位，可能还躺着一份有效 PAT，而它恰恰是你因**别的**任务（加 permission / 设 env / 配 hook）会整份打开的文件。要判断认证配没配好，**只跑 `whoami` 看结果**，绝不打开该文件；工具自己会在读到那份老 token 时打 WARN 催迁移，你照着转告用户即可。因其它任务确需改 settings.json 时，用 Edit **定点改目标键**，别整份 Read。
+   🔴 **「网络不通」也不是读 settings.json 的理由（2026-08 补，实测被击穿）**：连不上 Jira（VPN 没开 / 公司网络不通 / 超时）跟凭据配得对不对**没有任何关系**——**实测**：一次 VPN 未通，模型在排障压力下整份读了 `~/.claude/settings.json`"看看配置对不对"，把还躺在兼容位里的 PAT 读进了会话记录（它自己汇报的）。工具的网络错误文案里已写死同一条禁令，**照它转给用户、等他确认 VPN 后重试**即可。**排障压力不解禁**：任何"先看一眼配置"的念头，答案都是 `whoami`，不是打开文件。
+2. **禁止以任何方式直连 Jira API**——`curl` / `httpie` / `python -c` 内联 `urllib` / 任何 HTTP 客户端都算。一切请求必须经 `jira_cards.py`；它没有的能力就是"本 kit 不做"，请用户去 Jira 界面处理。
+3. **禁止在本工具之外构造或传递 `Authorization` 头**（含任何形式的 `Bearer <token>` 拼装）。
+
+> 为什么这么严：token 只要经过你的手（读进上下文、拼进命令行、回显进报错），就等于进了会话记录 / 日志 / 进程表，**撤销重建是唯一补救**。把"取密钥"整个折进工具，你就永远没有"不小心看到"的机会。所以也**别自己拼 `osascript`、别自己写那个文件**——密码框的唯一持有者是 `setup-token`，本文档只引用命令、不给脚本原文。
+
+### 需求 → 工具命令 匹配表（你的活儿是选对这一行）
+
+| 你要干什么 | 跑哪条 |
+|-----------|-------|
+| **配置认证**（首跑 / token 过期被撤销） | `python3 scripts/jira_cards.py setup-token` |
+| **验证连通**、拿当前用户名 | `python3 scripts/jira_cards.py whoami` |
+| **查受益方选项**（线上实时） | `python3 scripts/jira_cards.py beneficiary-options APP`（或 `WEB`） |
+| **校验计划** + 出计划表 | `python3 scripts/jira_cards.py validate <plan.json>` |
+| **建卡** | `python3 scripts/jira_cards.py apply <plan.json>` |
+| **纠错受益方**（已建卡填错了） | `python3 scripts/jira_cards.py set-beneficiary "<线上选项原文>" <卡号…> [--apply]` |
+| 读本机配置（`product_role` / `tracking_assignees` / `last_epic`） | `python3 scripts/jira_cards.py config-show` |
+| 写本机配置（只合并一个键） | `python3 scripts/jira_cards.py config-set <键> <值>` |
+| 查 assignee 的 username | `python3 scripts/jira_cards.py user-search <关键词>` |
+| 废弃自动化多长出来的卡（评论留痕、不删卡） | `python3 scripts/jira_cards.py discard <卡号…> --reason "去向说明" [--apply]` |
+
+**表里没有的需求＝本 kit 不做**（删卡、改其它字段、改状态…）：请用户去 Jira 界面处理，**不要**自己找别的路子实现。
+
+### token 铁律（并入本契约，不再另立一节）
+
+1. **绝不让用户把 token 发进对话**（贴进聊天窗 = 永久落进会话记录/日志，等于泄露）。
+   **用户真贴了 → 立刻告诉他：这个 token 已经进入会话记录，去 Jira 把它撤销（Revoke）、重建一个**，再走下面的流程；别装作没看见、更别拿它去调接口。
+2. **token 只经工具的 `setup-token` 进文件**：工具内部弹系统原生密码框（输入显示为圆点），取回的文本进程内直写落盘并 `chmod 600`——不进 stdout、不进 argv、不进 shell 历史、不进对话。**你能看到的只有 `OK` / `CANCELLED`。**
+3. 不要把 token 写进 `config.json`（那个文件会被转发给同事）；`config-set` 也会拒收凭据类键。
+4. 🔴 **AI 严禁以任何方式读取 token 明文**：不许读那个 token 文件（`cat`/`head`/`echo` 一律禁止）、不许从系统任何中转区取用它、不许在任何输出或报错里回显它。**验证只看 `whoami` / `setup-token` 的结果**，不看 token 本身。
+
+### 认证失败（HTTP 401 / 403）怎么办
+
+工具会打出统一那句：`❌ Jira 认证失败（HTTP 4xx）：token 可能已过期或被撤销。请更新密钥：运行 python3 scripts/jira_cards.py setup-token 重新配置…`
+
+🔴 **收到它你只做一件事：把它原样转告用户、请他更新 token**（他愿意就直接跑 `setup-token` 带他配一遍）。
+**禁止**去读 / `ls` / `cat` `~/.jira-card-kit/` 下任何文件"看看 token 还在不在、是不是空的、是不是权限不对"；**禁止**改用 `curl` 直连 Jira"试试是不是网络问题"——这两条正是三重禁令要挡的旁路。403 还可能是**该操作超出他的 Jira 权限**（不是 token 坏了），一并说给他听。
+
+### 首跑没有 token 时的配置流程（macOS 主路 · 用户全程不碰终端）
+
+用户里很多人不会用终端。**主路是 AI 帮他开页面、他只做"点创建 + 复制 + 粘进弹窗"三个动作，弹框与落盘由工具自己完成——AI 只负责跑那一条命令。**
+
+**第 1 步 · AI 直接帮他打开建 token 的页面**（不要只给链接让他自己找）：
+
+```bash
+open "https://jira.mxcb.xyz/secure/ViewProfile.jspa?selectedTab=com.atlassian.pats.pats-plugin:jira-user-personal-access-tokens"
+```
+
+（2026-08-27 实测可达：这台实例装的是 Atlassian 内置 PAT 插件，这个 URL 直接落在 Personal Access Tokens 标签页；没登录会先跳登录页，登完自动回到该页。打不开就退一步 `open "https://jira.mxcb.xyz/secure/ViewProfile.jspa"` 让他点 **Personal Access Tokens** 标签。）
+
+**第 2 步 · 告诉用户只做两件事**（原样说给他听）：
+
+> 页面上点 **Create token**（名字随便填，比如 `jira-card-kit`）→ 生成后**点复制按钮把 token 复制走**（这个值只显示这一次，别关页面前先复制）→ 回来跟我说一声"复制好了"。
+> **别把它贴给我**，我不需要看到它。
+
+**第 3 步 · 用户说"复制好了"后，AI 跑这一条**（**只有这一条**——密码框在工具内部弹，AI 不碰、也不需要知道它长什么样）：
+
+```bash
+python3 scripts/jira_cards.py setup-token
+```
+
+它会：弹系统原生密码框（标题「Jira Token 配置」，输入显示为圆点）→ 取回的文本**进程内直写** `~/.jira-card-kit/token` 并 `chmod 600` → **自动接 `whoami` 验证**。按它的输出分支：
+
+- **`OK` + 「配置成功，当前用户：XXX」** → 配好了，直接继续建卡（验证工具已经替你做完，**别再单独跑一次 `whoami`**）。
+- **`CANCELLED`** → 用户点了取消或没填，什么都没写。问一句「刚才那个框取消了，再来一次？」，重跑本步。
+- **「token 已落盘，但验证没过（HTTP 401）」** → **不是让用户把 token 贴出来**，而是：「这个 token 好像不对（可能粘的时候少了几位，或者页面上那个已经失效了）。回到那个页面重新复制一次（或重新 Create 一个），我再跑一遍。」然后重跑本步。
+- **「这台机器弹不出系统密码框…」** → 工具已经把终端降级引导一并打出来了，**照它给的原样转给用户**（别自己另编一套、别代跑）。
+
+🔴 这条命令的 stdout 只会是 `OK` / `CANCELLED`——**token 不进 stdout、不进 argv、不进对话**。密码框归工具持有：**别自己拼 `osascript`、别自己写那个文件**（见职责分离契约的三重禁令）。
+
+### 降级链（工具自己会退，你只负责照着转达）
+
+| 情况 | 怎么做 |
+|------|-------|
+| **弹窗跑不起来**（无 GUI / 远程会话 / Codex 沙箱拦 `osascript`）| `setup-token` 会自己打印终端降级引导（`read -rs` 那条）并 exit 1——**把它原样给用户，让他自己在终端跑**，措辞是「如果你熟悉终端，跑一下这条」。别把它当默认、更别你代跑。 |
+| **Windows / Linux** | 同上：`setup-token` 判平台后直接打印同一条终端引导（Windows 在 WSL / Git Bash 里跑）。 |
+| 用户已经把 token 贴进对话 | 按 token 铁律 1 处理：**先让他去 Jira 撤销重建**，再走主路 |
+
+> Codex 注记：脚本调用在 Codex 下**单条裸跑**（沿用 lark-cli 铁律，别串管道/别包在复合命令里）。token 走普通文件，**不依赖系统钥匙串**——Codex 沙箱禁钥匙串是老坑，别往那儿引。
 
 ## 流程（按序执行，每步首次进入时读对应参考）
 
-1. **认证自检**：`python3 scripts/jira_cards.py whoami`。失败则引导用户按团队文档配 token（见 README 安装节），不要继续。
-2. **收集需求信息**：
+1. **认证自检**：`python3 scripts/jira_cards.py whoami`。
+   - 报「找不到 Jira token」→ 按上面「首跑配置流程」带用户配（**AI 开页面 + 跑 `setup-token`，用户只点创建、复制、粘贴；绝不收 token、绝不回显 token**），不要继续。
+   - 报「❌ Jira 认证失败（HTTP 401/403）」→ 按契约里的「认证失败怎么办」：**原样转告用户去更新 token**（或直接跑 `setup-token` 带他重配），**别去翻 `~/.jira-card-kit/`、别改用 curl 试**，也不要继续建卡。
+   - 报「连不上 jira.mxcb.xyz（…）——公司网络/VPN 通吗？」→ **网络问题，不是凭据问题**：把这条**原样转告用户，请他确认 VPN 后重试**；**禁止**为此读任何配置文件（`~/.claude/settings.json`、`~/.jira-card-kit/` 都不许），**禁止**改用 curl 直连"试试"（见三重禁令①的网络补充条）。用户没确认之前不要继续建卡。
+2. **收集需求信息**（🔴 **与 PRD 先后不限**：写 PRD 和建卡是同一个需求的两件事、**不分先后**——**开场不设任何前置，绝不要求用户"先去写 PRD"**；PRD 后补时把链接回填进卡描述即可）：
    - 输入是 lark PRD 链接且 `lark-cli` 可用 → 读 PRD 提取字段答案（提取映射见 [references/03-workflow.md](references/03-workflow.md)）；
-   - 无 PRD → 按 03-workflow 的问题清单向用户收集。
+   - 无 PRD → 按 03-workflow 的问题清单向用户收集，**口头需求描述就够建卡**。
    - 读 [references/01-card-model.md](references/01-card-model.md) 确定这个需求该建哪几张卡（标准包结构、机器人边界——很多卡和字段系统会自动生成，别重复建）。
-3. **一次性补齐提问**：只问无法推断的项（设计师人选、端范围、业务线标签、Epic、跨端依赖），能给默认值的都带默认值。禁止挤牙膏式追问。
-   🔴 **唯一例外——受益方 customfield_16706 是硬闸**：它决定人力成本记在哪个团队账上（定额消费、季末回溯审计），组织明令"谁收益填谁、不要想当然"。**必须由使用本 kit 的产品本人亲口确认，AI 才能代写**——不许给默认值、不许从 Epic/项目名/需求名推断、不许照抄主卡或相似卡（主卡自己也可能填错）。问法："这个需求做成后收益归谁？如果是产品自提，有没有业务方愿意埋单？"拿到答复后把确认人填进 `plan.meta.beneficiary_confirmed_by`、依据填进 `beneficiary_rationale`；**两者缺一 validate 直接报错、建不了卡**。判定规则见 [references/02-field-model.md](references/02-field-model.md) 红线节。
-4. **生成 plan.json**：字段值与 payload 形状严格按 [references/02-field-model.md](references/02-field-model.md)；文件放当前工作目录或临时目录。参考 `examples/plan-app-pair.json`（APP 双端）与 `examples/plan-web-story.json`（WEB 故事）。
-5. **校验并出计划表**：`python3 scripts/jira_cards.py validate <plan.json>`，把输出的计划表**连同「受益方确认」区块**原样展示给用户，**等用户明确说"确认/建吧"**。用户改哪就改哪，改完重新 validate。受益方那一段不许省略——它是最容易错、后果最实的字段。
+3. **一次性补齐提问**：只问无法推断的项（设计师人选、端范围、业务线标签、跨端依赖），能给默认值的都带默认值。禁止挤牙膏式追问。
+   ⚠️ **默认值不等于恒定值**（2026-08-27 抽样 7 位产品 97 张真卡，见 [references/04-field-survey.md](references/04-field-survey.md)）：**优先级、版本(fixVersions)、是否需要国际化、组件**这四项各人写法不一致，原先 kit 写死是把作者个人习惯当房规——现在做法是**照常带默认值，但在第 5 步的计划表里显示出来跟其它项一起确认**（并入同一轮，别新增提问回合）。
+   🔴 **首跑问一次、之后读 config 不再问**：先 `python3 scripts/jira_cards.py config-show` 看有没有 `product_role`（**这是读配置的唯一入口，别 cat 那个文件**）；没有就问**「你是 APP 产品线的，还是业务产品？」**→ 决定 `是否需要APP端产品介入`(cf_17100) 填 `已审核（APP产品选填）` 还是 `不需要（业务产品选填）`（抽样证明这跟需求内容无关、只跟填卡人身份有关）。拿到答复后用 **`python3 scripts/jira_cards.py config-set product_role app`**（或 `business`）写进去——工具只合并这一个键，别自己读出来改完再整份写回。
+   🔴 **两个例外是硬闸，没有默认值、每批必问、不许推断**：
+   - **受益方 customfield_16706**：它决定人力成本记在哪个团队账上（定额消费、季末回溯审计），组织明令"谁收益填谁、不要想当然"，**填错等于让别人替你的需求埋单**。**必须由使用本 kit 的产品本人亲口确认，AI 才能代写**——不许给默认值、不许从 Epic/项目名/需求名推断、不许照抄主卡或相似卡（主卡自己也可能填错）。流程：**先 `python3 scripts/jira_cards.py beneficiary-options APP`（或 WEB）实时拉线上选项**（本 kit 不内置受益方枚举——此 skill 全组产品共用、各人受益方不同，写死等于诱导错填）→ **把选项摆出来让产品亲选**（有 AskUserQuestion 这类结构化提问工具就列成选项让他点；选项多按前缀分组分批问；没有该工具就列清单、以问句收口等答复）→ 选中项**逐字**填进卡，确认人填 `plan.meta.beneficiary_confirmed_by`、依据填 `beneficiary_rationale`；**两者缺一 validate 直接报错、建不了卡**。线上选项拉不到 → **停下**，让用户从 Jira 建单界面把选项原文逐字抄来，**绝不放行近似值、绝不猜**。判定规则见 [references/02-field-model.md](references/02-field-model.md) 红线节。
+   - **Epic（史诗链接 customfield_10102）**：各产品挂的 Epic 不同，kit **不写死任何卡号**。建卡前必须问：**「这批卡挂哪个 Epic？（给卡号；不挂也可以）」**。⚠️ **Epic 常挂在别的项目下**（抽样里 APP 卡挂的都是 CONTRACT/SPOT/OPT 等业务项目的史诗），别只认 `APP-` 前缀；**且多数真卡本来就不挂 Epic，用户答"不挂"是正常答复，别追问**。配置里的 `last_epic`（`config-show` 读、`config-set last_epic <卡号>` 写）只能当**候选**展示（「上次挂的是 xxx，这批还挂它吗？」），**禁止沿用不问、禁止从主卡/历史/需求名推断**。validate 会拿卡号去线上验一次，不存在（404）直接拦住不建卡。
+4. **生成 plan.json**：字段值与 payload 形状严格按 [references/02-field-model.md](references/02-field-model.md)；文件放当前工作目录或临时目录。参考 `examples/plan-app-pair.json`（APP 双端）与 `examples/plan-web-story.json`（WEB 故事）。🔴 **本会话里已经有 PRD 链接的（刚用 prd-authoring-kit 发布的、或用户早先贴过的）→ 直接填进卡 description，别再要用户贴一遍**（见 03-workflow 步骤 3）。
+5. **校验并出计划表**：`python3 scripts/jira_cards.py validate <plan.json>`（会联网核对受益方选项与 Epic 卡号），把输出的计划表**连同「受益方确认」和「Epic 确认」两个区块**原样展示给用户，**等用户明确说"确认/建吧"**。用户改哪就改哪，改完重新 validate。这两段一段都不许省略——受益方是最容易错、后果最实的字段；Epic 挂错整批卡都要返工。收口那句里**顺带把降级过的默认值（优先级 / 版本 / 国际化 / 组件）点一遍**让用户扫一眼，别单开一轮问。
 6. **执行**：`python3 scripts/jira_cards.py apply <plan.json>`。部分失败时如实报告已建卡清单（结果在 `<plan>.result.json`，修正后重跑 apply 自动续传，已建的不会重复建）。
 7. **汇报**：把 apply 输出的卡链接清单整理给用户（可直接贴群）。提醒：机器人会在几分钟内自动补开发/测试负责人、埋点子任务等，不用管。
+8. 🔴 **收尾 · PRD 确认提问（强制——一个需求 PRD 和 Jira 卡两件事都要做，此问是闭环硬闸）**：本会话既没写过 PRD、用户也没说过不写 → 建卡汇报后**必须提问**：「这个需求的 PRD 写了吗？要我现在写吗？（卡号我会填进 PRD 的『需求Jira单』格）」——**有结构化提问工具就用**（Claude Code 用 AskUserQuestion，选项：现在写 / 已有 PRD（给链接我补卡描述） / 不用写），**没有的平台以问句结束回合等答复**，不许降级成顺带一句。免问仅两种：已写过 / 用户已明确说不写。🔴 **本机没装 prd-authoring-kit**（`~/.claude/skills/prd-authoring-kit` 与 `~/.agents/skills/prd-authoring-kit` 都不存在）→ **不问，静默省略**。
 
 ## 边界
 

@@ -1,13 +1,13 @@
 <!-- PRD Authoring Kit · © Noah Zhan (@noah.zhan) · 二次分发/衍生须保留署名，不得标榜为自己原创创作。LICENSE / NOTICE 见根目录。 -->
 # 埋点生成 —— 从 PRD 自动产出埋点表（读线上公参）
 
-> 填 PRD 的 **Data Requirements / 埋点** 章节。源自成熟的「PM 自动埋点填写机 V2.0」，并改成**读线上公参表**（不再硬编码）。产出：①PRD 内写一份埋点表（满足 nocode 准入）②另建一个 Lark Sheet 承载完整埋点表，链接贴回 PRD。
+> 填 PRD 的 **Data Requirements / 埋点** 章节。源自成熟的「PM 自动埋点填写机 V2.0」，并改成**读线上公参表**（不再硬编码）。产出：**PRD 内一份完整埋点表**（满足 nocode 准入，且是唯一真源）。🔴 **默认不另建子 Sheet**（2026-08 产品定，以 PRD 为准），仅当产品明确要求单独表时才建，见 §6。
 
 ## 第 0 步：先确认要不要埋点
 **写 PRD 前先问产品**："这个需求要不要埋点？" 不要 → PRD 只写「本需求无需埋点」（过 tracking 豁免、也过准入），**不生成表、不建子表**，本文件后续都跳过。要 → 才走下面流程。别默认就生成。
 
 ## 流程
-PRD → 抽独立 UI 对象 → 派生曝光/点击 → 匹配标准事件类型（Element/Resource/PageView）→ 挑公参（查线上公参表校验）→ 生成埋点表 → 写 PRD + 建子表并贴链接。
+PRD → 抽独立 UI 对象 → 派生曝光/点击 → 匹配标准事件类型（Element/Resource/PageView）→ 挑公参（查线上公参表校验）→ 生成埋点表 → 写进 PRD（默认不建子表）。
 
 ## 1. 抽独立 UI 对象（不是每个字段都埋）
 **判断法**："如果这个对象消失，从用户视角是少了一个**独立可识别对象**，还是只少了一个**数据/字段**？" 只是少字段 → 不抽。
@@ -42,7 +42,9 @@ PRD → 抽独立 UI 对象 → 派生曝光/点击 → 匹配标准事件类型
 
 ## 4. 公参：查**线上**公参表校验（不硬编码、不编造）
 线上公参字典（一次配置，随线上变化）：
-- Base(app_token)：`TbHVbdmxVaAYB8sR8o3ub1A1sCb` · Table：`tblmsp9qzMWVNmKF`（事件属性）
+- Base(app_token)：`TbHVbdmxVaAYB8sR8o3ub1A1sCb` · Table：`tblmsp9qzMWVNmKF`（事件属性）。该 app_token 是**资源定位符而非凭据**——调 API 另需本人 lark 授权、表仅公司租户可访问，落包无泄密面（2026-08-12 定案，勿再移除）。
+- **访问不了才降级**（无权限/非公司环境）：改用 ①环境变量 `LARK_TRACKING_BASE_URL` ②用户在对话里给过的公参表链接；都没有 → **跳过线上校验、不阻塞交付**——属性名按本节命名规范自查，交付简报注一句"公参未线上校验，请埋点同学过一眼属性名"。**绝不编造属性名。**
+- 表结构：事件属性表
 - 字段：`name`(公参英文键) / `cname`(中文名/说明) / `data_type`(STRING|NUMBER|BOOL|DATETIME|LIST)。共约 1574 条，是**全局公参词典**（校验 + 中文 + 类型来源），**不含"是否必传"、不含事件↔参数映射**。
 
 **用法**（先读 `lark-cli skills read lark-base` 拿准命令；查询而非全量拉，全量 ~2.6s/页很慢）：
@@ -66,29 +68,29 @@ PRD → 抽独立 UI 对象 → 派生曝光/点击 → 匹配标准事件类型
 - **PageView 极简**：`standard_PageView` 只带 `jira_id`（页面维度由采集 SDK 自动上报），不堆自定义属性；多页面可共用一个 PV 事件并在备注声明覆盖范围。
 - **格内写法**：「事件属性英文」列一格永远只有一个键（❌ 禁：`card_type / strategy_id`）；`/` 拼只用于**同一属性的多取值枚举**（如 button_name 的取值列）；属性值列用"代码枚举（中文注释）"或中文短语可读值，以与研发实现一致为准。
 - **是否必传只写 是/否**；【待确认】/【公参推荐】标注放「属性值」或「备注」列。
-- **截图列**：具备截图能力时（来源与编排见 `06` 元素表「原型」格贴图），埋点对象的截图**与该 US-R 原型图同源复用**——同一张 PNG **重新 `media-insert` 一次**拿新 token 插进 PRD 内埋点表截图列（🔴 禁止 `<img src="<旧token>">` 复用——垃圾图红线，见 `06`）；子 Sheet 版截图列写「见 PRD 埋点表」即可（sheet 单元格插图不在本流程）。不具备截图能力则该列留空或写「/」。
+- 🔴 **`module` 的属性值用中文**（埋点产品 2026-08 最新要求；如 `发现动态流` 而非 `discover_feed`）。其余照旧：事件名与属性键仍是英文（`standard_ElementClick` / `element_name` / `button_name`），`button_name` 等取值沿用"代码枚举（中文注释）"或中文短语。🔴 **英文键只活在这张埋点表里**——正文与验收不散落事件名/属性键（同族：信息进接口信息需求清单、错误码进错误码表，总纲见 `07 §二之三` 节末「技术标识各有其家」；上方「一属性一行」与它们的"一条一行"是同一把尺）。
+- **截图列**：具备截图能力时（来源与编排见 `06` 元素表「原型」格贴图），埋点对象的截图**与该 US-R 原型图同源复用**——同一张 PNG **重新 `media-insert` 一次**拿新 token 插进 PRD 内埋点表截图列（🔴 禁止 `<img src="<旧token>">` 复用——垃圾图红线，见 `06`）；产品要求另建子表时，子表截图列写「见 PRD 埋点表」即可（sheet 单元格插图不在本流程）。不具备截图能力则该列留空或写「/」。
 - **数量级 sanity（过抽自查）**：单一功能模块 2–4 个事件、整页多模块改版约 10 个事件；明显超出 → 回头检查是不是没合并。
 - **复用的公共组件**（弹窗/现有流程/一键下单等）：不重复抽，在表下补一行「复用现有埋点」说明，并与对应负责人确认入口来源参数（如 `source=xxx`）可透传。
 - 多端需求：逐条标 Web/App/H5，或统一注"双端均实现"（对齐 tracking_platform_clarity）。
 - **口径别自相矛盾**：某状态（如"兜底/失败曝光"）若只是主曝光事件的一个 `show_type` 值，指标**整体口径**要以主事件的**维度**为准回收；"专项监控"事件在说明里写清"是 X 事件 show_type=Y 的子集，不代表整体口径"（实测被扣完整性分）。
 
-**示例（2 事件 × 6 行；PRD 内与子 Sheet 均按此样式）**：
+**示例（2 事件 × 6 行；PRD 内表按此样式，产品要求另建的子表同款）**：
 
 | 触发时机 | 事件名称英文 | 事件名称 | 事件说明 | 事件属性英文 | 事件属性说明 | 是否必传 | 属性值 | 页面截图 | 备注 |
 |---|---|---|---|---|---|---|---|---|---|
-| feed 页动态卡进入可视区 | standard_ElementExposure | 动态卡曝光 | 回收卡片曝光，作转化分母 | module | 模块名称 | 是 | smart_picks_feed | 见设计稿 | |
+| feed 页动态卡进入可视区 | standard_ElementExposure | 动态卡曝光 | 回收卡片曝光，作转化分母 | module | 模块名称 | 是 | 发现动态流 | 见设计稿 | |
 | | | | | rank | 排序 | 否 | 卡片序号，从 1 起 | | |
 | | | | | jira_id | 需求 JIRA 单号 | 是 | APP-34744 | | |
-| 点击动态卡任一可点区域 | standard_ElementClick | 动态卡点击 | 同卡所有可点合并，button_name 区分 | module | 模块名称 | 是 | smart_picks_feed | 见设计稿 | 整卡与 CTA 是不同取值 |
+| 点击动态卡任一可点区域 | standard_ElementClick | 动态卡点击 | 同卡所有可点合并，button_name 区分 | module | 模块名称 | 是 | 发现动态流 | 见设计稿 | 整卡与 CTA 是不同取值 |
 | | | | | button_name | 按钮名称 | 是 | long（买入）/ short（卖出）/ card（整卡）【待确认】 | | |
 | | | | | jira_id | 需求 JIRA 单号 | 是 | APP-34744 | | |
 
-## 6. 写回 PRD + 建子表贴链接（满足 nocode 准入 + 可维护）
-1. **PRD 内**：把埋点表写进 `Data Requirements` 章节（结构扫描器 + tracking_* 四项要看到具名章节和逐条诉求）。**PRD 内表 = §5 十列格式一字不改**（列名、列序、逐属性多行、组首行规则全部适用）：禁自造列、禁把多个属性用 `/` 拼进一格；「页面截图」列 md 阶段可写「见设计稿」占位。**PRD 内表不是摘要**，与子 Sheet 是逐行一致的同一张表。
-2. **建子 Sheet**：用 `lark-sheets`（`lark-cli skills read lark-sheets`）新建一个 Lark 电子表格（标题如 `<PRD名>-埋点表`），把完整埋点表写进去。
-3. **挂成 PRD 子页（产品指定形态）**：优先 `lark-cli drive +move --file-token <sheet_token> --type sheet --folder-token <PRD docx token>`（需 `space:document:move` scope）。**实测两个坑**：① 该 scope 可能被租户管理员禁用（授权页会提示、增量授权返回"新授予 scopes：空"，别反复重试）；② `sheets +workbook-create --folder-token <docx token>` 不行——create API 只认真文件夹（报 1310204 folder token not exist）。API 路被禁时**降级为指导产品手动挂**（2 步）：飞书云文档里对该 Sheet 点 ⋯ →「移动到」→ 选中 PRD 文档（用户 UI 操作不受 app scope 限制）。无论挂载与否，都把 Sheet 链接贴回 PRD 的 `Data Requirements` 章节。
-4. **一致**：PRD 内表与子 Sheet 内容一致；子表用于研发/数据同学落地，PRD 内表用于评审与门禁。
-5. **无 lark-cli（降级）**：第 2/3 步跳过——埋点表**只进 PRD 正文**（十列格式不变，用 `07 §六` 标准 md 表格），**不因降级砍列砍行**。**§4 的查表校验同步降级**：只使用 §4 已列出的本环境验证过的真实键（`module`/`element_name`/`button_name`/`page_name`/`trade_type`/`rank`/`jira_id`）；其余候选公参照写进表格、但在属性说明列标注「待确认·装 lark-cli 后校验」——**不因查不了表就编造键名，也不砍 jira_id/module 等必带项**。「装 lark-cli 后可迁为子表/校验公参」这类话**只说在对话交付简报里，不写进 md 正文**（产品要直接导入成正式 PRD）。
+## 6. 写回 PRD（默认不建子表，满足 nocode 准入 + 单一真源）
+1. **PRD 内（唯一必做）**：把埋点表写进 `Data Requirements` 章节（结构扫描器 + tracking_* 四项要看到具名章节和逐条诉求）。**PRD 内表 = §5 十列格式一字不改**（列名、列序、逐属性多行、组首行规则全部适用）：禁自造列、禁把多个属性用 `/` 拼进一格；「页面截图」列 md 阶段可写「见设计稿」占位。**本表不是摘要，是完整表、以 PRD 为准**。
+2. 🔴 **默认不建子 Sheet**（2026-08 产品定）：埋点表直接写在 PRD 里，研发/数据同学看 PRD 即可，**不再默认另建表、也不留「见 Lark Sheet」占位行**。别顺手建了再问。
+3. **仅当产品明确要求单独表时才建**（可选路径）：用 `lark-sheets`（`lark-cli skills read lark-sheets`）新建电子表格（标题如 `<PRD名>-埋点表`）写入同一张十列表 → 可选挂成 PRD 子页 `lark-cli drive +move --file-token <sheet_token> --type sheet --folder-token <PRD docx token>`（需 `space:document:move` scope）→ 链接贴回 `Data Requirements` 章节，并保证两处逐行一致。**实测两个坑**：① 该 scope 可能被租户管理员禁用（授权页会提示、增量授权返回"新授予 scopes：空"，别反复重试）；② `sheets +workbook-create --folder-token <docx token>` 不行——create API 只认真文件夹（报 1310204 folder token not exist）。API 路被禁时**降级为指导产品手动挂**：飞书云文档里对该 Sheet 点 ⋯ →「移动到」→ 选中 PRD 文档（用户 UI 操作不受 app scope 限制）。
+4. **无 lark-cli（降级）**：第 3 步本就不做——埋点表**只进 PRD 正文**（十列格式不变，用 `07 §六` 标准 md 表格），**不因降级砍列砍行**。**§4 的查表校验同步降级**：只使用 §4 已列出的本环境验证过的真实键（`module`/`element_name`/`button_name`/`page_name`/`trade_type`/`rank`/`jira_id`）；其余候选公参照写进表格、但在属性说明列标注「待确认·装 lark-cli 后校验」——**不因查不了表就编造键名，也不砍 jira_id/module 等必带项**。「装 lark-cli 后可校验公参」这类话**只说在对话交付简报里，不写进 md 正文**（产品要直接导入成正式 PRD）。
 
 ## 7. 反编造（贯穿）
 - 事件：不把纯文案/字段误判成按钮；不把动画/进度条/倒计时当埋点对象；不输出重复对象。

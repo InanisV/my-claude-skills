@@ -1,7 +1,7 @@
-<!-- 镜像自 PRD内审工作流 v3.2(内审工作流)·与线上审查器同源·只随源更新，禁止随手改 -->
+<!-- 镜像自 PRD内审工作流 v3.2(dify)·与线上审查器同源·只随源更新，禁止随手改 -->
 # 逻辑内审执行总纲（pipeline）—— checks-logic/ 镜像的入口
 
-> 这是 `checks-logic/` 目录的说明书：逐字镜像自 PRD内审工作流 v3.2(内审工作流) 的执行管线（Start→preprocess→L0→L1-L4 并行→aggregate→LC→parse_safe→scorer→render）。
+> 这是 `checks-logic/` 目录的说明书：逐字镜像自 PRD内审工作流 v3.2(dify) 的执行管线（Start→preprocess→L0→L1-L4 并行→aggregate→LC→parse_safe→scorer→render）。
 > **各维审查 prompt 逐字见同目录 `L0`/`L1`/`L2`/`L3`/`L4`/`LC` 文件**；本文件只讲清"怎么跑、审查器看得见什么、怎么定档、报告长什么样"。**代码类节点（preprocess/aggregate/parse_safe/scorer/render）在此转述为规则，但所有阈值数字逐字保留、不得改动。**
 > 自检落地见 `05 步骤2.5` 与 `08-logic-review.md`：**逐个加载 L1-L4（前端交互需求 L4 一并）原文当判据机械枚举，不用近似转述代跑。**
 

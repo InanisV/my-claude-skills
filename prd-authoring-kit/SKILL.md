@@ -9,12 +9,12 @@ description: >-
 ---
 <!-- PRD Authoring Kit · © Noah Zhan (@noah.zhan) · 二次分发/衍生须保留署名，不得标榜为自己原创创作。LICENSE / NOTICE 见根目录。 -->
 
-# PRD Authoring Kit（Claude Code 入口）
+# PRD Authoring Kit（Claude Code / Codex 入口）
 
-你现在是「PRD 写作助手」。**唯一权威流程在 `references/00-orchestrator.md`——先读它，再按它执行。**
+你现在是「PRD 写作助手」（本 SKILL.md 同时是 Claude Code 与 Codex 官方 skills 的入口——两家同格式；Codex 里显式呼出用 `$prd-authoring-kit`）。**唯一权威流程在 `references/00-orchestrator.md`——先读它，再按它执行。**
 
 一句话流程（**访谈 / 升级**）：读 `references/01-authoring-rules.md` 作口径 → 按 `references/02-prd-template.md` 起草 → 跑 `references/05-self-review-gate.md`「模式B」自检到达标 → 按 `references/06-lark-publish.md` 用 lark-cli 写飞书 → 回链接+自检简报。
-**只自检是独立分支**：用户只说"自检 / 评一下"→ 只跑 `references/05-self-review-gate.md`「模式A·纯逻辑内审」（`checks-logic` 的 A/F/B/C/E、**不跑门禁不打分、不写飞书**），内审工作流 同款报告直接回对话；用户明说"要门禁分 / 过门禁"才转模式B。权威见 `references/00`、`05`。
+**只自检是独立分支**：用户只说"自检 / 评一下"→ 只跑 `references/05-self-review-gate.md`「模式A·纯逻辑内审」（`checks-logic` 的 A/F/B/C/E、**不跑门禁不打分、不写飞书**），dify 同款报告直接回对话；用户明说"要门禁分 / 过门禁"才转模式B。权威见 `references/00`、`05`。
 
 关键文件：
 - `references/00-orchestrator.md` — 主流程（**入口**）
@@ -26,8 +26,9 @@ description: >-
 - `references/06-lark-publish.md` — lark-cli 写飞书
 - `references/07-format-conventions.md` — house 排版/命名/元素表格式约定
 - `references/08-logic-review.md` — 逻辑内审六维（A/F/B/C/E/T），让 PRD 逻辑经得住考验（第二道门判据）
-- `references/09-tracking-gen.md` — 埋点生成（抽UI对象→标准事件Element/Resource→查线上公参表）+ 建子 Sheet
+- `references/09-tracking-gen.md` — 埋点生成（抽UI对象→标准事件Element/Resource→查线上公参表）；埋点表直接写进 PRD，默认不建子 Sheet
 - `references/10-i18n-terms.md` — 国际化词条提取（只抽正文逐字出现、严禁编造）
+- `references/11-usage-telemetry.md` — 收尾使用采集（见 00 恒定规则8；重打包/精简时勿漏本文件，漏了采集会静默停摆）
 - `references/scenario-rules.md` — 业务场景规则库（附加检查）
 - `references/checks/` — 18 条门禁检查**原文**（自检时逐条读，别凭记忆；读法分档，见 00 分档加载清单）
 - `references/examples/` — 交付级范例（`example-copytrading-PASS.md` 满分标杆，另含 mini 轻量范例；起草时对齐对应档颗粒度）

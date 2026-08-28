@@ -3,16 +3,16 @@
     "requirement": "AI快讯弹窗展示优化",
     "prd": "https://l7jipx1bfq.larksuite.com/wiki/ZdK8wIGEuiUOB3kWgyUu8txlsPh",
     "biz_tag": "AI",
-    "beneficiary_confirmed_by": "Noah Zhan（产品，2026-08-13 对话确认）",
-    "beneficiary_rationale": "快讯弹窗是 AI 线自有功能、收益归 AI 线，Noah 确认挂 AI - Ealy（非照抄默认值）",
-    "_comment": "APP 双端标准包示例：4 卡 + 3 链接。字段形状见 references/02-field-model.md"
+    "beneficiary_confirmed_by": "<确认人姓名>（产品本人，YYYY-MM-DD 对话确认）",
+    "beneficiary_rationale": "<产品给出的判定依据，原话浓缩：为什么收益归这条线、而不是照抄主卡或历史值>",
+    "_comment": "APP 双端标准包示例：4 卡 + 3 链接。字段形状见 references/02-field-model.md。⚠️ 尖括号占位一律要替换：受益方(cf_16706)必须先跑 `beneficiary-options APP` 拉线上选项、由产品本人亲选后逐字填；史诗链接(cf_10102)每批向产品要卡号，不许沿用本文件里的示例格式当默认值。summary 恒用**一层**全角前缀 `【端】需求名`（业务线并进需求名，别写成【iOS】【AI】…，Noah 2026-08-27 拍板）。fixVersions **分端占位**：iOS 卡填 iOS_、Android 卡填 安卓_；**不主动问版本**，用户主动给了版本号才换成真实值。"
   },
   "cards": [
     {
       "ref": "ios_story",
       "project": "APP",
       "issuetype": "故事",
-      "summary": "【iOS】【AI】AI快讯弹窗展示优化",
+      "summary": "【iOS】AI快讯弹窗展示优化",
       "fields": {
         "description": "https://l7jipx1bfq.larksuite.com/wiki/ZdK8wIGEuiUOB3kWgyUu8txlsPh",
         "priority": {
@@ -28,7 +28,7 @@
             "name": "iOS_待评审 & 待排期"
           }
         ],
-        "customfield_10102": "APP-24564",
+        "customfield_10102": "<Epic卡号·每批向产品确认，形如 XXX-12345；常挂在别的项目下，不限 APP->",
         "customfield_11319": {
           "value": "业务需求"
         },
@@ -48,16 +48,16 @@
           "value": "否"
         },
         "customfield_11531": {
-          "value": "需要且英文文案已校对"
+          "value": "需要但英文文案暂未校对"
         },
         "customfield_12506": {
           "value": "否"
         },
         "customfield_17100": {
-          "value": "已审核（APP产品选填）"
+          "value": "<按 config.product_role 取：app→已审核（APP产品选填）/ business→不需要（业务产品选填）>"
         },
         "customfield_16706": {
-          "value": "AI - Ealy"
+          "value": "<受益方·从线上选项中经产品确认后逐字填入>"
         }
       }
     },
@@ -65,7 +65,7 @@
       "ref": "android_story",
       "project": "APP",
       "issuetype": "故事",
-      "summary": "【Android】【AI】AI快讯弹窗展示优化",
+      "summary": "【Android】AI快讯弹窗展示优化",
       "fields": {
         "description": "https://l7jipx1bfq.larksuite.com/wiki/ZdK8wIGEuiUOB3kWgyUu8txlsPh",
         "priority": {
@@ -81,7 +81,7 @@
             "name": "安卓_待评审 & 待排期"
           }
         ],
-        "customfield_10102": "APP-24564",
+        "customfield_10102": "<Epic卡号·每批向产品确认，形如 XXX-12345；常挂在别的项目下，不限 APP->",
         "customfield_11319": {
           "value": "业务需求"
         },
@@ -101,16 +101,16 @@
           "value": "否"
         },
         "customfield_11531": {
-          "value": "需要且英文文案已校对"
+          "value": "需要但英文文案暂未校对"
         },
         "customfield_12506": {
           "value": "否"
         },
         "customfield_17100": {
-          "value": "已审核（APP产品选填）"
+          "value": "<按 config.product_role 取：app→已审核（APP产品选填）/ business→不需要（业务产品选填）>"
         },
         "customfield_16706": {
-          "value": "AI - Ealy"
+          "value": "<受益方·从线上选项中经产品确认后逐字填入>"
         }
       }
     },
@@ -119,7 +119,7 @@
       "project": "APP",
       "issuetype": "UI设计任务",
       "parent_ref": "ios_story",
-      "summary": "【UI设计】【AI】AI快讯弹窗展示优化",
+      "summary": "【UI设计】AI快讯弹窗展示优化",
       "fields": {
         "assignee": {
           "name": "Norman"
@@ -137,7 +137,7 @@
       "project": "APP",
       "issuetype": "国际化任务",
       "parent_ref": "ios_story",
-      "summary": "【国际化】【AI】AI快讯弹窗展示优化",
+      "summary": "【国际化】AI快讯弹窗展示优化",
       "fields": {
         "assignee": {
           "name": "noah.zhan"
