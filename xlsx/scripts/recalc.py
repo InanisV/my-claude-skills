@@ -85,6 +85,12 @@ def _names_pattern(names):
     return re.compile(r"\b(" + "|".join(re.escape(n) for n in sorted(names)) + r")\b")
 
 
+def _existing_cells(ws):
+    if not hasattr(ws, "iter_rows"):  
+        return []
+    return [ws._cells[key] for key in sorted(ws._cells)]
+
+
 def external_links_at_risk(filename):
     try:
         with zipfile.ZipFile(filename) as archive:
@@ -126,19 +132,16 @@ def external_links_at_risk(filename):
         at_risk = []
         for sheet in formulas.sheetnames:
             ws = formulas[sheet]
-            if not hasattr(ws, "iter_rows"):  
-                continue
             cached = values[sheet]
-            for row in ws.iter_rows():
-                for cell in row:
-                    v = cell.value
-                    if isinstance(v, ArrayFormula):
-                        v = v.text
-                    if not (isinstance(v, str) and v.startswith("=")):
-                        continue
-                    reaches_out = EXTERNAL_REF_RE.search(v) or (name_re and name_re.search(v))
-                    if reaches_out and cached[cell.coordinate].value is None:
-                        at_risk.append(f"{sheet}!{cell.coordinate}")
+            for cell in _existing_cells(ws):
+                v = cell.value
+                if isinstance(v, ArrayFormula):
+                    v = v.text
+                if not (isinstance(v, str) and v.startswith("=")):
+                    continue
+                reaches_out = EXTERNAL_REF_RE.search(v) or (name_re and name_re.search(v))
+                if reaches_out and cached[cell.coordinate].value is None:
+                    at_risk.append(f"{sheet}!{cell.coordinate}")
         return at_risk
 
 
@@ -249,17 +252,14 @@ def _recalc_with_profile(filename, abs_path, timeout, profile_dir: Path):
 
         for sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
-            if not hasattr(ws, "iter_rows"):  
-                continue
-            for row in ws.iter_rows():
-                for cell in row:
-                    if cell.value is not None and isinstance(cell.value, str):
-                        for err in excel_errors:
-                            if err in cell.value:
-                                location = f"{sheet_name}!{cell.coordinate}"
-                                error_details[err].append(location)
-                                total_errors += 1
-                                break
+            for cell in _existing_cells(ws):
+                if isinstance(cell.value, str):
+                    for err in excel_errors:
+                        if err in cell.value:
+                            location = f"{sheet_name}!{cell.coordinate}"
+                            error_details[err].append(location)
+                            total_errors += 1
+                            break
 
         result = {
             "status": "success" if total_errors == 0 else "errors_found",
@@ -280,15 +280,12 @@ def _recalc_with_profile(filename, abs_path, timeout, profile_dir: Path):
         formula_count = 0
         for sheet_name in wb_formulas.sheetnames:
             ws = wb_formulas[sheet_name]
-            if not hasattr(ws, "iter_rows"):  
-                continue
-            for row in ws.iter_rows():
-                for cell in row:
-                    v = cell.value
-                    if isinstance(v, ArrayFormula):
-                        v = v.text
-                    if isinstance(v, str) and v.startswith("="):
-                        formula_count += 1
+            for cell in _existing_cells(ws):
+                v = cell.value
+                if isinstance(v, ArrayFormula):
+                    v = v.text
+                if isinstance(v, str) and v.startswith("="):
+                    formula_count += 1
         wb_formulas.close()
 
         result["total_formulas"] = formula_count
