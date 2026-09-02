@@ -16,7 +16,7 @@
 
 1. 用你平台的文件查找能力定位 `00-orchestrator.md`（有 glob/file-search 工具用之；没有就用 shell：`find . ~/.prd-authoring-kit ~/.agents/skills ~/.codex ~/.claude/skills -name 00-orchestrator.md 2>/dev/null` 或 `rg --files -g '**/00-orchestrator.md'`）：
    - **命中一份** → 它所在目录即 `references/`，其上一级即 **KIT_ROOT**。
-   - **多份命中** → **先比 mtime 取最新、相同再取路径最深**，**回显该路径一行后直接继续**（不必停下等确认；多份通常是开发机 dev 仓库 + 安装副本并存，取最新即对）。
+   - **多份命中 → 🔴 按「安装位优先级」选，不比 mtime**（mtime 反映"最近被碰过"，不是版本新旧——实测：一个刚建的发布快照/刚解压的 zip 放在 `~/Downloads` 就把正式安装位挤掉，AI 用了老版本还以为是最新）：**① 平台官方 skills 位**（Codex `~/.agents/skills/prd-authoring-kit`、Claude `~/.claude/skills/prd-authoring-kit`）→ **② `~/.prd-authoring-kit`** → **③ 当前项目内 `./prd-authoring-kit`**（Kiro 场景）→ **④ 其它任何位置**（下载目录/开发仓库/发布快照）**只在 ①②③ 全无时才用，且必须回显一行警告**"用的是非安装位的副本，建议跑一次安装器"。同级并列（如 ①里两个平台位都在）→ 读各自 `KIT_ROOT/VERSION` **比版本号取高**，无 VERSION 文件的一律排在有的后面。**回显选中路径 + 版本号一行后直接继续**（不必停下等确认）。
    - **零命中** → 先探 `~/.prd-authoring-kit`、`~/.claude/skills/prd-authoring-kit` 与当前项目根；仍找不到 → **停下问用户 kit 装在哪**，不要凭记忆或本文件摘要即兴写 PRD。
 2. 读 `KIT_ROOT/references/00-orchestrator.md`，之后**严格按它执行**。
 3. **回显你从 00 读到的三模式表**（访谈 / 升级草稿 / 只自检 各对应哪个主流程文件）**以及恒定规则中「域感知」一条的触发词**（按名找，不按编号）——本文件故意不预列这些映射，只有真读了 00 才拿得到，回显即证明已读；据用户第一句选定模式。

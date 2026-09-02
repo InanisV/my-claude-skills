@@ -7,6 +7,6 @@
     "review": "<【埋点方案审核任务】经办人 username>",
     "acceptance": "<【埋点验收任务】经办人 username>"
   },
-  "_comment_epic": "last_epic = 上次用过的 Epic 卡号，**仅作下次提问时的候选展示**；每批仍必须向产品确认（「这批卡挂哪个 Epic？给卡号；不挂也可以」），禁止沿用不问、禁止从主卡或需求名推断。Epic 常挂在别的项目下（CONTRACT/SPOT/OPT/WEB…），项目前缀不限于 APP。",
+  "_comment_epic": "last_epic = 上次用过的 Epic 卡号，**仅作下次提问时的末位候选**（epic-candidates 会把它排在「关联需求实际挂的 Epic」之后、标『上次用的』）；每批仍必须向产品确认，且要用「Epic 名称(卡号)」问、不许甩裸卡号。禁止沿用不问、禁止静默填。Epic 常挂在别的项目下（CONTRACT/SPOT/OPT/WEB…），项目前缀不限于 APP。",
   "last_epic": "<上次用过的 Epic 卡号，如 XXX-12345>"
 }

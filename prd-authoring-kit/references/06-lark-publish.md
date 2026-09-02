@@ -21,6 +21,7 @@
 > - **撞错才补，缺啥补啥**：实际调用报 `missing_scope` 时，只增量申请**报错点名的那一个** scope/domain（`--scope "<缺的>"` 或对应最小 domain）。🔴 **禁止因"想一次拿全套"对已登录用户重跑完整 login**——公司 IT 流程用 `lark-cli auth login --recommend`（**推荐 scope 集**），与本工作流的 domain 清单**本来就可能不重合，不重合不是重登的理由**。
 > - **一次会话至多一次授权交互**；发起前必须一句话讲清：**缺哪个权限、这次用来做什么、确认一次以后不会再要**。
 > - 采集（`11`）相关的 `sheets` 缺失**永远不单独发起授权**（失败静默，铁律不变）；只有**开场统一预检**或**产品要求的埋点子表**等**用户可见功能**撞缺时，才顺带补。
+> - **背景自采集（`12`）的全文搜索**：`docs +search` / `drive +search` 撞 `missing_scope: search:docs:read` 时——🔴 **`search` 不是合法 `--domain`**（1.0.91 的 domain 清单实测无此项，**别加进上面的开场 domain 清单**），只能按本纪律「撞错才补」**增量申请那一个 scope**：`lark-cli auth login --scope "search:docs:read"`。**已登录用户绝不因此重授权**；用户不愿授权就跳过这一级——`12` 的兜底顺序里 **wiki 树浏览零新授权、优先用它**，搜索本就是最后一级。
 >
 > 🔴 **Codex 沙箱适配（命令形态）——Codex 平台专属：lark-cli 命令一律「单条裸跑」**：沙箱放行规则（用户在 `~/.codex/rules/default.rules` 配的 `prefix_rule`，见下方错误分诊「keychain」首判行）只匹配 **argv 首 token 为 `lark-cli` 的裸命令**；以下形态**全部不匹配、必落回沙箱撞 keychain 报错**（实测定案）：
 > - ① **env 赋值 / `env` 命令前缀**：`LARK_CLI_NO_PROXY=1 lark-cli …`、`env -u HTTPS_PROXY … lark-cli …`（首 token 是变量赋值或 `env`，不是 `lark-cli`）；

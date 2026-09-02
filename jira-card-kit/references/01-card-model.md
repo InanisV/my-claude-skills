@@ -14,7 +14,7 @@
 【Android】需求名      故事         │   description = PRD lark 链接
                                     │
   ├ 子任务挂在 iOS 主卡下：         │
-  │   【UI设计】需求名   UI设计任务  assignee=设计师
+  │   【UI设计】需求名   UI设计任务  assignee=设计师（可空·后补）
   │   【国际化】需求名   国际化任务  assignee=建卡人自己
   │
   └ 链接：

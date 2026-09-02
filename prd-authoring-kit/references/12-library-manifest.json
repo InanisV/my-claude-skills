@@ -1,0 +1,149 @@
+{
+  "_about": "PRD Authoring Kit · 历史需求库清单（背景自采集用）。判据与检索纪律见 references/12-context-recall.md。全程只读。",
+  "_schema": {
+    "sources[]": "一个可查询的需求登记表。type=base 时用 base_token+table_id 走 lark-cli base +record-search / +record-list",
+    "sources[].era": "current=现用（优先查） | 2025 / 2024=历史（现用未命中、或用户问「以前做过吗」才查）",
+    "sources[].platform": "端路由用：app | web | both。APP 需求查 app+both，Web 需求查 web+both",
+    "sources[].fields": "🔴 各表字段名不同，按本映射取值，别跨表照抄（如 Jira单号/链接 vs JIRA单号；进展 vs 需求状态）",
+    "sources[].filter_module": "该表按端过滤时用的字段与取值；null=该表本身就是单端表、无需再过滤",
+    "wiki_spaces[]": "树浏览兜底：lark-cli wiki +node-list --space-id <id>（零新授权）",
+    "alias": "模块受控词表，L0 抽检索键时对齐词汇用；运行时不必再拉选项",
+    "_empty_form": "sources 与 wiki_spaces 均为 [] 时 = 空清单形态 → 按 12-context-recall.md §manifest 机制「首跑问一次」分支走"
+  },
+  "generated": "2026-09-01",
+  "sources": [
+    {
+      "id": "backlog-current",
+      "label": "现用 backlog（Web + App 合表）",
+      "type": "base",
+      "era": "current",
+      "platform": "both",
+      "base_token": "RQmCbHS3maSShns8SRuuBL9Csib",
+      "table_id": "tbl0Dfehgj7xFwhw",
+      "field_count": 17,
+      "fields": {
+        "name": "需求描述",
+        "module": "产品模块",
+        "prd": "PRD",
+        "status": "进展",
+        "jira": "Jira单号/链接",
+        "owner": "产品经理",
+        "iteration": "迭代版本",
+        "value": "需求价值",
+        "priority": "优先级"
+      },
+      "filter_module": { "field": "产品模块", "app": ["App", "App（DEX)"], "web": ["Web/H5"] },
+      "module_options": ["App", "Web/H5", "App（DEX)"],
+      "note": "选项只有端级三项、颗粒度粗；细分模块词用 alias.module_terms 对齐"
+    },
+    {
+      "id": "app-2025",
+      "label": "APP 2025 需求表",
+      "type": "base",
+      "era": "2025",
+      "platform": "app",
+      "base_token": "LfJGbOkhvaliKUsoo2Xug8ePsdg",
+      "table_id": "tblHTjZY5oQffRwN",
+      "field_count": 21,
+      "fields": {
+        "name": "需求描述",
+        "module": "业务模块",
+        "prd": "PRD",
+        "status": "需求状态",
+        "jira": "JIRA单号",
+        "owner": "产品经理",
+        "iteration": "所属迭代",
+        "value": "需求价值",
+        "priority": "优先级"
+      },
+      "filter_module": null,
+      "module_options": ["合约交易", "现货交易", "资产钱包", "法币", "现货活动", "合约活动", "公共模块", "交易模块"],
+      "note": "wiki 内嵌 base；另有「产品模块」字段但只有 APP 一个选项（单端表）。🔴 状态列叫「需求状态」不是「进展」，Jira 列叫「JIRA单号」不带「/链接」"
+    },
+    {
+      "id": "app-2025-apr",
+      "label": "APP 2025（4 月新建）",
+      "type": "base",
+      "era": "2025",
+      "platform": "app",
+      "base_token": "J9ftbNZc0apo0OsNKgauND7wske",
+      "table_id": "tbl03MjTer0FYbUI",
+      "field_count": 28,
+      "fields": {
+        "name": "需求描述",
+        "module": "产品模块",
+        "prd": "PRD",
+        "status": "进展",
+        "jira": "Jira单号/链接",
+        "owner": "产品经理",
+        "iteration": "迭代版本",
+        "value": "需求价值",
+        "priority": "优先级"
+      },
+      "filter_module": null,
+      "module_options": ["App（20）", "App（DEX)"],
+      "note": "wiki 内嵌 base；模块选项里另有 2 条空名选项（脏数据），别拿去当检索键"
+    },
+    {
+      "id": "web-2025",
+      "label": "Web 2025 总需求池",
+      "type": "base",
+      "era": "2025",
+      "platform": "web",
+      "base_token": "KCR6bPGhVaKP7DsujUZu50hMsim",
+      "table_id": "tblzT2A05Yfx5Zw1",
+      "field_count": 26,
+      "fields": {
+        "name": "需求描述",
+        "module": "产品模块",
+        "prd": "PRD",
+        "status": "进展",
+        "jira": "Jira单号/链接",
+        "owner": "产品经理",
+        "iteration": "迭代版本",
+        "brd": "BRD/MRD",
+        "value": "需求价值"
+      },
+      "filter_module": null,
+      "note": "wiki 内嵌 base；表名「总需求池」，约 665 条。模块选项 29 条（含 3 条人名选项，不入词表）"
+    },
+    {
+      "id": "web-2026",
+      "label": "Web 2026 总需求池",
+      "type": "base",
+      "era": "current",
+      "platform": "web",
+      "base_token": "Acu8bc8uBadbPYsM3v9uKNEVsdb",
+      "table_id": "tbl3YEFCFeJnHWVv",
+      "field_count": 23,
+      "fields": {
+        "name": "需求描述",
+        "module": "产品模块",
+        "prd": "PRD",
+        "status": "进展",
+        "jira": "Jira单号/链接",
+        "owner": "产品经理",
+        "iteration": "迭代版本",
+        "brd": "BRD/MRD",
+        "value": "需求价值"
+      },
+      "filter_module": null,
+      "note": "wiki 内嵌 base；表小（约 38 条），空结果是常态、不代表查询失败"
+    }
+  ],
+  "wiki_spaces": [
+    { "id": "7623986191989214645", "label": "现用知识库", "era": "current" },
+    { "id": "7311584935679180806", "label": "历史 APP 知识库", "era": "2025" },
+    { "id": "7311612534761504773", "label": "历史 Web 知识库", "era": "2024" }
+  ],
+  "alias": {
+    "_note": "各源「产品模块 / 业务模块」选项的联合去重，2026-09-01 一次性拉全（--limit 200 分页拉尽，防 50 条截断）：74 条原始选项 → 去 2 条空名、去 6 条人名选项 → 归一掉末尾的（N）/（Share N）计数后缀 → 33 条。用途只有一个：L0 抽检索键时把口语词对齐到库里真实用的词。",
+    "platform_terms": ["App", "APP", "Web/H5", "App（DEX)"],
+    "module_terms": [
+      "行情&搜索", "现货交易", "合约交易", "合约跟单", "合约风控", "盘前交易", "交易模块",
+      "现货活动", "合约活动", "活动中台", "资产管理", "资产钱包", "法币", "理财产品",
+      "用户中心（含KYC）", "代理/邀请好友", "内容中心", "消息触达", "运营后台", "上币CRM",
+      "合规中心", "业务风控", "大数据", "公共模块", "DEX", "API", "OSS", "SEO", "Web主站/基建"
+    ]
+  }
+}

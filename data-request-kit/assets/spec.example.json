@@ -1,0 +1,28 @@
+{
+  "_comment": "spec 键 → 表单字段的映射在 scripts/dr.py 的 FIELD_IDS；requester 留空 = 当前 lark-cli 用户；人员一律 open_id；日期只写 YYYY-MM-DD；evidence 给关键字段写依据（原话 / 先例 / 推断），validate 会把它印进草稿表。",
+  "title": "首页Featured榜单「AI策略」tab表现数据回收",
+  "background": "APP首页Featured榜单区新增了「AI Strategy」子tab（与Spot / Futures / Top Traders并列），榜单卡片展示策略的7D胜率、7D ROI，并带「Create Now」创建入口。UIUX侧在评估首页榜单区模块排布时需要该tab的实际表现数据，目前产品和设计侧都没有现成数据。",
+  "goals": "拿到AI策略榜单tab从曝光到创建策略再到交易转化的全链路数据，明确该入口的真实使用效率以及单个策略之间的表现差异；用于判断AI策略tab在首页榜单区是否值得保留/前置/扩大曝光，支撑首页榜单区的排布调整和后续AI策略入口优化。",
+  "description": "统计周期：近30天（按日拆分），分iOS/Android\n统计对象：APP首页 Featured 榜单区 → AI Strategy（AI策略）tab\n\n1. tab曝光人数/曝光次数、点击人数、tab进入率\n2. 榜单内策略卡片曝光→点击CTR，需拆到单个策略（Chart Pattern Strategy / MACD Strategy 等）\n3. 「Create Now」点击率、策略创建成功人数、创建率（点击→创建）\n4. 交易转化：EFTT转化率、归因交易额、归因交易人数\n5. 用户结构：新老用户占比\n\n备注：如该tab埋点缺失或口径不全，麻烦先同步我，我们补埋点。",
+  "priority": "P1",
+  "type": "取数需求 Ad-hoc Data Request",
+  "business_line": "产品 Product",
+  "requester": "",
+  "analysts": [
+    {"id": "ou_数分对接人的open_id（用 dr.py user 姓名 查）", "name": "对接人姓名"}
+  ],
+  "expected_date": "2026-09-04",
+  "goal_category": "短期分析",
+  "delivery_form": "表格",
+  "attachments": [],
+  "extra": {},
+  "evidence": {
+    "type": "推断：一次性出数、不要结论 → 取数；已确认",
+    "priority": "先例：发起人近15条均P1",
+    "business_line": "先例：发起人近15条均为产品 Product",
+    "analysts": "先例：近15条对接人一致；已确认",
+    "expected_date": "原话：「下周五」→ 2026-09-04（周五）",
+    "goal_category": "原话：用户从下拉里选「短期分析」",
+    "delivery_form": "推断：取数需求 → 表格；已确认"
+  }
+}

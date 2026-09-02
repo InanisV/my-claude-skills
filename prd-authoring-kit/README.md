@@ -36,6 +36,8 @@ prd-authoring-kit/
 │  ├─ 09-tracking-gen.md          # 埋点生成，表直接写进 PRD（子 Sheet 默认不建）（⚠ 公参表 token 硬编码在其 §1，表迁移需同步改；05 的闭环矩阵复用它的对象清单，勿单独剥离）
 │  ├─ 10-i18n-terms.md            # 国际化词条提取
 │  ├─ 11-usage-telemetry.md       # 收尾使用采集（⚠ 采集表 token 硬编码在内，表迁移需同步改；重打包勿漏，漏了采集静默停摆）
+│  ├─ 12-context-recall.md        # 背景自采集：写之前先查历史需求库（问人之前先问库）→ 背景简报 → 访谈只问增量
+│  ├─ 12-library-manifest.json    # 历史需求库清单（各源 token/字段映射/模块词表；用户级覆盖放 ~/.prd-authoring-kit/library.json）
 │  ├─ scenario-rules.md           # 业务场景规则库（附加检查）
 │  ├─ checks/                     # 18 条门禁检查原文（自检逐条读）
 │  ├─ checks-logic/               # 逻辑内审镜像（第二道门原文判据）

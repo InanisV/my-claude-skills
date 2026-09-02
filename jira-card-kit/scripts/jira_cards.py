@@ -30,6 +30,16 @@ Base URL：环境变量 JIRA_URL → settings.json 的 env.JIRA_URL → 默认 h
                             实时拉取受益方(cf_16706)的线上选项原文（默认项目 APP），
                             供产品本人从中亲选。本 kit **不内置**受益方枚举——
                             此 skill 全组产品共用、各人受益方不同，写死等于诱导错填。
+  epic-candidates [--from KEY1,KEY2] [--keyword "词"…] [--project APP|WEB]
+                            **只读**捞 Epic 候选：读主卡/历史关联需求卡（--from）与同族卡
+                            （--keyword+--project，JQL 取最近 10 张）实际挂的 Epic，按出现
+                            次数排序，每个 Epic GET 一次取名称与状态（已收口的标「不建议」
+                            排后），配置里的 last_epic 只作**末位**候选标「上次用的」。
+                            输出「Epic 名称 | 卡号 | 依据 | 状态」候选表——**候选不是决定**，
+                            仍必须由产品确认；零候选就明说"未找到关联 Epic"，绝不编。
+  epic-search --name "名称片段" [--project APP|WEB]
+                            按**名称**找 Epic（≤10 条，名称|卡号|状态）——让产品用名字回答，
+                            卡号由工具找。多命中一律列出来让他选，不许猜。
   validate <plan.json>      校验计划并打印建单计划表（不创建任何东西）
   apply <plan.json>         执行创建；结果写 <plan>.result.json；中断后重跑自动续传
   show-result <plan.json>   重新打印上次 apply 的结果清单
@@ -583,6 +593,28 @@ def check_epics_live(plan, errors, warnings):
     return info
 
 
+def check_link_targets_live(plan, warnings):
+    """把 links 里指向**已有 Jira 卡**的 key 解析成卡名，供计划表按「名称」(卡号) 展示。
+
+    🔴 展示纪律：给产品看的每一张 Jira 卡都要带名称，裸卡号他核不动。
+    **只影响展示、不改校验强度**：读不回卡名只 WARN，不拦建卡。
+    """
+    keys = sorted({l.get(side) for l in plan.get("links", []) for side in ("from", "to")
+                   if isinstance(l.get(side), str) and ISSUE_KEY_RE.match(l.get(side))})
+    names = {}
+    for k in keys:
+        try:
+            names[k] = api("GET", f"/rest/api/2/issue/{k}",
+                           params={"fields": "summary"})["fields"].get("summary", "")
+        except (AuthError, NetworkError):
+            raise
+        except (HttpError, RuntimeError) as e:
+            names[k] = ""
+            warnings.append(f"链接目标「{k}」读不回卡名（{short_err(e)}）——卡号写错的话 apply "
+                            "补链接这一步会失败，确认一下；展示给产品时也补上卡名。")
+    return names
+
+
 def check_versions_live(plan, errors, warnings):
     """fixVersions 必须是该项目线上**真实存在**的版本名（占位版本也一样要对得上）。
 
@@ -727,10 +759,11 @@ def validate_plan(plan, online=True):
                 errors.append(f"{tag}: {side}_ref「{ref}」不在 cards 里")
             if key and not re.match(r"^[A-Z][A-Z0-9]+-\d+$", key):
                 errors.append(f"{tag}: {side}「{key}」不像 Jira key")
-    live = {"epics": {}}
+    live = {"epics": {}, "links": {}}
     if online:
         check_beneficiary_live(plan, errors)
         live["epics"] = check_epics_live(plan, errors, warnings)
+        live["links"] = check_link_targets_live(plan, warnings)
         check_versions_live(plan, errors, warnings)
     return errors, warnings, live
 
@@ -782,15 +815,20 @@ def print_epic_check(plan, epics):
         k = (c.get("fields") or {}).get(EPIC_FIELD)
         if isinstance(k, str) and k.strip():
             groups.setdefault(k.strip(), []).append(c.get("ref"))
-    print("\n### Epic 确认（每批必须由产品指定卡号——不许沿用上次、不许从主卡/需求名推断）")
+    print("\n### Epic 确认（每批必须由产品明确点头——候选可以摆，但不许静默填、不许沿用上次不问）")
     if not groups:
         print("- **未挂 Epic** ← 全部卡。只有产品明确说这批不挂 Epic 才可以这样。")
+        print("- 还没问过？先跑 `epic-candidates --from <主卡/历史需求卡号> "
+              '--keyword "<需求关键词>" --project APP|WEB` 捞带名称的候选，再让产品选。')
         return
     for k, refs in groups.items():
         info = (epics or {}).get(k)
-        title = f"「{info['summary']}」({info['type']}/{info['status']})" if info else "（未能读回卡名）"
-        print(f"- **{k}** {title} ← {', '.join(r for r in refs if r)}")
-    print("- 请产品确认：**这批卡就挂这个 Epic 吗？**（换 Epic 就改 plan 后重新 validate）")
+        # 🔴 展示纪律：一律「名称」(卡号)——裸卡号产品核不动，正是漏挂错挂的来源。
+        meta = f" · {info['type']}/{info['status']}" if info else " · （未能读回卡名）"
+        print(f"- **{name_key((info or {}).get('summary'), k)}**{meta} "
+              f"← {', '.join(r for r in refs if r)}")
+    print("- 请产品确认：**这批卡就挂这个 Epic 吗？**（换 Epic 就改 plan 后重新 validate；"
+          '只说得出名字就跑 `epic-search --name "<名称片段>"` 解析卡号）')
 
 
 def print_table(plan, live=None):
@@ -808,11 +846,21 @@ def print_table(plan, live=None):
     print_epic_check(plan, (live or {}).get("epics"))
     if plan.get("links"):
         verbs = {"Blocks": "blocks", "Cloners": "clones", "Relates": "relates to", "Duplicate": "duplicates"}
+        names = (live or {}).get("links") or {}
+
+        def side_label(l, side):
+            """🔴 展示纪律：本批新建卡显示 ref；指向**已有 Jira 卡**的一律「名称」(卡号)。"""
+            ref = l.get(f"{side}_ref")
+            if ref:
+                return ref
+            k = l.get(side)
+            return name_key(names.get(k), k) if k else "?"
+
         print("\n| 链接 | from | to |")
         print("|------|------|----|")
         for l in plan["links"]:
             print(f"| {l['type']}({verbs.get(l['type'], '?')}) "
-                  f"| {l.get('from_ref') or l.get('from')} | {l.get('to_ref') or l.get('to')} |")
+                  f"| {side_label(l, 'from')} | {side_label(l, 'to')} |")
 
 
 # ---------------------------------------------------------------- apply
@@ -1093,6 +1141,277 @@ def cmd_beneficiary_options(project, sample_key=None):
           "选定后把确认人写进 plan.meta.beneficiary_confirmed_by、依据写进 beneficiary_rationale。")
 
 
+# --------------------------------------------- Epic 候选检索（只读，供产品用名字选）
+# 🔴 定位：本节的两条命令**只产出候选**，不产出决定。Epic 是每批必问的硬闸——
+#    候选可以来自主卡 / 历史关联需求 / 上次用过的值，但**必须由产品明确确认才能填进 plan**；
+#    「禁推断」禁的是**静默填**，不是禁止把线索摆出来给他选（2026-09-02 口径统一）。
+# 🔴 展示纪律：凡向产品展示 Jira 卡，一律「名称」(卡号)，禁止裸卡号——裸卡号对产品没有信息量。
+EPIC_TYPE_NAMES = ("史诗", "Epic")
+# 已收口的状态：优先看 statusCategory.key == "done"（与界面语言无关），名字表只作兜底。
+CLOSED_STATUS_NAMES = {"已关闭", "关闭", "已完成", "完成", "已解决", "已上线", "废弃",
+                       "Closed", "Done", "Resolved"}
+PROJECT_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]*$")
+ISSUE_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")
+EPIC_PICK_FOOTER = (
+    "\n🔴 **这是候选、不是决定**：把上面的「Epic 名称(卡号)」摆给产品选"
+    "（有结构化提问工具就列成选项：top 3 候选 + 「换一个（说名字或卡号都行，我来找）」+ 「本批不挂」），"
+    "拿到明确答复才能写进 plan.fields.customfield_10102。\n"
+    "🔴 **禁止静默填**：不许因为「主卡挂了它 / 上次就是它」就自己填上去；"
+    "产品只说得出名字 → 跑 `epic-search --name \"<名称片段>\"` 解析卡号，**多命中就列出来让他选，不许猜**；"
+    "产品说「本批不挂」→ 留空，这是多数派答复，别追问。")
+
+
+def short_err(e):
+    """错误摘要：HttpError 只留状态码（服务端 detail 又长又对产品没用），其余原样。"""
+    code = getattr(e, "code", None)
+    return f"HTTP {code}" if code else str(e)
+
+
+def jql_quote(s):
+    """把任意文本包成 JQL 字符串字面量（转义反斜杠与双引号）。"""
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def status_closed(status):
+    """Epic 是否已收口（已关闭/已完成/废弃）——这类不该再往上挂新卡，排到候选末尾。"""
+    cat = (status or {}).get("statusCategory") or {}
+    if cat.get("key") == "done":
+        return True
+    return (status or {}).get("name") in CLOSED_STATUS_NAMES
+
+
+_AUTH_PROBED = []
+
+
+def assert_auth_ok():
+    """400 的兜底分诊：拿一次 `/myself` 确认这不是**认证**问题。每进程只探一次。
+
+    🔴 实测（2026-09-02，凭据无效跑 `epic-search`）：**JQL 检索在 token 失效时回的是 400
+    不是 401**——服务端先解析 JQL，匿名身份看不到 `issuetype` 那些名字，于是报"值不存在"。
+    照 400 处理就会把认证失败降级成「Epic 检索没跑通」这种含糊错误，正是 `AuthError` 统一
+    出口要避免的（含糊错误会诱导 AI 去翻密钥文件排查）。所以撞 400 先探一次身份：
+    认证坏了直接抛 AuthError 走统一出口，认证没问题才当真正的 JQL 错误往上抛。
+    """
+    if _AUTH_PROBED:
+        return
+    api("GET", "/rest/api/2/myself")
+    _AUTH_PROBED.append(True)
+
+
+def search_issues(jql, fields, limit=10):
+    """JQL 检索，返回 (issues, total)。只读。"""
+    try:
+        data = api("GET", "/rest/api/2/search",
+                   params={"jql": jql, "maxResults": limit, "fields": ",".join(fields)})
+    except HttpError as e:
+        if e.code == 400:
+            assert_auth_ok()  # 先分诊认证；没问题才让 400 当 JQL 错误继续往上走
+        raise
+    return data.get("issues", []), data.get("total", 0)
+
+
+def epic_link_of(fields):
+    """cf_10102 在 Jira 里是**裸字符串卡号**；防御地兼容 dict / None 形态。"""
+    v = (fields or {}).get(EPIC_FIELD)
+    if isinstance(v, dict):
+        v = v.get("key") or v.get("value")
+    return v.strip() if isinstance(v, str) and v.strip() else ""
+
+
+def name_key(summary, key):
+    """🔴 展示纪律统一出口：「名称」(卡号)。名称读不回来才退化成占位，绝不只给卡号。"""
+    return f"「{summary or '（读不到卡名）'}」({key})"
+
+
+def fetch_epic_info(keys):
+    """对每个 Epic **GET 一次**拿 名称/类型/状态。读不到的照样列出来并标明，绝不编卡名。"""
+    info = {}
+    for k in keys:
+        try:
+            f = api("GET", f"/rest/api/2/issue/{k}",
+                    params={"fields": "summary,issuetype,status"})["fields"]
+            info[k] = {"summary": f.get("summary", ""),
+                       "type": (f.get("issuetype") or {}).get("name", "?"),
+                       "status": (f.get("status") or {}).get("name", "?"),
+                       "closed": status_closed(f.get("status"))}
+        except (AuthError, NetworkError):
+            raise  # 认证/网络走 main 统一出口，别降级成「读不到卡名」
+        except (HttpError, RuntimeError) as e:
+            info[k] = {"summary": "", "type": "?", "status": f"读不回（{short_err(e)}）",
+                       "closed": False}
+    return info
+
+
+def collect_epic_seeds(from_keys, keywords, project, notes):
+    """收种子卡：--from 逐张 GET；--keyword 走 JQL 取同族卡最近 10 张。返回 seeds 列表。"""
+    seeds = []
+    for k in from_keys:
+        if not ISSUE_KEY_RE.match(k):
+            notes.append(f"--from「{k}」不像 Jira 卡号（形如 XXX-12345），已跳过")
+            continue
+        try:
+            f = api("GET", f"/rest/api/2/issue/{k}",
+                    params={"fields": f"summary,{EPIC_FIELD}"})["fields"]
+        except (AuthError, NetworkError):
+            raise
+        except (HttpError, RuntimeError) as e:
+            notes.append(f"--from {k} 读不到（{short_err(e)}）——卡号写错或没权限，已跳过")
+            continue
+        seeds.append({"key": k, "summary": f.get("summary", ""),
+                      "epic": epic_link_of(f), "origin": "from"})
+    for kw in keywords:
+        jql = (f"project = {project} AND summary ~ {jql_quote(kw)} "
+               "ORDER BY created DESC")
+        try:
+            issues, total = search_issues(jql, ["summary", EPIC_FIELD], 10)
+        except (AuthError, NetworkError):
+            raise
+        except (HttpError, RuntimeError) as e:
+            notes.append(f"关键词「{kw}」在项目 {project} 搜不了（{short_err(e)}）——换个词或直接问产品")
+            continue
+        if not issues:
+            notes.append(f"关键词「{kw}」在项目 {project} 没搜到同族卡")
+            continue
+        notes.append(f"关键词「{kw}」@{project}：命中 {total} 张，取最近 {len(issues)} 张")
+        for it in issues:
+            f = it.get("fields") or {}
+            seeds.append({"key": it.get("key", "?"), "summary": f.get("summary", ""),
+                          "epic": epic_link_of(f), "origin": "kw"})
+    return seeds
+
+
+def epic_candidate_rank(groups, info, k):
+    """候选排序键（模块级纯函数，便于单测）：
+
+    ① 只由 `last_epic` 带出来的（groups 里没有关联卡）**一律排最后**——"上次顺手"不是"这批该挂"；
+    ② **已收口的 Epic 再往后压**（哪怕关联卡更多），它们不该再接新卡；
+    ③ 其余按关联卡数降序；④ 同数时**主卡(--from)带出来的**优先（主卡是这个需求自己的卡，
+       信号比同族历史卡强）；⑤ 再同就按卡号稳定排序。
+    """
+    g = groups.get(k)
+    weight = len(g["from"]) + len(g["kw"]) if g else 0
+    return (0 if g else 1, 1 if info[k]["closed"] else 0, -weight,
+            0 if (g and g["from"]) else 1, k)
+
+
+def epic_candidate_why(groups, last, k):
+    """候选的「依据」列：说清这个 Epic 是**从哪张卡捞出来的**，产品才判断得了。
+
+    🔴 展示纪律：这里出现的每张卡都走 name_key()，一律「名称」(卡号)。
+    """
+    g = groups.get(k) or {"from": [], "kw": []}
+    bits = []
+    for s in g["from"][:2]:
+        bits.append("主卡" + name_key(s["summary"], s["key"]) + "挂它")
+    if len(g["from"]) > 2:
+        bits.append(f"另有 {len(g['from']) - 2} 张给定卡挂它")
+    if g["kw"]:
+        head = g["kw"][0]
+        tail = f" 等 {len(g['kw'])} 张" if len(g["kw"]) > 1 else ""
+        bits.append("历史需求" + name_key(head["summary"], head["key"]) + tail + "挂它")
+    if k == last:
+        bits.append("上次用的（last_epic）")
+    return "；".join(bits) or "—"
+
+
+def cmd_epic_candidates(from_keys, keywords, project):
+    """从主卡 / 历史关联需求 / 同族卡里**捞出 Epic 候选**，带名称、依据、状态摆给产品选。
+
+    只读、不写任何东西。首选候选来自**关联需求实际挂的 Epic**；配置里的 `last_epic`
+    只作**末位**候选（标「上次用的」）——它是"上次顺手"，不是"这批该挂"。
+    """
+    notes = []
+    seeds = collect_epic_seeds(from_keys, keywords, project, notes)
+    groups = {}
+    for s in seeds:
+        if s["epic"]:
+            groups.setdefault(s["epic"], {"from": [], "kw": []})[s["origin"]].append(s)
+
+    last = str(load_config().get("last_epic") or "").strip()
+    if last and not ISSUE_KEY_RE.match(last):
+        last = ""  # config.example 里的占位符 <上次用过的…> 不当候选
+    order = list(groups)
+    if last and last not in order:
+        order.append(last)
+
+    for n in notes:
+        print(f"· {n}")
+    hung = sum(1 for s in seeds if s["epic"])
+    print(f"\n扫描种子卡 {len(seeds)} 张（--from {len(from_keys)} 张 / 关键词 {len(keywords)} 个），"
+          f"其中 {hung} 张挂了 Epic。")
+
+    if not order:
+        print("\n## Epic 候选：**未找到关联 Epic**")
+        print("- 一张种子卡都没读到（卡号/关键词都没命中），本机 `last_epic` 也没有可用值。"
+              if not seeds else
+              "- 上面这些种子卡一张都没挂 Epic，本机 `last_epic` 也没有可用值。")
+        print("- 🔴 **不编**：直接问产品「这批卡挂哪个 Epic？（说名字或卡号都行，我来找卡号；"
+              "不挂也可以）」——抽样里多数真卡本来就不挂 Epic，「不挂」是完全正常的答复。")
+        print("- 产品给了名字 → 跑 `epic-search --name \"<名称片段>\"` 把名字解析成卡号。")
+        return
+
+    info = fetch_epic_info(order)
+    order.sort(key=lambda k: epic_candidate_rank(groups, info, k))
+    print(f"\n## Epic 候选（{len(order)} 个 · 按关联卡数排序 · 只读检索）")
+    print("\n| # | Epic 名称 | 卡号 | 依据 | 状态 |")
+    print("|---|-----------|------|------|------|")
+    for i, k in enumerate(order, 1):
+        it = info[k]
+        st = it["status"] + ("  🔴 已收口，不建议" if it["closed"] else "")
+        if it["type"] not in EPIC_TYPE_NAMES and it["type"] != "?":
+            st += f"  ⚠️ 类型是「{it['type']}」不是史诗"
+        print(f"| {i} | {it['summary'] or '（读不回卡名）'} | {k} "
+              f"| {epic_candidate_why(groups, last, k)} | {st} |")
+    print(EPIC_PICK_FOOTER)
+
+
+def cmd_epic_search(name, project=None):
+    """按**名称片段**找 Epic，返回 名称|卡号|状态 ≤10 条——让产品用名字回答，卡号由工具找。"""
+    types = ", ".join(jql_quote(t) for t in EPIC_TYPE_NAMES)
+    # 这台实例的史诗类型名可能是中文「史诗」或英文 Epic：先按 in(...) 试，
+    # 400（该实例没有其中某个类型名）就退回逐个试，别让产品为此改问法。
+    clauses = [f"issuetype in ({types})"] + [f"issuetype = {jql_quote(t)}" for t in EPIC_TYPE_NAMES]
+    issues, total, last_err = None, 0, None
+    for c in clauses:
+        jql = c + f" AND summary ~ {jql_quote(name)}"
+        if project:
+            jql = f"project = {project} AND " + jql
+        jql += " ORDER BY created DESC"
+        try:
+            issues, total = search_issues(jql, ["summary", "status"], 10)
+            break
+        except (AuthError, NetworkError):
+            raise
+        except HttpError as e:
+            if e.code == 400:
+                last_err = e
+                continue
+            raise
+    if issues is None:
+        die(f"Epic 检索没跑通（{short_err(last_err)}）——名称片段换短一点重试，或请产品直接给卡号。")
+    scope = f"项目 {project} " if project else ""
+    print(f"## Epic 检索 · {scope}名称含「{name}」· 命中 {total} 条"
+          + (f"，列前 {len(issues)} 条" if total > len(issues) else ""))
+    if not issues:
+        print("\n- **一条都没搜到**。🔴 别猜卡号：换个更短的名称片段再搜；"
+              "还搜不到就请产品直接给卡号，或确认这批「不挂 Epic」。")
+        return
+    print("\n| # | Epic 名称 | 卡号 | 状态 |")
+    print("|---|-----------|------|------|")
+    for i, it in enumerate(issues, 1):
+        f = it.get("fields") or {}
+        st = (f.get("status") or {}).get("name", "?")
+        if status_closed(f.get("status")):
+            st += "  🔴 已收口，不建议"
+        print(f"| {i} | {f.get('summary', '')} | {it.get('key', '?')} | {st} |")
+    if len(issues) > 1:
+        print("\n🔴 **多命中不许猜**：把上面这几条「名称(卡号)」原样列给产品，让他指一条；"
+              "他指完才写进 plan。")
+    if total > len(issues):
+        print(f"🔴 命中 {total} 条、只列了 {len(issues)} 条：**别在没列全的表上替产品选**，"
+              "让他把名称片段说得更具体一点再搜一次。")
+
+
 def cmd_set_beneficiary(value, keys, apply_it):
     """修正受益方。默认 dry-run；--apply 才写入。只碰 cf_16706 这一个字段。"""
     meta = api("GET", f"/rest/api/2/issue/{keys[0]}/editmeta")
@@ -1174,6 +1493,21 @@ def cmd_discard(keys, reason, apply_it):
             print(f"  {k}: FAILED {e}", file=sys.stderr)
 
 
+def pop_flag_values(rest, flag):
+    """把 rest 里所有 `--flag <值>` 取出来（**可重复**），返回 (值列表, 剩余参数)。"""
+    vals, out, i = [], [], 0
+    while i < len(rest):
+        if rest[i] == flag:
+            if i + 1 >= len(rest):
+                die(f"{flag} 后面要跟一个值")
+            vals.append(rest[i + 1])
+            i += 2
+        else:
+            out.append(rest[i])
+            i += 1
+    return vals, out
+
+
 def dispatch(args):
     if not args:
         print(__doc__)
@@ -1203,6 +1537,38 @@ def dispatch(args):
             sample = rest[i + 1]
             rest = rest[:i] + rest[i + 2:]
         cmd_beneficiary_options(rest[0] if rest else "APP", sample)
+    elif cmd == "epic-candidates":
+        froms, rest = pop_flag_values(args[1:], "--from")
+        kws, rest = pop_flag_values(rest, "--keyword")
+        projs, rest = pop_flag_values(rest, "--project")
+        if rest:
+            die(f"epic-candidates 不认识的参数：{' '.join(rest)}。"
+                '用法: epic-candidates [--from KEY1,KEY2] [--keyword "词"…] [--project APP|WEB]')
+        keys = [k.strip().upper() for v in froms for k in v.split(",") if k.strip()]
+        if not keys and not kws:
+            die('用法: epic-candidates [--from KEY1,KEY2] [--keyword "词"…] [--project APP|WEB]\n'
+                "两路可同时给：--from 是主需求卡/背景简报里的历史需求卡号（逗号分隔，可重复给）；"
+                "--keyword 是需求关键词/模块名（可重复给，配 --project 取同族卡）。")
+        project = (projs[-1] if projs else "APP").upper()
+        if kws and not PROJECT_KEY_RE.match(project):
+            die(f"--project「{project}」不是项目 key（大写字母数字，如 APP / WEB）")
+        if kws and not projs:
+            print("· 没给 --project，关键词按默认项目 APP 检索（WEB/H5 需求记得加 --project WEB）")
+        cmd_epic_candidates(keys, kws, project)
+    elif cmd == "epic-search":
+        names, rest = pop_flag_values(args[1:], "--name")
+        projs, rest = pop_flag_values(rest, "--project")
+        if rest:
+            die(f"epic-search 不认识的参数：{' '.join(rest)}。"
+                '用法: epic-search --name "名称片段" [--project APP|WEB]')
+        if not names:
+            die('用法: epic-search --name "名称片段" [--project APP|WEB]\n'
+                "（产品只说得出 Epic 名字时用它把名字解析成卡号；Epic 常挂在别的项目下，"
+                "**默认不限项目**，别急着加 --project。）")
+        project = projs[-1].upper() if projs else None
+        if project and not PROJECT_KEY_RE.match(project):
+            die(f"--project「{project}」不是项目 key（大写字母数字，如 APP / WEB）")
+        cmd_epic_search(names[-1], project)
     elif cmd == "validate":
         if len(args) < 2:
             die("用法: validate <plan.json>")
@@ -1246,8 +1612,8 @@ def dispatch(args):
         cmd_set_beneficiary(rest[0], rest[1:], "--apply" in args)
     else:
         die(f"未知命令 {cmd}。可用: setup-token / whoami / config-show / config-set / "
-            f"user-search / beneficiary-options / validate / apply / show-result / "
-            f"set-beneficiary / discard")
+            f"user-search / beneficiary-options / epic-candidates / epic-search / "
+            f"validate / apply / show-result / set-beneficiary / discard")
 
 
 def main():

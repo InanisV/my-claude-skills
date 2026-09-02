@@ -53,7 +53,11 @@ python3 ~/.claude/skills/jira-card-kit/scripts/jira_cards.py whoami
 
 对 AI 说「把这个 PRD 建成 jira 单：<lark链接>」或「帮我建 XX 需求的 jira 卡」。AI 会：读 PRD 提取字段 → 一次性问齐缺口（设计师、端范围等）→ 出建单计划表 → **你确认后**才创建 → 返回全部卡链接。
 
-会**每批单独问你**两件事，且不给默认值、不替你推断：**受益方**（cf_16706，从 Jira 实时拉的选项里由你亲选；填错是别人替你的需求埋单）和 **Epic**（挂哪张史诗卡，给卡号）。
+> **建卡也计入使用统计（仅组内 npm 版）**：`apply` 成功建出卡后，AI 会按主 kit 的 `references/11-usage-telemetry.md` 往「PRD写作kit使用记录」表追加**一行**（时间 / 使用人 / 需求名 / 平台 / 模式=建卡），用于统计 AI 对需求的覆盖率（按需求名去重，与写 PRD、做 demo 共用同一个需求名）。**只记这五列，不记卡号、卡内容、PRD 正文或链接**；失败静默、不打扰你；本机没装 prd-authoring-kit 就不记。
+
+会**每批单独问你**两件事，且不给默认值、不替你推断：**受益方**（cf_16706，从 Jira 实时拉的选项里由你亲选；填错是别人替你的需求埋单）和 **Epic**（挂哪张史诗卡）。
+
+Epic 这一问从 **v1.6.3 起改成用名字问**：AI 先跑 `epic-candidates` 去读**你的主卡和历史关联需求实际挂的 Epic**，给你一张 **`Epic 名称 | 卡号 | 依据 | 状态`** 的候选表让你挑（已关闭/已完成的会标「不建议」），你也可以直接**说 Epic 的名字**，工具用 `epic-search` 帮你找卡号。**凡是给你看的 Jira 卡都会带卡名**——计划表、确认问句、汇报三处都一样，不再甩给你一串裸卡号。
 
 手动跑执行器也可以：
 
@@ -61,6 +65,8 @@ python3 ~/.claude/skills/jira-card-kit/scripts/jira_cards.py whoami
 python3 scripts/jira_cards.py setup-token          # 配/换 Jira token（弹系统密码框，自动验证）
 python3 scripts/jira_cards.py whoami               # 验证连通
 python3 scripts/jira_cards.py beneficiary-options APP   # 实时拉受益方线上选项（供产品亲选）
+python3 scripts/jira_cards.py epic-candidates --from <主卡卡号> --keyword "<需求关键词>" --project APP   # 捞 Epic 候选（名称+依据+状态）
+python3 scripts/jira_cards.py epic-search --name "<Epic 名称片段>"   # 按名称找 Epic 卡号
 python3 scripts/jira_cards.py validate plan.json   # 校验+预览，不创建
 python3 scripts/jira_cards.py apply plan.json      # 创建（失败自动续传）
 python3 scripts/jira_cards.py user-search 关键词    # 查 assignee username
@@ -79,11 +85,11 @@ python3 scripts/jira_cards.py set-beneficiary "<线上选项原文>" WEB-19174 W
 - `SKILL.md` — AI 工作流入口
 - `references/01-card-model.md` — 标准包结构、机器人边界、summary 规范
 - `references/02-field-model.md` — 字段 ID/允许值/payload 形状（2026-08 createmeta 实测）
-- `references/03-workflow.md` — PRD 提取映射、提问纪律、汇报格式
+- `references/03-workflow.md` — PRD 提取映射、提问纪律、Epic 名称化提问四步、汇报格式
 - `references/04-field-survey.md` — **7 位产品 97 张真卡的字段实证抽样**（哪些默认值是全组房规、哪些只是作者个人习惯）
 - `scripts/jira_cards.py` — 零依赖执行器
 - `examples/` — APP 双端包与 WEB 故事的 plan 示例
-- `config.example.json` — 本机配置样例（身份 `product_role`、埋点两件套经办人、上次用的 Epic 候选；实际文件放 `~/.jira-card-kit/config.json`，由你手工填或由 kit 用 `config-set` 写。**不放 token**——token 单独一个 600 权限的文件，免得转发配置时把凭据一起发出去）
+- `config.example.json` — 本机配置样例（身份 `product_role`、埋点两件套经办人、上次用的 Epic（只作末位候选）；实际文件放 `~/.jira-card-kit/config.json`，由你手工填或由 kit 用 `config-set` 写。**不放 token**——token 单独一个 600 权限的文件，免得转发配置时把凭据一起发出去）
 
 ## 已知边界
 
