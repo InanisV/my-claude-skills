@@ -19,14 +19,14 @@ lark-cli im +messages-resources-download --message-id om_xxx --file-key img_v3_x
 
 跑 `scripts/competitor_lookup.sh`（iTunes Lookup API，跨区一致）。App ids：Bitget 1442778704 / Bybit 1488296980 / Binance 1436799971（美区不上架，用 sg/gb）/ OKX 1327268470 / Gate 1294998195；参照自查 MEXC 1605393003。发版日期与版本号只认 API 返回；notes 是套话就如实写「无实质信息」。语言支持核查可用 lookup 返回的 `languageCodesISO2A`（注意：元数据可能超报 App 内实际列表）。
 
-## 3. 用户声音增量（只扫近 24–48h）
+## 3. 用户声音增量（只扫近 24–48h；渠道状态截至 9/2 实测）
 
-- Google Play：`play.google.com` 详情页 batchexecute 按语言池拉 newest（无法按国家拆分，按语言池统计）
-- iOS：`https://itunes.apple.com/<区>/rss/customerreviews/page=1/id=1605393003/sortby=mostrecent/json`（每 storefront 最多约 500 条，无日期筛选）
-- Reddit：官方域被封，用 redlib 镜像（redlib.privacyredirect.com）看 r/MEXC_official 及马来/菲律宾等区域版块 new；评论级检索受限，提及量系统性低估
-- Trustpilot：`trustpilot.com/review/www.mexc.com?sort=recency`（用「体验日期」不用发布日期，两者差 5–25 天）
-- 已知缺口：X 原生声量、中文社区（即刻/知识星球是 Yoki 点名信源，尚未接入）
-- 大规模深扫（多路子代理并行）只在周一补库时做，日常只做增量
+- **Trustpilot**：`trustpilot.com/review/www.mexc.com?sort=recency`。⚠️ 该排序按「发布时间」，页面显眼的是「体验日期」，两者可差 5–25 天——判窗以发布时间（"x hours ago"/datetime 属性）为准；带 "Updated" 标记的是旧评价改稿，看更新内容是否有实质增量。⚠️ 停分横幅是客户端渲染组件，**文本代理/纯 curl 看不到**会误报「不存在」——核查横幅类事实必须用真浏览器渲染（9/1 实测横幅仍在）。
+- **Google Play**：`play.google.com/store/apps/details?id=com.mexcpro.client` 按 newest 取；公开 feed 滞后约 34 小时，当天评价次日才可见；窗口内常有过半模板化营销式 5★，统计情绪前先剔除。
+- **Reddit**：官方域 403；redlib 镜像（privacyredirect 等）自 9/1 起上 Anubis 人机墙，**当前不可达**，不要花时间试镜像；需 Reddit 覆盖时改用有 API 凭证的路径或值班人本人浏览器。
+- **Apple 评价 RSS**：`itunes.apple.com/<区>/rss/customerreviews/...` 自 9/1 起返回空 entry（接口空转，非无新评价），不可用；iOS 评分总量仍可用 lookup API（ratingCount/averageUserRating）。
+- **X 原生声量、中文社区（即刻/知识星球，Yoki 点名信源）**：尚未接入，属已知缺口。
+- 深扫（多路子代理并行）只在周一补库时做；日常只做增量，扫不到就如实写「不可达」，不编。
 
 ## 4. 洞察登记表（Yoki 要求，洞察须落表并导向落地）
 
