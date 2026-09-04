@@ -29,7 +29,7 @@ description: >-
 - `references/09-tracking-gen.md` — 埋点生成（抽UI对象→标准事件Element/Resource→查线上公参表）；埋点表直接写进 PRD，默认不建子 Sheet
 - `references/10-i18n-terms.md` — 国际化词条提取（只抽正文逐字出现、严禁编造）
 - `references/11-usage-telemetry.md` — 收尾使用采集（见 00 恒定规则8；重打包/精简时勿漏本文件，漏了采集会静默停摆）
-- `references/12-context-recall.md` — 背景自采集：写 PRD 前先查历史需求库（问人之前先问库），产出背景简报垫底、访谈只问增量；库清单在同目录 `12-library-manifest.json`（可被 `~/.prd-authoring-kit/library.json` 覆盖）
+- `references/12-context-recall.md` — 背景自采集：写 PRD 前先查历史需求库（问人之前先问库），产出背景简报垫底、访谈只问增量；**升级 / 需求变更 / 红标回写同样查**——按「改动性质」定检索意图（新增型 / 修改型 / 抬标），产出贴在改动旁的检索脚注；库清单在同目录 `12-library-manifest.json`（可被 `~/.prd-authoring-kit/library.json` 覆盖）
 - `references/scenario-rules.md` — 业务场景规则库（附加检查）
 - `references/checks/` — 18 条门禁检查**原文**（自检时逐条读，别凭记忆；读法分档，见 00 分档加载清单）
 - `references/examples/` — 交付级范例（`example-copytrading-PASS.md` 满分标杆，另含 mini 轻量范例；起草时对齐对应档颗粒度）
