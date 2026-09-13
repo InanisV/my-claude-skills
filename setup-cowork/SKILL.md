@@ -1,6 +1,7 @@
 ---
 name: "setup-cowork"
 description: "Guided setup — install role-matched plugins, connect your tools, try a skill."
+disable-model-invocation: true
 ---
 
 # Guided setup
