@@ -1,16 +1,21 @@
 """
 Validator for tracked changes in Word documents.
 
-Detects untracked edits in word/document.xml: text that differs from the
+Detects untracked edits in a Word document: text that differs from the
 original without a <w:ins>/<w:del> wrapper recording it. The tracked changes
 that are new relative to the original are undone, and the result is compared
 against the original; whatever text still differs was edited without being
 tracked.
 
-Only the document body is compared. Headers, footers, footnotes and endnotes
-are separate parts and are not checked.
+The body (word/document.xml) is compared, and so is each header, footer,
+footnotes and endnotes part, against the original's part of the same name.
+Other parts, comments among them, are not checked. A page-number field
+whose cached result is a plain number counts as its name in braces
+("{PAGE}"), not as that number, which any application that repaginates the
+document rewrites.
 """
 
+import re
 import subprocess
 import tempfile
 import zipfile
@@ -20,6 +25,9 @@ import defusedxml.ElementTree as ET
 from defusedxml.common import DefusedXmlException
 
 from helpers import rendered_text, safe_extract
+
+
+XML_ERRORS = (ET.ParseError, DefusedXmlException, LookupError, ValueError)
 
 
 class RedliningValidator:
@@ -58,34 +66,76 @@ class RedliningValidator:
                 )
                 return False
 
-            try:
-                modified_tree = ET.parse(modified_file)
-                modified_root = modified_tree.getroot()
-                original_tree = ET.parse(original_file)
-                original_root = original_tree.getroot()
-            except (ET.ParseError, DefusedXmlException) as e:
-                print(f"FAILED - Error parsing XML files: {e}")
-                return False
+            sides = (("original", temp_path), ("modified", self.unpacked_dir))
+            change_count, failures, differences = 0, [], []
+            for part in self._parts_to_compare(temp_path, self.unpacked_dir):
+                roots = []
+                for side, unpacked in sides:
+                    try:
+                        roots.append(self._parse_part(unpacked / part))
+                    except XML_ERRORS as e:
+                        failures.append(
+                            f"FAILED - Error parsing {part} of the {side} document: {e}"
+                        )
+                if len(roots) < len(sides):
+                    continue  
+                new_changes, original_text, modified_text = self._compare_part(*roots)
+                change_count += len(new_changes)
+                if modified_text != original_text:
+                    differences.append((part, original_text, modified_text))
 
-            new_changes = self._new_tracked_changes(original_root, modified_root)
-            self._remove_tracked_changes(modified_root, new_changes)
-
-            modified_text = self._extract_text_content(modified_root)
-            original_text = self._extract_text_content(original_root)
-
-            if modified_text != original_text:
-                error_message = self._generate_detailed_diff(
-                    original_text, modified_text
-                )
-                print(error_message)
+            if differences:
+                failures.append(self._generate_detailed_diff(differences))
+            if failures:
+                print("\n".join(failures))
                 return False
 
             if self.verbose:
                 print(
-                    f"PASSED - All {len(new_changes)} change(s) against the original "
+                    f"PASSED - All {change_count} change(s) against the original "
                     "are properly tracked"
                 )
             return True
+
+    OTHER_PARTS = (
+        "word/header*.xml",
+        "word/footer*.xml",
+        "word/footnotes.xml",
+        "word/endnotes.xml",
+    )
+
+    def _parts_to_compare(self, original_dir, modified_dir):
+        others = set()
+        for unpacked in (Path(original_dir), Path(modified_dir)):
+            for pattern in self.OTHER_PARTS:
+                others.update(
+                    path.relative_to(unpacked).as_posix()
+                    for path in unpacked.glob(pattern)
+                )
+        return ["word/document.xml", *sorted(others)]
+
+    def _compare_part(self, original_root, modified_root):
+        for root in (original_root, modified_root):
+            self._flatten_text_elements(root)
+        new_changes = self._new_tracked_changes(original_root, modified_root)
+        self._remove_tracked_changes(modified_root, new_changes)
+        return (
+            new_changes,
+            self._extract_text_content(original_root),
+            self._extract_text_content(modified_root),
+        )
+
+    def _parse_part(self, path):
+        if not path.is_file():
+            return ET.fromstring("<absent/>")
+        return ET.parse(path).getroot()
+
+    def _flatten_text_elements(self, root):
+        for elem in self._text_elements(root):
+            if len(elem):
+                elem.text = "".join(elem.itertext())
+                for child in list(elem):
+                    elem.remove(child)
 
     def _tracked_change_elements(self, root):
         w = self.namespaces["w"]
@@ -148,7 +198,7 @@ class RedliningValidator:
             new.update(elems)
         return new
 
-    def _generate_detailed_diff(self, original_text, modified_text):
+    def _generate_detailed_diff(self, differences):
         error_parts = [
             "FAILED - Document text doesn't match after removing the tracked changes",
             "",
@@ -170,11 +220,23 @@ class RedliningValidator:
             "",
         ]
 
-        git_diff = self._get_git_word_diff(original_text, modified_text)
-        if git_diff:
-            error_parts.extend(["Differences:", "============", git_diff])
-        else:
-            error_parts.append("Unable to generate word diff (git not available)")
+        explain_page_fields = False
+        for part, original_text, modified_text in differences:
+            body = part == "word/document.xml"
+            heading = "Differences:" if body else f"Differences in {part}:"
+            if error_parts[-1]:
+                error_parts.append("")  
+            git_diff = self._get_git_word_diff(original_text, modified_text)
+            if git_diff:
+                error_parts.extend([heading, "=" * len(heading), git_diff])
+                if re.search(r"\{(%s)\}" % "|".join(self.PAGE_FIELDS), git_diff):
+                    explain_page_fields = True
+            else:
+                error_parts.extend(
+                    [heading, "Unable to generate word diff (git not available)"]
+                )
+        if explain_page_fields:
+            error_parts.extend(["", self.PAGE_FIELD_NOTE])
 
         return "\n".join(error_parts)
 
@@ -268,8 +330,10 @@ class RedliningValidator:
             for elem in to_remove:
                 parent.remove(elem)
 
-        deltext_tag = f"{{{w}}}delText"
-        t_tag = f"{{{w}}}t"
+        renamed = {
+            f"{{{w}}}delText": f"{{{w}}}t",
+            f"{{{w}}}delInstrText": f"{{{w}}}instrText",
+        }
 
         for parent in root.iter():
             to_process = []
@@ -279,8 +343,7 @@ class RedliningValidator:
 
             for del_elem, del_index in reversed(to_process):
                 for elem in del_elem.iter():
-                    if elem.tag == deltext_tag:
-                        elem.tag = t_tag
+                    elem.tag = renamed.get(elem.tag, elem.tag)
 
                 for child in reversed(list(del_elem)):
                     parent.insert(del_index, child)
@@ -325,18 +388,73 @@ class RedliningValidator:
 
     def _extract_text_content(self, root):
         p_tag = f"{{{self.namespaces['w']}}}p"
-        t_tag = f"{{{self.namespaces['w']}}}t"
 
         paragraphs = []
         for p_elem in root.findall(f".//{p_tag}"):
-            text_parts = []
-            for t_elem in p_elem.findall(f".//{t_tag}"):
-                text_parts.append(self._rendered_text(t_elem))
-            paragraph_text = "".join(text_parts)
+            paragraph_text = self._paragraph_text(p_elem)
             if paragraph_text:
                 paragraphs.append(paragraph_text)
 
         return "\n".join(paragraphs)
+
+    PAGE_FIELDS = {"PAGE", "NUMPAGES", "SECTIONPAGES"}
+    PAGE_NUMBER = re.compile(r"-? ?[0-9]{1,6} ?-?|[ivxlcdm]{1,8}|[a-z]{1,2}|", re.I)
+    PAGE_FIELD_NOTE = (
+        "Note: {PAGE}, {NUMPAGES} or {SECTIONPAGES} above stands for a page-number\n"
+        "field. Word recomputes the number it displays, so the number stored in\n"
+        "the file is not compared, but adding or removing the field still counts."
+    )
+
+    def _paragraph_text(self, p_elem):
+        w = self.namespaces["w"]
+        t_tag, instr_tag = f"{{{w}}}t", f"{{{w}}}instrText"
+        fld_char, fld_simple = f"{{{w}}}fldChar", f"{{{w}}}fldSimple"
+
+        def page_field(instruction, field):
+            words = instruction.split()
+            locked = field.get(f"{{{w}}}fldLock") in ("1", "true", "on")
+            if words and words[0].upper() in self.PAGE_FIELDS and not locked:
+                return words[0].upper()
+
+        def shown(name, result):
+            return "{%s}" % name if self.PAGE_NUMBER.fullmatch(result) else result
+
+        parts, fields = [], []
+        skipped = set()  
+
+        def sink():
+            for *_, result in reversed(fields):
+                if result is not None:
+                    return result
+            return parts
+
+        for elem in p_elem.iter():
+            if elem.tag == fld_simple:
+                name = page_field(elem.get(f"{{{w}}}instr", ""), elem)
+                if name:
+                    texts = [self._rendered_text(t) for t in elem.iter(t_tag)]
+                    sink().append(shown(name, "".join(texts).strip()))
+                    skipped.update(elem.iter(t_tag))
+            elif elem.tag == fld_char:
+                kind = elem.get(f"{{{w}}}fldCharType")
+                if kind == "begin":
+                    fields.append([elem, "", False, None])
+                elif kind == "separate" and fields and not fields[-1][2]:
+                    fields[-1][2] = True
+                    if page_field(fields[-1][1], fields[-1][0]):
+                        fields[-1][3] = []
+                elif kind == "end" and fields:
+                    begin, instruction, _, result = fields.pop()
+                    name = page_field(instruction, begin)
+                    if name:
+                        sink().append(shown(name, "".join(result or []).strip()))
+            elif elem.tag == instr_tag and fields and not fields[-1][2]:
+                fields[-1][1] += elem.text or ""
+            elif elem.tag == t_tag and elem not in skipped:
+                sink().append(self._rendered_text(elem))
+        for *_, result in fields:
+            parts.extend(result or [])
+        return "".join(parts)
 
 
 if __name__ == "__main__":
