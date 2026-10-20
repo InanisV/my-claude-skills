@@ -279,3 +279,15 @@ lark-cli base +record-search --base-token <t> --table-id <tbl> --keyword "<键>"
 | 字段映射核对 | 5 源字段数 17/21/28/26/23 与清单逐字一致，映射字段全部存在 |
 | Jira 单号列复核（2026-09-02）| manifest 5 源 `fields.jira` **全部就位**：`backlog-current` / `app-2025-apr` / `web-2025` / `web-2026` =「Jira单号/链接」，`app-2025` =「JIRA单号」——简报第 7 段照这里取列名 |
 | 已知失败态 | 冷存储 `code 600`、无权限 `code 3380004`——各遇到过，均按"跳过 + 进未读清单"处理 |
+
+## 十、需求收集表登记（流水线 S3；本文件唯一的写动作）
+
+每个需求都要进公司需求收集表（`manifest.sources[0]`：base `RQmCbHS3maSShns8SRuuBL9Csib` / table `tbl0Dfehgj7xFwhw`）——它是 AI 覆盖率与需求进展看板的底表。时机：PRD 发布成功或 Jira 卡建成之后、汇报之前（`06 步骤 4` 与 jira-card-kit 步骤 8b 都回到这里；话术见 `13 §三`）。
+
+1. 🔴 **动手前必问一次**「要登记进需求收集表吗？」——连预览一起问：**优先级 / 迭代版本 / 进展 三项由产品定**——**三项各自把线上选项原文列出来让产品点**（`+field-search-options`），别做成「采用这组值 / 我提供其他值」二选一（实测产品点了"采用"后连改两次）；其它字段自动填；**自动填的格（需求描述 / PRD / Jira / 产品模块）也要在同一条问句里贴出来让产品看过**（实测：需求描述没预览就写进去，成了一大段功能清单，产品事后追改）；登记人（`产品经理`、`需求提出方`）默认 = lark-cli 登录本人（`python3 scripts/register.py whoami`），产品另指才换。产品说不登记 → 闭环清单记「跳过·原因」，本需求内不再问。
+2. **先查后写**：`python3 scripts/register.py demand-find --prd <PRD 链接> --name <需求名关键词>`——有既有行只补空格（`PRD`、`Jira单号/链接`、`BRD/MRD`），**不新建重复行**。
+3. **出预览**：`python3 scripts/register.py demand-plan [--prd <url>] --name "<需求描述：≤20 字短需求名，默认 = PRD 标题去【端】与「PRD」；不是功能清单>" --module "<产品模块选项>" --priority <优先级选项> --iteration "<迭代版本选项>" --progress "<进展选项>" [--jira KEY,KEY] [--value "<需求价值一句>"] [--source-dept "<需求来源部门选项>"] [--brd <url>]`——脚本在线校验每个单选值（选项会变，别背），把既有行匹配结果和将写入的每一格打成表；任何一格「？」都不许进下一步。**没有 PRD 也照常登记**（先建卡后写 PRD 是 kit 支持的路径）：`--prd` 留空、`PRD` 格留空，事后 `python3 scripts/register.py demand-update <record_id> --set PRD=<url> --yes` 补。
+4. **写入并回读**：`python3 scripts/register.py demand-apply demand-plan.json --yes` → 既有行只填空格，新行新建；写完自动回读并打印，把 record_id 写进闭环清单；成功后脚本自动记一行使用记录（模式 `登记需求`，需求名 = `--requirement`，平台 = `--platform`；输出「未写入」才按 `11` 手动补）。
+5. 用户贴的是 `view=` 视图链接 → 先 `lark-cli base +url-resolve` 拿底表 token，别对着视图猜。
+
+字段（2026-09 表头，以 `+field-list` 读回为准）：`需求描述` / `产品模块`(select：App / Web/H5 / App（DEX)) / `PRD`(链接) / `Jira单号/链接` / `产品经理`(user) / `需求提出方`(user) / `优先级`(select) / `迭代版本`(select) / `进展`(select) / `需求价值` / `需求来源部门`(select) / `BRD/MRD` / `备注`。**默认值（产品口径 2026-09-23）**：`进展` 刚登记 = 「0. 未开始」（不是待评审 / 待排期——进展跟的是开发进度）；`迭代版本` 从线上选项里让产品点（该表有「下个迭代」这类选项，猜不出来），不默认「待排期」；`优先级` 取 PRD 文档信息表的值当起点。 `Jira单号/链接` 写成可点的 `[KEY](链接)`，不是裸文本。产品当场改哪格就 `demand-update --set` 改哪格并回读，别整行重写。

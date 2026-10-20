@@ -5,7 +5,7 @@
 >
 > **可信度锚点**：本 kit 的 `references/checks/` 是门禁 18 条原文镜像（归属审查方产品作者 **@coast.lin**），基线 2026-07-08；`examples/` 的 PASS 是按 kit 口径自检 PASS，非真门禁背书。
 
-陪产品把需求变成一份 **能显著提高一次通过研发 nocode 工作流准入门禁概率** 的飞书 PRD。跨 AI 应用可用（Claude Code / Kiro / Codex / Gemini / Antigravity），同一套核心知识，各平台只是不同入口。
+陪产品把**一个需求走完闭环**：写出能显著提高一次通过研发 nocode 工作流准入门禁概率的飞书 PRD，接着建卡（含 Epic）、登记需求收集表、提词条文案校对，评审后按评论改并同步到群——每站收尾只提一句下一站，登记类先问一次再动手（`references/13-workflow.md`）。跨 AI 应用可用（Claude Code / Kiro / Codex / Gemini / Antigravity），同一套核心知识，各平台只是不同入口。
 
 ## 它解决什么
 
@@ -14,6 +14,7 @@
 2. 按飞书 house 风格 + 补齐门禁最爱扣分的缺口（成功指标 / 验收标准 / 本期不含 / 数据来源 / 幂等 / 埋点）起草；
 3. **发布前用门禁的原始 18 条检查自检**到达交付标准（见下）；
 4. 用 `lark-cli` 写进飞书，回链接 + 自检简报。
+5. **不止 PRD——一个需求的闭环全包**（v1.8）：建卡（含 Epic）→ 需求收集表登记 → 词条文案校对登记 → 评审后按评论改、群同步；每站收尾只提一句下一站，登记类先确认再动手（`references/13-workflow.md`）。
 
 > 定位诚实说明：本 kit **主要面向加密交易所/App 类产品**（交易/行情/资金/推送场景的域规则最厚）；通用需求**也可用**，但不做过度承诺。自检的作用是**显著提高一次过门禁的概率**，不是「确保/保证一次过」。
 
@@ -37,12 +38,15 @@ prd-authoring-kit/
 │  ├─ 10-i18n-terms.md            # 国际化词条提取
 │  ├─ 11-usage-telemetry.md       # 收尾使用采集（⚠ 采集表 token 硬编码在内，表迁移需同步改；重打包勿漏，漏了采集静默停摆）
 │  ├─ 12-context-recall.md        # 背景自采集：写/改之前先查历史需求库 → 按改动性质定意图 → 简报(访谈)/脚注(升级·变更·回写)
-│  ├─ 12-library-manifest.json    # 历史需求库清单（各源 token/字段映射/模块词表；用户级覆盖放 ~/.prd-authoring-kit/library.json）
+│  ├─ 12-library-manifest.json    # 历史需求库清单 + 登记表单地址（各源 token/字段映射/模块词表/forms；用户级覆盖放 ~/.prd-authoring-kit/library.json）
+│  ├─ 13-workflow.md              # 需求一条龙流水线：七站总表 + 闭环清单 + 登记确认话术（S3 需求收集表 / S4 校对登记 / S6 AB 实验登记）+ 聊天记录当输入的配方
 │  ├─ scenario-rules.md           # 业务场景规则库（附加检查）
 │  ├─ checks/                     # 18 条门禁检查原文（自检逐条读）
 │  ├─ checks-logic/               # 逻辑内审镜像（第二道门原文判据）
 │  ├─ examples/                   # 交付级样例（已过全部 18 条的 PASS 稿）
 │  └─ templates/                  # 对接产品的通用前/后端参考模板
+├─ scripts/
+│  └─ register.py                 # 需求收集表 / 文案校对登记表 登记脚本（只调 lark-cli；plan 预览 → apply --yes）
 ├─ adapters/                      # 各平台薄指针（不含核心逻辑，只指回 references/）
 │  ├─ codex/AGENTS.md
 │  ├─ gemini/GEMINI.md
@@ -68,6 +72,8 @@ prd-authoring-kit/
    - **每一项 `status=pass` 即视为通过**；顶部若有 `update`（版本升级）提示可忽略，不影响使用。
 
 > **没有 lark-cli 也能用**（很多同事没申请，kit 对这部分用户全程可用）：进入「无 lark-cli 全程模式」——写/升级/自检三模式照常，读飞书稿改为你全选复制粘贴给它，交付一份可直接粘进飞书的纯文本 PRD（md 文件）+ 自检简报，结尾附一次装法。装好 lark-cli 的增益=一键发布成飞书文档 + 贴链接就能读稿原地升级。
+>
+> **写完之后的几站也靠它**：需求收集表登记与文案校对登记跑的是 `scripts/register.py`（python3 macOS 自带 + 已登录 lark-cli，不碰任何密钥）；建卡走伴生 jira-card-kit（Jira token 配置见其 README）。没有 lark-cli 时这两站退化为把要填的内容整理给你自己填，确认规则不变。
 
 ## 安装（一条命令）
 
@@ -84,7 +90,7 @@ prd-authoring-kit/
 ```
 发布到 npm 后也可：`npx prd-authoring-kit <claude|codex|gemini|kiro|antigravity|all>`。
 
-- **Claude Code（主推）**：`./install.sh claude` → 新会话说「帮我写个 PRD / 升级这份 PRD / 自检这份 PRD」即自动触发。
+- **Claude Code（主推）**：`./install.sh claude` → 新会话说「帮我写个 PRD / 升级这份 PRD / 自检这份 PRD / 登记需求 / 登记校对 / 建个 Epic」即自动触发。
 - **Codex**：`./install.sh codex` → 装进 Codex **官方 skills 位** `~/.agents/skills/prd-authoring-kit`（手动等价：`mkdir -p ~/.agents/skills && cp -R <本包> ~/.agents/skills/prd-authoring-kit`）。Codex 2025-12 起原生支持 skills：**自动发现、按 description 自动触发、全局生效**，**不必再往 AGENTS.md 并加载句**；显式呼出用 `$prd-authoring-kit`；装完/更新后**完全重启 Codex** 生效。（旧接法 `~/.prd-authoring-kit` + AGENTS.md 加载句仍双写兼容，已并句的用户不用动。）
 - **Gemini**：装完按提示把**一句加载器**并入你的 `GEMINI.md`（安装器会打印那句话）——**只并这一句、别整份拷**：这样日后自动更新只刷 `~/.prd-authoring-kit/` 里的完整片段，你并入的那句永不过时。（旧版整份并入的用户：建议换成这一句，否则你并入的内容不吃自动更新、会慢慢过时。）
 - **Cursor 等还没有 skills 机制的平台**：走旧法——`./install.sh codex` 装好核心后，把安装器打印的那**一句加载器**并入**项目根的 `AGENTS.md`**（或该平台等价的常驻上下文文件），同样**只并这一句**。新版 Cursor 若已支持 `.agents/skills` 目录（与 Codex 同标准），可同 Codex 装法——**以你的 Cursor 版本实测为准**。
@@ -99,7 +105,7 @@ prd-authoring-kit/
 
 ## 📦 本包同时携带伴生 skill：jira-card-kit（建卡/拆单）、showcase-demo（演示 demo）
 
-- **jira-card-kit**：把需求拆成 Jira 卡并批量创建（APP 双端标准包 / WEB 故事 / 跨端依赖）。
+- **jira-card-kit**：把需求拆成 Jira 卡并批量创建（APP 双端标准包 / WEB 故事 / 跨端依赖 / **新建 Epic**，v1.8 起）。
 - **showcase-demo**：把 PRD / 设计稿 / 对话结论变成一键自动播放的单文件 HTML 可交互演示 demo。
 
 **装 `claude` / `codex` 时自动落位**，无需另外下载安装：
@@ -115,6 +121,7 @@ prd-authoring-kit/
 - 没 PRD 也能直接建卡（口头描述就够，绝不会让你"先去写 PRD"）；PRD 还没写时「需求Jira单」格填占位「待建卡」，建完回填；
 - 会话里已有 PRD 链接 → 建卡时自动填进卡描述，不用你再贴一遍；
 - 做完一件，另一件**只提一句**（「Jira 卡建了吗？」/「PRD 写了吗？」），不追问、不推销；对方另一半没装就整句省略。
+- PRD 发布或卡建好之后，kit 还会**各问一次**：「要登记进需求收集表吗？」（优先级 / 迭代版本 / 进展你定，登记人默认 lark-cli 本人）；本轮有新词条 →「要提文案校对登记吗？」（只问优先级，其余按 PRD 自动填）。说不用就记「跳过」，同一需求不再问——这是流水线的 S3 / S4（`references/13-workflow.md`）。
 
 **要拿去讲的时候**：写完 PRD 要演示，直接说「做个 demo」即进 showcase-demo（偶发需求，不主动追问、不打断写 PRD 的节奏）。
 
@@ -126,15 +133,17 @@ jira-card-kit 的用法、Jira token 配置与边界见 `companions/jira-card-ki
 >
 > 非 Claude 平台**定位 kit 的机械动作**：用你平台的文件查找能力定位 `00-orchestrator.md`（有 glob/file-search 工具用之；否则用 shell：`find . ~/.claude/skills ~/.prd-authoring-kit -name 00-orchestrator.md 2>/dev/null`）→ 它的上一级目录就是 `references/`，再上一级就是 KIT_ROOT；所有 `references/…` 与 `references/checks/…` 的读取都加 KIT_ROOT 前缀。找不到就**停下问用户 kit 路径**，不要凭摘要即兴写 PRD。
 
-## 用法（三种模式）
+## 用法（你说什么，它做什么）
 
 | 你说 | 它做 |
 |---|---|
 | “帮我写个 PRD / 我有个需求” | 对话访谈 → 起草 → 自检 → 发飞书 |
 | “升级/改这份 PRD”（附链接或草稿） | 结构化 → 补门禁缺口 → 自检 → 迭代更新飞书 |
 | “自检/评一下这份 PRD” | 只跑 18 条检查 → 给分 + 缺口，不必发布 |
+| “建卡 / 建个 Epic” | 伴生 jira-card-kit：受益方·Epic·端范围三问 → 计划表确认 → 建 Epic / 故事 / 子任务 |
+| “登记需求 / 登记校对 / 登记实验” | 需求收集表 / 文案校对登记表 / AB 实验管理表：先问一次（S3 三项让你从选项里点；S4 只问优先级；S6 流量·主体·周期你定）→ 脚本填表 → 回读 |
 
-> **第 0 步不可跳过**：任何模式动手前，先读 `references/00-orchestrator.md` 并回显它的三模式表——这是硬要求，不是脚注。
+> **第 0 步不可跳过**：任何模式动手前，先读 `references/00-orchestrator.md` 并回显它的模式表——这是硬要求，不是脚注。
 >
 > **正式准入 = PRD Bot**（@coast.lin 的准入门禁产品）：kit 自检是写作侧逻辑内审；发布后在 PRD Bot 会话发送 `/review <链接>`（纯文本官方格式）即得官方评审——报告贴回来，kit 帮你按清单补缺口（`06 §提审`）。
 
@@ -152,11 +161,13 @@ jira-card-kit 的用法、Jira token 配置与边界见 `companions/jira-card-ki
 
 对标对接产品的旧 prd-bot（28 工具 MCP 状态机 + 1500 字截断绕行 + 硬脚本 steering，难用），本 kit 反其道：**知识 + 模板 + 流程都是纯文件，让各平台 agent 自己编排，直接调 lark-cli**。轻、可移植、改一处全平台生效。
 
+**模型兼容（v1.8.1）**：同一套 kit 两档执行强度——**完整档**给 Kiro / Gemini 等平台的默认模型与 gpt-5.x 级模型（逐条读、逐条做）；**精简档**给 GPT-6 Astra、Claude Opus 5 / Fable 5 级模型（读 `references/00-core-contract.md` 结果契约，细则定点读）。两档产出、报告、确认闸一字不差，差别只在读多少"为什么"；不确定就走完整档。做法呼应 OpenAI《Rethinking skills and prompts for GPT-6 Astra》：根 `SKILL.md` 只做路由、描述只写精确触发、支撑文档按需读、Codex `AGENTS.md` 明写哪些只读步骤不必征询；**但 🔴 闸是产品定的结果要求，不是给弱模型的脚手架，两档都不省**。
+
 ---
 
 ## 定位与署名
 
-- **只做「撰写」，与「审查/准入」互补**：研发团队的 nocode 审查/准入门禁（prd-review skill 及其 18 条检查体系）是 **@coast.lin 的产品**；本 kit 是流水线的**撰写**这一半，**建在他那套门禁之上**（`references/checks/` 就是那 18 条检查的镜像，归属 @coast.lin）——目标是**让全组更容易过他的门禁**，不绕过、不替代、不抢功。撰写（本 kit，Noah Zhan）+ 审查（@coast.lin 的门禁）= 完整流水线。
+- **做「撰写 + 写完之后的闭环」，与「审查/准入」互补**：研发团队的 nocode 审查/准入门禁（prd-review skill 及其 18 条检查体系）是 **@coast.lin 的产品**；本 kit 是流水线的**撰写这一半，以及写完之后的建卡、登记、校对、评审后同步**，**建在他那套门禁之上**（`references/checks/` 就是那 18 条检查的镜像，归属 @coast.lin）——目标是**让全组更容易过他的门禁**，不绕过、不替代、不抢功。撰写（本 kit，Noah Zhan）+ 审查（@coast.lin 的门禁）= 完整流水线。
 - **署名 / 二次创作边界**：本 kit 作者 **Noah Zhan (@noah.zhan)**。欢迎使用、改造、内部分发，但请遵守 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)：**保留各文件署名头与本 README 署名，衍生须明确标注"基于 Noah Zhan 的 PRD Authoring Kit 改编"，不得把本 kit 的结构与方法论（最小充分 / 不臆造 / house 粒度 / 对话确认 / 把准入检查反写成写作规则）标榜为自己的原创。** git 历史即先创作证据。
 
 > 作者信息（`Noah Zhan (@noah.zhan)`、仓库 URL）在 `LICENSE`/`NOTICE`/`package.json`/各文件头，按需自行核对替换。

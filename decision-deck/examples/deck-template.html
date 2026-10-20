@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DECK 标题（改成一句判断）</title>
+<style>
+/* ===== tokens：与 mexc-infographic/references/design-tokens.md 的 :root 保持一致，改那边同步改这里 ===== */
+:root{
+  --bg-base:#0B0E11;--bg-surface:#12151A;--bg-card:#181B22;--bg-card-hover:#1E222B;--bg-elevated:#242830;
+  --brand-primary:#2B6AFF;--brand-light:#5B8FFF;--brand-bg:rgba(43,106,255,.12);
+  --color-up:#00B87A;--color-up-bg:rgba(0,184,122,.12);--color-down:#F6465D;--color-down-bg:rgba(246,70,93,.12);
+  --color-warning:#F0B90B;--color-warning-bg:rgba(240,185,11,.12);--color-info:#1E9FF2;
+  --text-primary:#EAECEF;--text-secondary:#848E9C;--text-tertiary:#5E6673;
+  --border-card:rgba(234,236,239,.08);--border-emphasis:rgba(234,236,239,.15);
+  --radius-md:10px;--radius-lg:14px;--radius-xl:20px;
+  --font-sans:"PingFang SC","Microsoft YaHei","Noto Sans SC","Noto Sans CJK SC",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --font-display:"DIN Alternate","DIN","Barlow",var(--font-sans);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-family:var(--font-sans);overflow:hidden}
+
+/* ===== 舞台：固定 1920×1080，按窗口缩放 ===== */
+#stage{position:absolute;left:50%;top:50%;width:1920px;height:1080px;transform:translate(-50%,-50%) scale(1);transform-origin:center center;background:var(--bg-base)}
+.slide{position:absolute;inset:0;display:none;padding:88px 112px 120px;background:var(--bg-base)}
+.slide.active{display:block}
+
+/* ===== 页头：段落标签 + 观点句标题 ===== */
+.kicker{font-size:18px;letter-spacing:2px;color:var(--brand-light);font-weight:600;margin-bottom:14px}
+.slide-title{font-size:54px;font-weight:800;line-height:1.22;letter-spacing:-.5px;max-width:1500px}
+.slide-title em{font-style:normal;color:var(--color-warning)}
+.slide-sub{margin-top:14px;font-size:24px;color:var(--text-secondary);max-width:1400px}
+.visual{margin-top:44px}
+
+/* ===== 页脚：deck 名 · 页码 · 本页秒数 · 计时 ===== */
+#footer{position:absolute;left:112px;right:112px;bottom:40px;display:flex;justify-content:space-between;align-items:center;font-size:16px;color:var(--text-tertiary)}
+#footer b{color:var(--text-secondary);font-weight:500}
+#clock{font-family:var(--font-display);font-variant-numeric:tabular-nums}
+#clock.run{color:var(--color-up)}
+#clock.over{color:var(--color-down)}
+.src{position:absolute;left:112px;bottom:92px;font-size:14px;color:var(--text-tertiary)}
+
+/* ===== 封面 ===== */
+.cover .kicker{color:var(--text-secondary)}
+.cover .slide-title{font-size:84px;line-height:1.15;margin-top:150px}
+.cover .slide-title em{color:var(--brand-light)}
+.cover .question{margin-top:28px;font-size:34px;color:var(--text-primary);font-weight:500}
+.bignums{display:flex;gap:28px;margin-top:96px}
+.bignum{background:var(--bg-card);border:1px solid var(--border-card);border-radius:var(--radius-lg);padding:26px 36px;min-width:300px}
+.bignum .v{font-family:var(--font-display);font-size:56px;font-weight:800;color:var(--brand-light);line-height:1}
+.bignum .v.gold{color:var(--color-warning)}
+.bignum .l{margin-top:10px;font-size:18px;color:var(--text-secondary)}
+
+/* ===== 反差页：两条路径并排 ===== */
+.paths{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+.path{background:var(--bg-card);border:1px solid var(--border-card);border-radius:var(--radius-xl);padding:40px 44px;min-height:380px}
+.path.new{border-color:rgba(43,106,255,.45);background:linear-gradient(180deg,rgba(43,106,255,.10),var(--bg-card))}
+.path .tag{display:inline-block;padding:6px 16px;border-radius:999px;font-size:16px;font-weight:600;margin-bottom:22px;background:var(--bg-elevated);color:var(--text-secondary)}
+.path.new .tag{background:var(--brand-bg);color:var(--brand-light)}
+.path .chain{font-size:38px;font-weight:700;line-height:1.4}
+.path .chain span{color:var(--text-tertiary);margin:0 14px}
+.path .note{margin-top:24px;font-size:20px;color:var(--text-secondary)}
+.path.new .note{color:var(--text-primary)}
+
+/* ===== 曲线加事件页 ===== */
+.curve{display:grid;grid-template-columns:1.6fr 1fr;gap:40px;align-items:start}
+.chart{background:var(--bg-card);border:1px solid var(--border-card);border-radius:var(--radius-xl);padding:28px}
+.chart svg{width:100%;height:auto;display:block}
+.events{list-style:none}
+.events li{display:flex;gap:18px;align-items:flex-start;padding:18px 0;border-bottom:1px solid var(--border-card);font-size:22px}
+.events li:last-child{border-bottom:none}
+.events .n{flex:0 0 36px;height:36px;border-radius:50%;background:var(--color-warning);color:#0B0E11;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:18px}
+.events .d{color:var(--text-tertiary);font-size:16px;display:block;margin-top:4px}
+
+/* ===== 矩阵页 ===== */
+table.matrix{width:100%;border-collapse:separate;border-spacing:0;font-size:22px}
+.matrix th,.matrix td{padding:16px 18px;text-align:center;border-bottom:1px solid var(--border-card)}
+.matrix th{color:var(--text-secondary);font-weight:600;font-size:18px;background:var(--bg-card)}
+.matrix td:first-child,.matrix th:first-child{text-align:left}
+.matrix td.ok{color:var(--color-up)}
+.matrix td.partial{color:var(--color-warning)}
+.matrix td.no{color:var(--color-down);font-weight:800}
+.matrix td.unknown{color:var(--text-tertiary)}
+.matrix .us{background:rgba(246,70,93,.06);border-left:1px solid rgba(246,70,93,.35);border-right:1px solid rgba(246,70,93,.35)}
+.matrix th.us{color:var(--text-primary)}
+
+/* ===== 三栏页（案例 / 选项 / 三条变化） ===== */
+.cols-3{display:grid;grid-template-columns:repeat(3,1fr);gap:28px}
+.card{background:var(--bg-card);border:1px solid var(--border-card);border-radius:var(--radius-xl);padding:30px 32px;min-height:420px}
+.card.hot{border-color:rgba(240,185,11,.55)}
+.card .label{display:inline-block;font-size:15px;padding:4px 12px;border-radius:999px;background:var(--bg-elevated);color:var(--text-secondary);margin-bottom:16px}
+.card.hot .label{background:var(--color-warning-bg);color:var(--color-warning)}
+.card h3{font-size:30px;line-height:1.3;margin-bottom:14px}
+.card p{font-size:20px;color:var(--text-secondary);line-height:1.55}
+.card .shot{margin:18px 0 6px;width:100%;aspect-ratio:16/10;border-radius:var(--radius-md);background:#000;border:1px solid var(--border-card);display:flex;align-items:center;justify-content:center;color:var(--text-tertiary);font-size:16px;overflow:hidden;cursor:zoom-in}
+.card .shot img{width:100%;height:100%;object-fit:cover;display:block}
+.pros,.cons{list-style:none;margin-top:16px;font-size:20px}
+.pros li::before{content:"优势  ";color:var(--color-up);font-weight:700}
+.cons li::before{content:"代价  ";color:var(--color-down);font-weight:700}
+.pros li,.cons li{padding:8px 0;border-top:1px solid var(--border-card)}
+
+/* ===== 手机帧页：录屏或设计稿 + 价值清单 ===== */
+.phone-row{display:grid;grid-template-columns:420px 1fr;gap:64px;align-items:center}
+.phone{width:390px;height:844px;border-radius:44px;background:#000;border:6px solid #2a2f3a;overflow:hidden;position:relative;transform:scale(.78);transform-origin:top left;margin-bottom:-186px}
+.phone video,.phone img{width:100%;height:100%;object-fit:cover;display:block}
+.phone .placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--text-tertiary);font-size:20px;padding:40px;border:2px dashed var(--border-emphasis);margin:24px;border-radius:28px}
+.values{list-style:none}
+.values li{display:flex;gap:20px;align-items:flex-start;padding:22px 0;border-bottom:1px solid var(--border-card)}
+.values li:last-child{border-bottom:none}
+.values .n{flex:0 0 40px;height:40px;border-radius:50%;background:var(--brand-primary);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:20px}
+.values .n.green{background:var(--color-up);color:#0B0E11}
+.values b{display:block;font-size:30px;color:var(--color-warning);font-weight:700;line-height:1.3}
+.values b.green{color:var(--color-up)}
+.values span{display:block;margin-top:6px;font-size:19px;color:var(--text-secondary)}
+
+/* ===== 讨论页 ===== */
+.questions{list-style:none;counter-reset:q}
+.questions li{counter-increment:q;font-size:40px;font-weight:600;line-height:1.35;padding:28px 0;border-bottom:1px solid var(--border-card);display:flex;gap:28px}
+.questions li::before{content:counter(q);flex:0 0 56px;height:56px;border-radius:50%;background:var(--brand-bg);color:var(--brand-light);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:28px}
+.board{margin-top:34px;display:none;grid-template-columns:1fr 1.4fr;gap:28px}
+.board.on{display:grid}
+.board .form,.board .list{background:var(--bg-card);border:1px solid var(--border-card);border-radius:var(--radius-xl);padding:24px}
+.board input,.board textarea{width:100%;background:var(--bg-surface);border:1px solid var(--border-emphasis);border-radius:var(--radius-md);color:var(--text-primary);font:inherit;font-size:18px;padding:12px 14px;margin:8px 0 14px}
+.board textarea{height:90px;resize:none}
+.board button{background:var(--brand-primary);color:#fff;border:0;border-radius:var(--radius-md);padding:12px 22px;font-size:18px;font-weight:600;cursor:pointer}
+.board button.ghost{background:var(--bg-elevated);color:var(--text-secondary);margin-left:10px}
+.board .item{padding:12px 0;border-bottom:1px solid var(--border-card);font-size:19px}
+.board .item small{display:block;color:var(--text-tertiary);font-size:15px;margin-top:4px}
+.board .hint{font-size:14px;color:var(--text-tertiary);margin-top:10px}
+
+/* ===== 附录页 ===== */
+.links{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.links a{display:block;background:var(--bg-card);border:1px solid var(--border-card);border-radius:var(--radius-lg);padding:24px 26px;color:var(--text-primary);text-decoration:none;font-size:22px}
+.links a span{display:block;color:var(--text-tertiary);font-size:16px;margin-top:8px}
+table.plain{width:100%;border-collapse:collapse;font-size:18px;margin-top:10px}
+.plain th,.plain td{padding:12px 14px;border-bottom:1px solid var(--border-card);text-align:left;vertical-align:top}
+.plain th{color:var(--text-secondary);font-weight:600;background:var(--bg-card)}
+
+/* ===== 水印：概念稿必加 ===== */
+.wm{position:absolute;right:112px;top:92px;padding:8px 16px;border:1px solid rgba(240,185,11,.5);color:var(--color-warning);border-radius:999px;font-size:16px;letter-spacing:1px;background:var(--color-warning-bg)}
+
+/* ===== 目录、放大、提示 ===== */
+#toc{position:fixed;inset:0;background:rgba(11,14,17,.96);display:none;padding:60px 80px;overflow:auto;z-index:50}
+#toc.on{display:block}
+#toc h2{font-size:28px;color:var(--text-secondary);margin-bottom:24px;font-weight:500}
+#toc ol{list-style:none;columns:2;column-gap:60px}
+#toc li{font-size:22px;padding:12px 0;border-bottom:1px solid var(--border-card);cursor:pointer;break-inside:avoid}
+#toc li b{color:var(--text-tertiary);font-weight:500;margin-right:14px;font-family:var(--font-display)}
+#toc li small{float:right;color:var(--text-tertiary)}
+#zoom{position:fixed;inset:0;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;z-index:60;cursor:zoom-out}
+#zoom.on{display:flex}
+#zoom img{max-width:92vw;max-height:92vh;border-radius:12px}
+#help{position:fixed;left:16px;bottom:12px;font-size:12px;color:var(--text-tertiary);z-index:40;opacity:.8}
+
+/* ===== 打印 / PDF：每页一张，去掉导航 ===== */
+@page{size:1920px 1080px;margin:0}
+@media print{
+  html,body{overflow:visible;height:auto}
+  #stage{position:static!important;transform:none!important;left:auto;top:auto;width:1920px;height:auto;margin:0}
+  .slide{display:block;position:relative;width:1920px;height:1080px;page-break-after:always;break-after:page}
+  section.slide:last-of-type{page-break-after:auto;break-after:auto}
+  #toc,#zoom,#help,#footer{display:none!important}
+  .board{display:none!important}
+}
+</style>
+</head>
+<body>
+
+<div id="stage">
+
+<!-- P1 封面：一句判断做标题，开场问题做副标题，三个大数做反差 -->
+<section class="slide cover" data-seconds="40" data-title="封面">
+  <div class="kicker">MEXC · 2026.10 · 会议名称</div>
+  <h1 class="slide-title">一句判断做标题：<em>框架名写在这里</em></h1>
+  <p class="question">开场问题写在这里：会议室现在没有答案的那个缺口？</p>
+  <div class="bignums">
+    <div class="bignum"><div class="v">12 万 → 190 万</div><div class="l">大数一：从多少到多少，带时间跨度</div></div>
+    <div class="bignum"><div class="v gold">15.8 倍</div><div class="l">大数二：反差本身</div></div>
+    <div class="bignum"><div class="v">$ 待填</div><div class="l">大数三：和我们有关的那个数</div></div>
+  </div>
+  <div class="src">数据来源：写一行，来源写不出的数不上页</div>
+</section>
+
+<!-- P2 反差页：旧路径 vs 新路径 -->
+<section class="slide" data-seconds="50" data-title="第一件事 · 路径变了">
+  <div class="kicker">PART 1 · 别人为什么赢</div>
+  <h1 class="slide-title">标题是判断句：用户的路径从 <em>A 变成了 B</em></h1>
+  <div class="visual paths">
+    <div class="path"><span class="tag">传统</span><div class="chain">发现币<span>→</span>研究行情<span>→</span>下单</div><p class="note">一句话说旧路径的问题</p></div>
+    <div class="path new"><span class="tag">新</span><div class="chain">看谁赚钱<span>→</span>他买啥<span>→</span>还能上车吗</div><p class="note">一句话说新路径为什么更短</p></div>
+  </div>
+</section>
+
+<!-- P3 曲线加事件页：一条曲线，三个事件编号 -->
+<section class="slide" data-seconds="60" data-title="第一件事 · 三个拐点">
+  <div class="kicker">PART 1 · 别人为什么赢</div>
+  <h1 class="slide-title">标题是判断句：三个拐点，<em>缩短三种距离</em></h1>
+  <div class="visual curve">
+    <div class="chart">
+      <svg viewBox="0 0 1000 420" aria-label="示例曲线，换成真实数据">
+        <defs><linearGradient id="g" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#2B6AFF" stop-opacity=".35"/><stop offset="1" stop-color="#2B6AFF" stop-opacity="0"/></linearGradient></defs>
+        <g stroke="rgba(234,236,239,.08)"><line x1="60" x2="980" y1="100" y2="100"/><line x1="60" x2="980" y1="220" y2="220"/><line x1="60" x2="980" y1="340" y2="340"/></g>
+        <path d="M60 350 C 200 345, 300 340, 420 330 S 560 300, 640 260 S 760 150, 820 110 S 920 40, 980 30 L 980 380 L 60 380 Z" fill="url(#g)"/>
+        <path d="M60 350 C 200 345, 300 340, 420 330 S 560 300, 640 260 S 760 150, 820 110 S 920 40, 980 30" fill="none" stroke="#5B8FFF" stroke-width="4"/>
+        <g font-family="DIN Alternate, Barlow, sans-serif" font-size="20" font-weight="800">
+          <circle cx="420" cy="330" r="16" fill="#F0B90B"/><text x="420" y="337" text-anchor="middle" fill="#0B0E11">1</text>
+          <circle cx="640" cy="260" r="16" fill="#F0B90B"/><text x="640" y="267" text-anchor="middle" fill="#0B0E11">2</text>
+          <circle cx="820" cy="110" r="16" fill="#F0B90B"/><text x="820" y="117" text-anchor="middle" fill="#0B0E11">3</text>
+        </g>
+        <g fill="#5E6673" font-size="16" font-family="sans-serif"><text x="60" y="405">起点月</text><text x="940" y="405">最近月</text><text x="20" y="35">指标</text></g>
+      </svg>
+    </div>
+    <ul class="events">
+      <li><span class="n">1</span><div>事件一：功能或动作名<span class="d">2026-01 · 来源：官方公告</span></div></li>
+      <li><span class="n">2</span><div>事件二<span class="d">2026-07 · 来源：官方教程</span></div></li>
+      <li><span class="n">3</span><div>事件三<span class="d">2026-08 · 来源：媒体报道，原帖未回读</span></div></li>
+    </ul>
+  </div>
+  <div class="src">同期对照，不代表已验证因果 · 口径见附录</div>
+</section>
+
+<!-- P4 矩阵页：我们一列全叉就是反差 -->
+<section class="slide" data-seconds="70" data-title="第二件事 · 功能差距">
+  <div class="kicker">PART 2 · 跟我们有什么关系</div>
+  <h1 class="slide-title">标题是判断句：已有买卖和基础行情，<em>分析工具仍有差距</em></h1>
+  <div class="visual">
+    <table class="matrix">
+      <thead><tr><th>功能</th><th class="us">MEXC</th><th>竞品 A</th><th>竞品 B</th><th>竞品 C</th><th>竞品 D</th></tr></thead>
+      <tbody>
+        <tr><td>功能一（点名称看截图）</td><td class="no us">✕</td><td class="ok">✓</td><td class="ok">✓</td><td class="partial">△</td><td class="ok">✓</td></tr>
+        <tr><td>功能二</td><td class="no us">✕</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="unknown">?</td></tr>
+        <tr><td>功能三</td><td class="no us">✕</td><td class="ok">✓</td><td class="partial">△</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+        <tr><td>功能四</td><td class="ok us">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+        <tr><td>功能五</td><td class="no us">✕</td><td class="ok">✓</td><td class="no">✕</td><td class="ok">✓</td><td class="partial">△</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="src">✓ 界面或官方资料已确认 · △ 范围或证据有限 · ? 本轮未确认，不表示没有 · ✕ 确认没有 · 核对日期 2026-10-15</div>
+</section>
+
+<!-- P5 三栏案例页 -->
+<section class="slide" data-seconds="60" data-title="第二件事 · 三个案例">
+  <div class="kicker">PART 2 · 跟我们有什么关系</div>
+  <h1 class="slide-title">标题是判断句：竞品如何争夺用户的 <em>下一次交易</em></h1>
+  <div class="visual cols-3">
+    <div class="card"><span class="label">竞品 A</span><h3>机制一句话</h3><div class="shot"><span>真机截图 · 标端和日期</span></div><p>它证明了什么，一句</p></div>
+    <div class="card"><span class="label">竞品 B</span><h3>机制一句话</h3><div class="shot"><span>真机截图</span></div><p>它证明了什么，一句</p></div>
+    <div class="card"><span class="label">竞品 C</span><h3>机制一句话</h3><div class="shot"><span>真机截图</span></div><p>它证明了什么，一句</p></div>
+  </div>
+</section>
+
+<!-- P6 手机帧页：录屏或设计稿 + 价值清单 -->
+<section class="slide" data-seconds="70" data-title="第三件事 · 我们怎么做">
+  <div class="kicker">PART 3 · 我们怎么做</div>
+  <h1 class="slide-title">标题是判断句：P0 放在 <em>最接近下单的位置</em></h1>
+  <span class="wm">概念 · 示意数据</span>
+  <div class="visual phone-row">
+    <div class="phone">
+      <!-- 有录屏时：<video src="clip.mp4" autoplay muted loop playsinline></video>；有设计稿时：<img src="frame.png"> -->
+      <div class="placeholder">这里放 390×844 的录屏或设计稿整帧<br>不裁切，不套局部放大</div>
+    </div>
+    <ul class="values">
+      <li><span class="n">1</span><div><b>价值一，不超过 12 字</b><span>用户得到什么，灰字一句，老板版删</span></div></li>
+      <li><span class="n">2</span><div><b>价值二</b><span>为什么</span></div></li>
+      <li><span class="n green">3</span><div><b class="green">交易回流写绿色</b><span>转化在哪</span></div></li>
+    </ul>
+  </div>
+</section>
+
+<!-- P7 选项页：A/B/C 镜像，各自代价 -->
+<section class="slide" data-seconds="60" data-title="第三件事 · 三个选项">
+  <div class="kicker">PART 3 · 业务决策</div>
+  <h1 class="slide-title">标题是判断句：未来 3 到 6 个月，<em>做到哪一档</em></h1>
+  <div class="visual cols-3">
+    <div class="card"><span class="label">选项 A</span><h3>用户买得到</h3><p>一句说这档做什么</p><ul class="pros"><li>优势一句</li><li>可验收的点</li></ul><ul class="cons"><li>代价一句</li></ul></div>
+    <div class="card hot"><span class="label">选项 B · 倾向</span><h3>用户能买也能看</h3><p>一句说这档做什么</p><ul class="pros"><li>优势一句</li><li>数据可供谁用</li></ul><ul class="cons"><li>代价一句，待验证的写待验证</li></ul></div>
+    <div class="card"><span class="label">选项 C</span><h3>追齐全部工具</h3><p>一句说这档做什么</p><ul class="pros"><li>优势一句</li></ul><ul class="cons"><li>代价一句</li><li>和当前目标的冲突</li></ul></div>
+  </div>
+</section>
+
+<!-- P8 三卡页：一句能被转述的话 + 三条变化 -->
+<section class="slide" data-seconds="40" data-title="展望">
+  <div class="kicker">PART 4 · 总结展望</div>
+  <h1 class="slide-title">一句能被老板转述的话：<em>框架名</em></h1>
+  <div class="visual cols-3">
+    <div class="card" style="min-height:300px"><span class="label">用户变了</span><h3>先看到谁赚钱，再买</h3></div>
+    <div class="card" style="min-height:300px"><span class="label">内容变了</span><h3>真实交易就是内容</h3></div>
+    <div class="card" style="min-height:300px"><span class="label">流量变了</span><h3>交易员造流量</h3></div>
+  </div>
+</section>
+
+<!-- P9 讨论页：三问；会上讨论型按 B 开看板 -->
+<section class="slide" data-seconds="60" data-title="讨论">
+  <div class="kicker">PART 4 · 讨论环节</div>
+  <h1 class="slide-title">三个问题，每个自己先有倾向</h1>
+  <ol class="visual questions">
+    <li>竞争：别人都做了，我们凭什么赢？</li>
+    <li>冷启动：第一批人从哪来？</li>
+    <li>落地：第一期先做什么，才能最快看到成果？</li>
+  </ol>
+  <div class="board" id="board">
+    <div class="form">
+      <input id="bWho" placeholder="听众 / 团队（选填）">
+      <textarea id="bView" placeholder="核心看法（必填）"></textarea>
+      <input id="bWhy" placeholder="理由 / 成立条件（选填）">
+      <button onclick="boardAdd()">加入看板</button><button class="ghost" onclick="boardExport()">导出</button><button class="ghost" onclick="boardClear()">清空</button>
+      <div class="hint">只存在当前浏览器，不写入文件；会后导出备份</div>
+    </div>
+    <div class="list" id="bList"><div class="hint">先听观点，不预设答案</div></div>
+  </div>
+</section>
+
+<!-- P10 附录：档案链接 + 弹药页从这里往后加 -->
+<section class="slide" data-seconds="0" data-title="附录 · 档案与来源">
+  <div class="kicker">附录</div>
+  <h1 class="slide-title">档案与来源</h1>
+  <div class="visual links">
+    <a href="#">Lark 完整调研稿<span>全表、口径、免责</span></a>
+    <a href="#">竞品档案 ×N<span>每家一份，四态标记</span></a>
+    <a href="#">数据与计算<span>CSV、公式、端点、截止日</span></a>
+  </div>
+  <table class="plain">
+    <thead><tr><th>弹药页</th><th>预判的追问</th><th>答案所在</th></tr></thead>
+    <tbody>
+      <tr><td>附 1</td><td>追问一</td><td>下一页 / Lark 第几节</td></tr>
+      <tr><td>附 2</td><td>追问二</td><td></td></tr>
+      <tr><td>附 3</td><td>追问三</td><td></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<div id="footer"><span id="deckName"></span><span><b id="pageNo"></b> · 本页 <b id="secs"></b> 秒 · <span id="clock">0:00</span></span></div>
+</div>
+
+<div id="toc"><h2>目录（点页跳转，G 关闭）</h2><ol id="tocList"></ol></div>
+<div id="zoom" onclick="this.classList.remove('on')"><img id="zoomImg" alt=""></div>
+<div id="help">← → 翻页 · G 目录 · F 全屏 · T 计时 · B 看板 · 点图放大 · Esc 关闭</div>
+
+<script>
+(function(){
+  const slides=[...document.querySelectorAll('.slide')];
+  const stage=document.getElementById('stage');
+  const deckName=document.title; document.getElementById('deckName').textContent=deckName;
+  let i=Math.max(0,Math.min(slides.length-1,(parseInt(location.hash.replace('#p',''))||1)-1));
+  const total=slides.reduce((a,s)=>a+(+s.dataset.seconds||0),0);
+  function fit(){const sx=innerWidth/1920,sy=innerHeight/1080;stage.style.transform='translate(-50%,-50%) scale('+Math.min(sx,sy)+')';}
+  function go(n){i=(n+slides.length)%slides.length;slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    document.getElementById('pageNo').textContent=(i+1)+' / '+slides.length;
+    document.getElementById('secs').textContent=slides[i].dataset.seconds||0;
+    history.replaceState(null,'','#p'+(i+1));}
+  window.goTo=function(n){go(n);};
+  // 目录
+  const toc=document.getElementById('toc'),tl=document.getElementById('tocList');
+  slides.forEach((s,k)=>{const li=document.createElement('li');li.innerHTML='<b>'+String(k+1).padStart(2,'0')+'</b>'+(s.dataset.title||s.querySelector('.slide-title')?.textContent||'')+'<small>'+(s.dataset.seconds||0)+' 秒</small>';li.onclick=()=>{toc.classList.remove('on');go(k);};tl.appendChild(li);});
+  // 计时
+  let t0=null,tick=null;const clock=document.getElementById('clock');
+  function fmt(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
+  function timer(){if(tick){clearInterval(tick);tick=null;clock.classList.remove('run');return;}
+    if(!t0)t0=Date.now();clock.classList.add('run');
+    tick=setInterval(()=>{const e=Math.floor((Date.now()-t0)/1000);clock.textContent=fmt(e)+' / '+fmt(total);clock.classList.toggle('over',e>total);},500);}
+  function timerReset(){if(tick)clearInterval(tick);tick=null;t0=null;clock.textContent='0:00 / '+fmt(total);clock.className='';}
+  timerReset();
+  // 放大
+  const zoom=document.getElementById('zoom'),zimg=document.getElementById('zoomImg');
+  document.addEventListener('click',e=>{const img=e.target.closest('.slide img');if(img){zimg.src=img.src;zoom.classList.add('on');}});
+  // 键盘
+  document.addEventListener('keydown',e=>{
+    if(e.target.matches('input,textarea'))return;
+    switch(e.key){
+      case 'ArrowRight':case ' ':case 'PageDown':e.preventDefault();go(i+1);break;
+      case 'ArrowLeft':case 'PageUp':e.preventDefault();go(i-1);break;
+      case 'Home':go(0);break;case 'End':go(slides.length-1);break;
+      case 'g':case 'G':toc.classList.toggle('on');break;
+      case 'f':case 'F':document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();break;
+      case 't':case 'T':timer();break;case 'r':case 'R':timerReset();break;
+      case 'b':case 'B':document.getElementById('board')?.classList.toggle('on');break;
+      case 'Escape':toc.classList.remove('on');zoom.classList.remove('on');break;
+    }});
+  addEventListener('resize',fit);fit();go(i);
+  // 现场观点看板：只在讨论型会议启用（B 键），数据只在本浏览器
+  const key='deck-board:'+deckName;
+  function boardLoad(){try{return JSON.parse(localStorage.getItem(key)||'[]');}catch(e){return[];}}
+  function boardRender(){const l=document.getElementById('bList');if(!l)return;const d=boardLoad();
+    l.innerHTML=d.length?d.map(x=>'<div class="item">'+esc(x.view)+'<small>'+esc(x.who||'')+(x.why?' · '+esc(x.why):'')+' · '+x.t+'</small></div>').join(''):'<div class="hint">先听观点，不预设答案</div>';}
+  function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+  window.boardAdd=function(){const v=document.getElementById('bView').value.trim();if(!v)return;const d=boardLoad();
+    d.push({who:document.getElementById('bWho').value.trim(),view:v,why:document.getElementById('bWhy').value.trim(),t:new Date().toLocaleTimeString()});
+    try{localStorage.setItem(key,JSON.stringify(d));}catch(e){}document.getElementById('bView').value='';document.getElementById('bWhy').value='';boardRender();};
+  window.boardExport=function(){const blob=new Blob([JSON.stringify(boardLoad(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='观点看板.json';a.click();};
+  window.boardClear=function(){if(confirm('清空看板？'))try{localStorage.removeItem(key);}catch(e){}boardRender();};
+  boardRender();
+})();
+</script>
+</body>
+</html>

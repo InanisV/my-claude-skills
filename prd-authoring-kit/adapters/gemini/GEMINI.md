@@ -6,14 +6,14 @@
 
 ## 触发场景
 
-当用户要**写 PRD / 出需求文档 / 把需求文档化 / 升级或改现有 PRD / 评审或自检 PRD / 判断能否过研发 nocode 门禁**，或给出飞书 PRD 链接、需求草稿、需求截图并想变成正式 PRD 时，进入下述流程。
+当用户要**写 PRD / 出需求文档 / 把需求文档化 / 升级或改现有 PRD / 评审或自检 PRD / 判断能否过研发 nocode 门禁 / 登记需求 / 填写需求登记 / 登记校对 / 填文案登记表 / 登记实验 / 建个 Epic**，或给出飞书 PRD 链接、需求草稿、需求截图并想变成正式 PRD 时，进入下述流程。
 
-## 第 0 步（不可跳过）：定位 KIT_ROOT 并回显三模式表
+## 第 0 步（不可跳过）：定位 KIT_ROOT 并回显模式表
 
 这是祈使句，不是脚注。**先做，再谈需求。**
 
 1. 用你平台的文件查找能力定位 `00-orchestrator.md`（有 glob/file-search 工具用之；没有就用 shell：`find . ~/.prd-authoring-kit ~/.agents/skills ~/.gemini ~/.claude/skills -name 00-orchestrator.md 2>/dev/null` 或 `rg --files -g '**/00-orchestrator.md'`）；它的上一级目录是 `references/`，再上一级就是 **KIT_ROOT**。之后所有 `references/…` 与 `references/checks/…` 读取都加 `KIT_ROOT` 前缀。**多命中**按下方优先级选，**回显所选路径+版本一行后直接用它**（不必停下等确认；多份通常是开发机 dev 仓库 + 安装副本并存）；**空命中**先探 `~/.prd-authoring-kit`、`~/.claude/skills/prd-authoring-kit` 与项目根，仍无则**停下问用户 kit 路径**，别凭本文件摘要即兴写 PRD。 🔴 **多份命中按安装位优先级选，不比 mtime**：① 平台官方 skills 位（`~/.agents/skills/` 或 `~/.claude/skills/` 下的 prd-authoring-kit）→ ② `~/.prd-authoring-kit` → ③ 项目内 `./prd-authoring-kit` → ④ 其它位置（下载目录/开发仓库/发布快照）仅在前三者全无时用、且回显警告；同级比 `KIT_ROOT/VERSION` 取高版本。**回显选中路径+版本一行**。（实测：`~/Downloads` 里一个发布快照因 mtime 最新，把正式安装位挤掉了。）
-2. 完整读 `KIT_ROOT/references/00-orchestrator.md`，**在回复里回显它的三模式表**（访谈 / 升级草稿 / 只自检），再严格按它执行。三模式表回显 = 已真正读到编排文件的证据。
+2. 完整读 `KIT_ROOT/references/00-orchestrator.md`，**在回复里回显它的模式表**（访谈 / 升级草稿 / 需求变更 / 只自检 / 建卡 / 登记），再严格按它执行。模式表回显 = 已真正读到编排文件的证据。
 3. **起草钉子**：进入访谈 / 升级后，起草前必读 `KIT_ROOT/references/02-prd-template.md` 骨架并对齐 `references/examples/` 对应档（标准档→`example-copytrading-PASS.md`，轻量档→`example-mini-lightweight.md`）；访谈走 `03`、升级走 `04`。
 
 ## 自检（必读原文 · 05 全部编号步骤都要跑）

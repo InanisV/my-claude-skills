@@ -20,6 +20,7 @@
       "platform": "both",
       "base_token": "RQmCbHS3maSShns8SRuuBL9Csib",
       "table_id": "tbl0Dfehgj7xFwhw",
+      "url": "https://l7jipx1bfq.larksuite.com/base/RQmCbHS3maSShns8SRuuBL9Csib?table=tbl0Dfehgj7xFwhw",
       "field_count": 17,
       "fields": {
         "name": "需求描述",
@@ -32,8 +33,21 @@
         "value": "需求价值",
         "priority": "优先级"
       },
-      "filter_module": { "field": "产品模块", "app": ["App", "App（DEX)"], "web": ["Web/H5"] },
-      "module_options": ["App", "Web/H5", "App（DEX)"],
+      "filter_module": {
+        "field": "产品模块",
+        "app": [
+          "App",
+          "App（DEX)"
+        ],
+        "web": [
+          "Web/H5"
+        ]
+      },
+      "module_options": [
+        "App",
+        "Web/H5",
+        "App（DEX)"
+      ],
       "note": "选项只有端级三项、颗粒度粗；细分模块词用 alias.module_terms 对齐"
     },
     {
@@ -57,7 +71,16 @@
         "priority": "优先级"
       },
       "filter_module": null,
-      "module_options": ["合约交易", "现货交易", "资产钱包", "法币", "现货活动", "合约活动", "公共模块", "交易模块"],
+      "module_options": [
+        "合约交易",
+        "现货交易",
+        "资产钱包",
+        "法币",
+        "现货活动",
+        "合约活动",
+        "公共模块",
+        "交易模块"
+      ],
       "note": "wiki 内嵌 base；另有「产品模块」字段但只有 APP 一个选项（单端表）。🔴 状态列叫「需求状态」不是「进展」，Jira 列叫「JIRA单号」不带「/链接」"
     },
     {
@@ -81,7 +104,10 @@
         "priority": "优先级"
       },
       "filter_module": null,
-      "module_options": ["App（20）", "App（DEX)"],
+      "module_options": [
+        "App（20）",
+        "App（DEX)"
+      ],
       "note": "wiki 内嵌 base；模块选项里另有 2 条空名选项（脏数据），别拿去当检索键"
     },
     {
@@ -131,19 +157,119 @@
       "note": "wiki 内嵌 base；表小（约 38 条），空结果是常态、不代表查询失败"
     }
   ],
+  "forms": {
+    "_about": "常规回合要填的公司表单；店铺版整删本文件，规则文本里已写明「没有本文件请产品给链接」",
+    "copy_review": {
+      "name": "文案登记表（词条校对需求）",
+      "form_token": "shrusgtZjx5c1kwN0rGMeBcB8ne",
+      "url": "https://l7jipx1bfq.larksuite.com/share/base/form/shrusgtZjx5c1kwN0rGMeBcB8ne",
+      "rule": "优先级先问产品再填；备注写本轮新增行号+校对重点；提交先 --dry-run"
+    },
+    "ab_experiment": {
+      "kind": "base_table",
+      "name": "AB 实验管理表",
+      "base_token": "BkcRbHvEwaLSPMsRqk0uo1Hjsqb",
+      "table_id": "tbldXh3FguG4VmcD",
+      "url": "https://l7jipx1bfq.larksuite.com/base/BkcRbHvEwaLSPMsRqk0uo1Hjsqb?table=tbldXh3FguG4VmcD",
+      "inherit_from_reference": [
+        "原始需求方",
+        "原始需求方职务",
+        "原始需求方部门",
+        "数分POC",
+        "流量分配方式",
+        "实验周期(天)",
+        "代码下线周期(天)"
+      ],
+      "from_prd": [
+        "实验名称",
+        "实验背景",
+        "分组说明",
+        "假设与预期收益",
+        "实验受众要求",
+        "jira单"
+      ],
+      "confirm": [
+        "上线初始流量%",
+        "实验主体",
+        "实验周期(天)",
+        "代码下线周期(天)",
+        "备注"
+      ],
+      "fixed": {
+        "备注": "{whoami.first_lower}"
+      },
+      "leave_empty": [
+        "实验状态",
+        "是否已提供key",
+        "实验key",
+        "实验ID",
+        "实验开始日期",
+        "实验结束日期",
+        "实验下线日期",
+        "代码下线时间",
+        "实验效果数据",
+        "实验结论"
+      ],
+      "rule": "从「实验状态」往右（含 key / ID / 各日期 / 效果 / 结论）由数据产品填，登记时留空；数分POC 例外要填；备注 = 登记人（小写英文名）；上线初始流量、实验主体、周期是需求变量，按本需求重判、由产品拍板，不抄参考行",
+      "reference_hint": "同表里同业务线最近一条实验（流程常量从它继承：需求方 / 职务 / 部门 / 数分POC / 分配方式 / 周期上限）",
+      "telemetry_mode": "登记实验"
+    }
+  },
   "wiki_spaces": [
-    { "id": "7623986191989214645", "label": "现用知识库", "era": "current" },
-    { "id": "7311584935679180806", "label": "历史 APP 知识库", "era": "2025" },
-    { "id": "7311612534761504773", "label": "历史 Web 知识库", "era": "2024" }
+    {
+      "id": "7623986191989214645",
+      "label": "现用知识库",
+      "era": "current"
+    },
+    {
+      "id": "7311584935679180806",
+      "label": "历史 APP 知识库",
+      "era": "2025"
+    },
+    {
+      "id": "7311612534761504773",
+      "label": "历史 Web 知识库",
+      "era": "2024"
+    }
   ],
   "alias": {
     "_note": "各源「产品模块 / 业务模块」选项的联合去重，2026-09-01 一次性拉全（--limit 200 分页拉尽，防 50 条截断）：74 条原始选项 → 去 2 条空名、去 6 条人名选项 → 归一掉末尾的（N）/（Share N）计数后缀 → 33 条。用途只有一个：L0 抽检索键时把口语词对齐到库里真实用的词。",
-    "platform_terms": ["App", "APP", "Web/H5", "App（DEX)"],
+    "platform_terms": [
+      "App",
+      "APP",
+      "Web/H5",
+      "App（DEX)"
+    ],
     "module_terms": [
-      "行情&搜索", "现货交易", "合约交易", "合约跟单", "合约风控", "盘前交易", "交易模块",
-      "现货活动", "合约活动", "活动中台", "资产管理", "资产钱包", "法币", "理财产品",
-      "用户中心（含KYC）", "代理/邀请好友", "内容中心", "消息触达", "运营后台", "上币CRM",
-      "合规中心", "业务风控", "大数据", "公共模块", "DEX", "API", "OSS", "SEO", "Web主站/基建"
+      "行情&搜索",
+      "现货交易",
+      "合约交易",
+      "合约跟单",
+      "合约风控",
+      "盘前交易",
+      "交易模块",
+      "现货活动",
+      "合约活动",
+      "活动中台",
+      "资产管理",
+      "资产钱包",
+      "法币",
+      "理财产品",
+      "用户中心（含KYC）",
+      "代理/邀请好友",
+      "内容中心",
+      "消息触达",
+      "运营后台",
+      "上币CRM",
+      "合规中心",
+      "业务风控",
+      "大数据",
+      "公共模块",
+      "DEX",
+      "API",
+      "OSS",
+      "SEO",
+      "Web主站/基建"
     ]
   }
 }

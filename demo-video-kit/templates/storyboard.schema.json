@@ -1,0 +1,97 @@
+{
+  "$comment": "最小 schema，项目可扩展；storyboard.json 是唯一真源；运动用 motion-prompt 名称加编号，以名称为准",
+  "project": {
+    "root": "",
+    "fps": 30,
+    "width": 1920,
+    "height": 1080,
+    "branches": [
+      "cn_internal",
+      "cn_public",
+      "en_public"
+    ]
+  },
+  "beats": [
+    {
+      "id": "S01",
+      "beat": "亮屏",
+      "type": "GEN | UI | HTML | COMPOSITE",
+      "duration_s": 4,
+      "layout": "A | B | C",
+      "color_temp_k": 7000,
+      "light_band": "left | center | right",
+      "narration": {
+        "cn": "",
+        "en": ""
+      },
+      "on_screen": {
+        "cn": "",
+        "en": ""
+      },
+      "sources": [
+        {
+          "kind": "footage | replica | gen | html",
+          "ref": "",
+          "in_s": 0,
+          "out_s": 0
+        }
+      ],
+      "events": [
+        {
+          "t_s": 0.0,
+          "name": "",
+          "sfx": ""
+        }
+      ],
+      "internal_only": false,
+      "voice": [
+        {
+          "line": "",
+          "file": "",
+          "duration_s": 0,
+          "start_s": 0
+        }
+      ],
+      "question": "这拍回答观众的什么问题",
+      "energy": "high | mid | low",
+      "shots": [
+        {
+          "id": "S01a",
+          "question": "",
+          "framing": "",
+          "motion": [
+            {
+              "name": "Pop-in",
+              "ref": "motion-prompt #001",
+              "duration_s": 0.4,
+              "ease": "overshoot"
+            }
+          ],
+          "transition_out": {
+            "name": "",
+            "duration_s": 0.25
+          },
+          "duration_s": 2,
+          "source": {
+            "kind": "html",
+            "ref": ""
+          }
+        }
+      ]
+    }
+  ],
+  "audio": {
+    "music": {
+      "file": "",
+      "bpm": 0,
+      "license": ""
+    },
+    "duck_db": -9,
+    "lufs": -16
+  },
+  "story_clock": {
+    "enabled": true,
+    "from": "02:14",
+    "to": "02:16"
+  }
+}

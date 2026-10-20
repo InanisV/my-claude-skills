@@ -8,7 +8,7 @@
 
 ## 何时触发
 
-当用户要**写 PRD / 出需求文档 / 把需求文档化 / 升级或改现有 PRD / 评审或自检 PRD / 判断能否过研发 nocode 门禁**，或给出飞书 PRD 链接、需求草稿、需求截图并想变成正式 PRD 时——命中即进入下面的流程，**不要凭本文件的摘要即兴写 PRD**。
+当用户要**写 PRD / 出需求文档 / 把需求文档化 / 升级或改现有 PRD / 评审或自检 PRD / 判断能否过研发 nocode 门禁 / 登记需求 / 填写需求登记 / 登记校对 / 填文案登记表 / 登记实验 / 建个 Epic**，或给出飞书 PRD 链接、需求草稿、需求截图并想变成正式 PRD 时——命中即进入下面的流程，**不要凭本文件的摘要即兴写 PRD**。
 
 ## 第 0 步（不可跳过）：定位 KIT_ROOT 并读主流程
 
@@ -19,10 +19,14 @@
    - **多份命中 → 🔴 按「安装位优先级」选，不比 mtime**（mtime 反映"最近被碰过"，不是版本新旧——实测：一个刚建的发布快照/刚解压的 zip 放在 `~/Downloads` 就把正式安装位挤掉，AI 用了老版本还以为是最新）：**① 平台官方 skills 位**（Codex `~/.agents/skills/prd-authoring-kit`、Claude `~/.claude/skills/prd-authoring-kit`）→ **② `~/.prd-authoring-kit`** → **③ 当前项目内 `./prd-authoring-kit`**（Kiro 场景）→ **④ 其它任何位置**（下载目录/开发仓库/发布快照）**只在 ①②③ 全无时才用，且必须回显一行警告**"用的是非安装位的副本，建议跑一次安装器"。同级并列（如 ①里两个平台位都在）→ 读各自 `KIT_ROOT/VERSION` **比版本号取高**，无 VERSION 文件的一律排在有的后面。**回显选中路径 + 版本号一行后直接继续**（不必停下等确认）。
    - **零命中** → 先探 `~/.prd-authoring-kit`、`~/.claude/skills/prd-authoring-kit` 与当前项目根；仍找不到 → **停下问用户 kit 装在哪**，不要凭记忆或本文件摘要即兴写 PRD。
 2. 读 `KIT_ROOT/references/00-orchestrator.md`，之后**严格按它执行**。
-3. **回显你从 00 读到的三模式表**（访谈 / 升级草稿 / 只自检 各对应哪个主流程文件）**以及恒定规则中「域感知」一条的触发词**（按名找，不按编号）——本文件故意不预列这些映射，只有真读了 00 才拿得到，回显即证明已读；据用户第一句选定模式。
+3. **回显你从 00 读到的模式表**（访谈 / 升级草稿 / 需求变更 / 只自检 / 建卡 / 登记，各对应一个主流程文件）**以及恒定规则中「域感知」一条的触发词**（按名找，不按编号）——本文件故意不预列这些映射，只有真读了 00 才拿得到，回显即证明已读；据用户第一句选定模式。
 4. 之后所有 `references/…`、`checks/…` 读取一律加 **KIT_ROOT 前缀**。
 
 > Codex 无 skill 自动触发；且 Codex 偏简洁、容易跳步。所以第 0 步与下面的"三条不得"是硬门，不是建议。
+
+## 安全自主授权（两档通用；GPT-6 Astra 等强模型按 00 §执行强度分档走精简档）
+
+以下动作**无需逐步征询**，直接做：读 kit 文件与 `INDEX.md`；`lark-cli` 只读命令（`auth status` / `docs +fetch` / `drive` 列表 / `wiki` 读取 / `base +record-list|+record-search|+field-*` / `sheets +csv-get`）；`jira_cards.py` 的 `validate` / `epic-candidates` / `epic-search` / `beneficiary-options` / `whoami`；`register.py` 的 `whoami` / `*-find` / `*-plan`；本地 `py_compile`。**仍按各自闸门先确认**的：发布 / 回写飞书、`apply` 建卡、`*-apply --yes` 登记、`+form-submit --yes`、接管键鼠、任何删除。不要因为下面的"不得"措辞而在只读步骤上停下来问。
 
 ## 三条不得（Codex 显式硬门）
 

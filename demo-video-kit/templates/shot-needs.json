@@ -1,0 +1,23 @@
+[
+  {
+    "shot_id": "S04",
+    "beat": "入口",
+    "screen": "首页 → 入口 → 目标页",
+    "action": "pull_down",
+    "must_show": ["首页静置", "入口可读", "目标页已加载"],
+    "duration_s": [3, 6],
+    "need_still": true,
+    "max_subclips": 2,
+    "source": "主录屏，或 retake/S04.mp4 优先"
+  },
+  {
+    "shot_id": "S05",
+    "beat": "看",
+    "screen": "列表页",
+    "action": "scroll_down",
+    "must_show": ["目标元素可见", "互动入口可见"],
+    "duration_s": [4, 6],
+    "need_still": true,
+    "max_subclips": 1
+  }
+]
