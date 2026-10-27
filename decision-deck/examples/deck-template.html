@@ -22,7 +22,7 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
 
 /* ===== 舞台：固定 1920×1080，按窗口缩放 ===== */
 #stage{position:absolute;left:50%;top:50%;width:1920px;height:1080px;transform:translate(-50%,-50%) scale(1);transform-origin:center center;background:var(--bg-base)}
-.slide{position:absolute;inset:0;display:none;padding:88px 112px 120px;background:var(--bg-base)}
+.slide{position:absolute;inset:0;display:none;padding:70px 112px 100px;background:var(--bg-base)}
 .slide.active{display:block}
 
 /* ===== 页头：段落标签 + 观点句标题 ===== */
@@ -30,15 +30,20 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
 .slide-title{font-size:54px;font-weight:800;line-height:1.22;letter-spacing:-.5px;max-width:1500px}
 .slide-title em{font-style:normal;color:var(--color-warning)}
 .slide-sub{margin-top:14px;font-size:24px;color:var(--text-secondary);max-width:1400px}
-.visual{margin-top:44px}
+.visual{margin-top:40px}
 
 /* ===== 页脚：deck 名 · 页码 · 本页秒数 · 计时 ===== */
-#footer{position:absolute;left:112px;right:112px;bottom:40px;display:flex;justify-content:space-between;align-items:center;font-size:16px;color:var(--text-tertiary)}
+#footer{position:absolute;left:112px;right:112px;bottom:30px;display:flex;justify-content:space-between;align-items:center;font-size:16px;color:var(--text-tertiary)}
+#footer.export{justify-content:flex-end;color:var(--text-primary)}
+#footer.export #deckName,#footer.export #timing{display:none}
 #footer b{color:var(--text-secondary);font-weight:500}
 #clock{font-family:var(--font-display);font-variant-numeric:tabular-nums}
 #clock.run{color:var(--color-up)}
 #clock.over{color:var(--color-down)}
 .src{position:absolute;left:112px;bottom:92px;font-size:14px;color:var(--text-tertiary)}
+/* 正文页没有来源行和小 kicker：只有附录和封面能用 */
+.slide:not(.appendix) .src{display:none}
+.slide:not(.cover):not(.appendix) .kicker{display:none}
 
 /* ===== 封面 ===== */
 .cover .kicker{color:var(--text-secondary)}
@@ -49,7 +54,7 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
 .bignum{background:var(--bg-card);border:1px solid var(--border-card);border-radius:var(--radius-lg);padding:26px 36px;min-width:300px}
 .bignum .v{font-family:var(--font-display);font-size:56px;font-weight:800;color:var(--brand-light);line-height:1}
 .bignum .v.gold{color:var(--color-warning)}
-.bignum .l{margin-top:10px;font-size:18px;color:var(--text-secondary)}
+.bignum .l{margin-top:10px;font-size:19px;color:var(--text-primary)}
 
 /* ===== 反差页：两条路径并排 ===== */
 .paths{display:grid;grid-template-columns:1fr 1fr;gap:28px}
@@ -59,7 +64,7 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
 .path.new .tag{background:var(--brand-bg);color:var(--brand-light)}
 .path .chain{font-size:38px;font-weight:700;line-height:1.4}
 .path .chain span{color:var(--text-tertiary);margin:0 14px}
-.path .note{margin-top:24px;font-size:20px;color:var(--text-secondary)}
+.path .note{margin-top:24px;font-size:22px;color:var(--text-primary)}
 .path.new .note{color:var(--text-primary)}
 
 /* ===== 曲线加事件页 ===== */
@@ -70,7 +75,7 @@ html,body{height:100%;background:var(--bg-base);color:var(--text-primary);font-f
 .events li{display:flex;gap:18px;align-items:flex-start;padding:18px 0;border-bottom:1px solid var(--border-card);font-size:22px}
 .events li:last-child{border-bottom:none}
 .events .n{flex:0 0 36px;height:36px;border-radius:50%;background:var(--color-warning);color:#0B0E11;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:18px}
-.events .d{color:var(--text-tertiary);font-size:16px;display:block;margin-top:4px}
+.events .d{color:var(--text-primary);font-size:18px;display:block;margin-top:4px}
 
 /* ===== 矩阵页 ===== */
 table.matrix{width:100%;border-collapse:separate;border-spacing:0;font-size:22px}
@@ -91,7 +96,7 @@ table.matrix{width:100%;border-collapse:separate;border-spacing:0;font-size:22px
 .card .label{display:inline-block;font-size:15px;padding:4px 12px;border-radius:999px;background:var(--bg-elevated);color:var(--text-secondary);margin-bottom:16px}
 .card.hot .label{background:var(--color-warning-bg);color:var(--color-warning)}
 .card h3{font-size:30px;line-height:1.3;margin-bottom:14px}
-.card p{font-size:20px;color:var(--text-secondary);line-height:1.55}
+.card p{font-size:22px;color:var(--text-primary);line-height:1.5}
 .card .shot{margin:18px 0 6px;width:100%;aspect-ratio:16/10;border-radius:var(--radius-md);background:#000;border:1px solid var(--border-card);display:flex;align-items:center;justify-content:center;color:var(--text-tertiary);font-size:16px;overflow:hidden;cursor:zoom-in}
 .card .shot img{width:100%;height:100%;object-fit:cover;display:block}
 .pros,.cons{list-style:none;margin-top:16px;font-size:20px}
@@ -109,9 +114,9 @@ table.matrix{width:100%;border-collapse:separate;border-spacing:0;font-size:22px
 .values li:last-child{border-bottom:none}
 .values .n{flex:0 0 40px;height:40px;border-radius:50%;background:var(--brand-primary);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:20px}
 .values .n.green{background:var(--color-up);color:#0B0E11}
-.values b{display:block;font-size:30px;color:var(--color-warning);font-weight:700;line-height:1.3}
+.values b{display:block;font-size:32px;color:var(--color-warning);font-weight:700;line-height:1.3}
 .values b.green{color:var(--color-up)}
-.values span{display:block;margin-top:6px;font-size:19px;color:var(--text-secondary)}
+.values span{display:block;margin-top:6px;font-size:22px;color:var(--text-primary)}
 
 /* ===== 讨论页 ===== */
 .questions{list-style:none;counter-reset:q}
@@ -134,7 +139,139 @@ table.matrix{width:100%;border-collapse:separate;border-spacing:0;font-size:22px
 .links a span{display:block;color:var(--text-tertiary);font-size:16px;margin-top:8px}
 table.plain{width:100%;border-collapse:collapse;font-size:18px;margin-top:10px}
 .plain th,.plain td{padding:12px 14px;border-bottom:1px solid var(--border-card);text-align:left;vertical-align:top}
-.plain th{color:var(--text-secondary);font-weight:600;background:var(--bg-card)}
+.plain th{color:var(--text-primary);font-weight:600;background:var(--bg-card)}
+
+/* ===== 步骤带：正文每页标题下，三段，当前段亮色 ===== */
+.band{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:20px}
+.band span{height:52px;border-radius:12px;border:1px solid var(--border-emphasis);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;color:var(--text-primary);background:var(--bg-surface)}
+.band span.on1{background:var(--color-up);color:#0B0E11;border-color:var(--color-up)}
+.band span.on2{background:var(--brand-primary);color:#fff;border-color:var(--brand-primary)}
+.band span.on3{background:var(--color-warning);color:#0B0E11;border-color:var(--color-warning)}
+
+/* ===== 手机框（新）：.pw 定尺寸，里面的 .phone 按比例缩 ===== */
+.pw{position:relative;width:296px;height:641px}
+.pw .phone{position:absolute;left:0;top:0;transform:scale(.76);margin:0}
+.pw.m{width:296px;height:641px}.pw.m .phone{transform:scale(.76)}
+.pw.l{width:320px;height:692px}.pw.l .phone{transform:scale(.82)}
+.pw.s{width:265px;height:574px}.pw.s .phone{transform:scale(.68)}
+.pw.xs{width:220px;height:473px}.pw.xs .phone{transform:scale(.56)}
+.pcap{margin-top:14px;font-size:18px;color:var(--text-primary);line-height:1.45;max-width:296px}
+.pcap b{display:block;font-size:24px;margin-bottom:6px;line-height:1.3}
+.pcap.big{font-size:26px;font-weight:700;text-align:center;max-width:304px}
+
+/* ===== 封面三机：三台手机各配一句，不放大数 ===== */
+.cover .slide-title{margin-top:30px}
+.cover-strip{display:grid;grid-template-columns:repeat(3,220px);gap:80px;justify-content:center;margin-top:36px}
+.cover-strip .lab{text-align:center;font-size:21px;font-weight:700;color:var(--text-primary);margin-top:10px;white-space:nowrap}
+
+/* ===== 三步页 / 三栏大手机页：三台手机加两个箭头，可带右侧价值列 ===== */
+.steps3{display:grid;grid-template-columns:296px 90px 296px 90px 296px;justify-content:center;margin-top:22px;align-items:start}
+.steps3 .col{text-align:center}
+.steps3 .stephead{font-size:26px;font-weight:800;color:var(--text-primary);margin-bottom:10px;line-height:1.2;white-space:nowrap}
+.steps3 .stephead.g{color:var(--color-up)}
+.steps3 .pw{margin:0 auto}
+.steps3 .chip{display:inline-block;margin-top:12px;font-size:20px;font-weight:700;padding:9px 18px;border-radius:999px;background:var(--bg-elevated);color:var(--text-primary)}
+.steps3 .chip.now{background:var(--color-up-bg);color:var(--color-up)}
+.steps3 .chip.next{background:var(--brand-bg);color:var(--brand-light)}
+.steps3 .ar{height:641px;margin-top:36px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-size:44px;color:var(--text-tertiary)}
+.steps3 .ar .eq{font-size:16px;font-weight:700;color:var(--text-primary);padding:6px 12px;border-radius:999px;border:1px solid var(--border-emphasis);background:var(--bg-card);white-space:nowrap}
+.steps3.l{grid-template-columns:320px 110px 320px 110px 320px}
+.steps3.l .ar{height:692px}
+.withval{display:grid;grid-template-columns:1068px 440px;gap:40px;align-items:start;justify-content:center}
+.withval .steps3{justify-content:start}
+
+/* ===== 价值块：一句大字加一句白字说明，左边框跟步骤色 ===== */
+.vals{display:flex;flex-direction:column;gap:16px;margin-top:70px}
+.vt{background:var(--bg-card);border:1px solid var(--border-card);border-left:6px solid var(--color-warning);border-radius:14px;padding:22px 24px}
+.vt b{display:block;font-size:30px;font-weight:800;color:var(--text-primary);line-height:1.25}
+.vt span{display:block;margin-top:8px;font-size:22px;color:var(--text-primary)}
+.vt.v1{border-left-color:var(--color-up)}.vt.v2{border-left-color:var(--brand-light)}.vt.v3{border-left-color:var(--color-warning)}
+.valband{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:18px}
+.valband .vt{padding:18px 22px}
+.valband .vt b{font-size:28px}
+.valband .vt span{font-size:21px}
+
+/* ===== 图示页：一张图，或图加手机 ===== */
+.diag{margin-top:36px;display:flex;justify-content:center}
+.diag img{max-width:1696px;max-height:800px;display:block}
+.diag.small{margin-top:18px}
+.diag.small img{max-height:560px}
+.diag-phone{display:grid;grid-template-columns:900px 1fr;gap:40px;align-items:center;margin-top:30px}
+.diag-phone img.d{width:900px;height:760px;display:block}
+.diag-phone .pw{margin:0 auto}
+.diag-phone.small{grid-template-columns:720px 1fr;margin-top:18px}
+.diag-phone.small img.d{width:720px;height:608px}
+.diag-phone .dph{display:flex;align-items:center;justify-content:center;border:2px dashed var(--border-emphasis);border-radius:20px;color:var(--text-primary);font-size:22px;text-align:center}
+
+/* ===== 现状页：一台手机加几块大字 ===== */
+.today{display:grid;grid-template-columns:320px 1fr;gap:56px;align-items:start;margin-top:24px}
+.tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+.tile{background:var(--bg-card);border:1px solid var(--border-card);border-radius:16px;padding:28px 30px;min-height:150px;display:flex;flex-direction:column;justify-content:center}
+.tile b{font-size:34px;font-weight:800;color:var(--text-primary)}
+.tile span{display:block;margin-top:8px;font-size:22px;color:var(--text-primary)}
+.tile.wide{grid-column:1/-1;border-color:rgba(246,70,93,.6);background:rgba(246,70,93,.08)}
+.tile.wide b{font-size:44px;color:var(--color-down)}
+.tile.blue{border-color:rgba(91,143,255,.5)}
+
+/* ===== 合并页：左边三家真机，右边我们的现状 ===== */
+.shots-3{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.shotcard{background:var(--bg-card);border:1px solid var(--border-card);border-radius:var(--radius-xl);padding:16px 18px}
+.shotcard .cap{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.shotcard .cap b{font-size:22px}
+.shotcard .cap span{font-size:16px;color:var(--text-primary);padding:4px 10px;border:1px solid var(--border-emphasis);border-radius:999px}
+.shotcard .shot{height:560px;border-radius:12px;overflow:hidden;background:#000;border:1px solid var(--border-card);display:flex;align-items:center;justify-content:center;color:var(--text-primary);font-size:18px}
+.shotcard .shot img{width:100%;height:100%;object-fit:contain;display:block}
+.shotcard p{margin-top:12px;font-size:22px;color:var(--text-primary);line-height:1.45}
+.shotcard p em{font-style:normal;color:var(--color-warning)}
+.merge{display:grid;grid-template-columns:1030px 1px 580px;gap:40px;margin-top:30px;align-items:start}
+.merge .divider{background:var(--border-emphasis);height:700px;margin-top:10px}
+.merge .ourslab{font-size:24px;font-weight:800;color:var(--text-primary);margin-bottom:12px}
+.merge .ours{display:grid;grid-template-columns:304px 1fr;gap:18px;align-items:start}
+.merge .ours .pw{width:304px;height:658px}
+.merge .ours .pw .phone{transform:scale(.78)}
+.merge .ours .tiles{grid-template-columns:1fr;gap:14px}
+.merge .ours .tile{min-height:0}
+.merge .ours .tile.wide{grid-column:auto;padding:22px}
+.merge .ours .tile.wide b{font-size:32px}
+.merge .ours .tile span{font-size:20px}
+
+/* ===== 价值总览页：三列各一句结论 ===== */
+.valcols{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:26px}
+.valcol h3{font-size:30px;font-weight:800;margin-bottom:14px;text-align:center;padding:14px;border-radius:14px}
+.valcol.c1 h3{background:var(--color-up);color:#0B0E11}.valcol.c2 h3{background:var(--brand-primary);color:#fff}.valcol.c3 h3{background:var(--color-warning);color:#0B0E11}
+.valcol .lead{font-size:34px;font-weight:800;color:var(--text-primary);text-align:center;line-height:1.3;padding:26px 16px;margin-bottom:14px;background:var(--bg-card);border:1px solid var(--border-emphasis);border-radius:16px;min-height:130px;display:flex;align-items:center;justify-content:center}
+.valcol .vt{margin-bottom:14px;border-left-width:0;text-align:center}
+.valcol .vt b{font-size:26px}
+
+/* ===== 路线页：时间轴加三条错开的色块，模块做 chip ===== */
+.rm{margin-top:40px}
+.rm .tl{position:relative;height:60px;margin:0 20px 20px}
+.rm .tl::before{content:"";position:absolute;left:0;right:0;top:28px;height:3px;background:var(--border-emphasis)}
+.rm .tl span{position:absolute;top:0;transform:translateX(-50%);font-size:22px;font-weight:800;color:var(--text-primary);background:var(--bg-base);padding:16px 14px}
+.rm .tl span.g{color:var(--color-up)}.rm .tl span.b{color:var(--brand-light)}.rm .tl span.y{color:var(--color-warning)}
+.gantt{margin-top:34px;display:grid;grid-template-columns:240px 1fr;gap:22px 20px;align-items:center}
+.gantt .lab{font-size:34px;font-weight:800;color:var(--text-primary)}
+.gantt .lab small{display:block;font-size:22px;font-weight:600;margin-top:6px}
+.gantt .lab.g{color:var(--color-up)}.gantt .lab.b{color:var(--brand-light)}.gantt .lab.y{color:var(--color-warning)}
+.gantt .bar{border-radius:18px;padding:20px 24px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;min-height:150px}
+.gantt .bar.g{background:rgba(0,184,122,.12);border:2px solid var(--color-up);margin-right:52%}
+.gantt .bar.b{background:rgba(43,106,255,.12);border:2px solid var(--brand-light);margin-left:18%;margin-right:26%}
+.gantt .bar.y{background:rgba(240,185,11,.12);border:2px solid var(--color-warning);margin-left:44%}
+.gantt .bar span{font-size:24px;font-weight:700;color:var(--text-primary);padding:12px 20px;border-radius:12px;background:var(--bg-base)}
+
+/* ===== 架构附录页：分层 chip，按期配色 ===== */
+.legend{display:flex;gap:14px;margin-top:14px}
+.legend span{font-size:18px;font-weight:700;padding:8px 16px;border-radius:999px}
+.legend .p1{background:rgba(0,184,122,.14);color:var(--color-up)}.legend .p2{background:rgba(43,106,255,.14);color:var(--brand-light)}.legend .p3{background:rgba(240,185,11,.14);color:var(--color-warning)}
+.arch{margin-top:30px;display:grid;grid-template-columns:1fr;gap:12px}
+.arch .ly{display:grid;grid-template-columns:200px 1fr;gap:18px;align-items:center;background:var(--bg-card);border:1px solid var(--border-card);border-radius:var(--radius-lg);padding:16px 22px}
+.arch .ly b{font-size:26px;color:var(--text-primary)}
+.arch .ly b small{display:block;font-size:16px;color:var(--text-primary);font-weight:500;margin-top:4px}
+.arch .ms{display:flex;flex-wrap:wrap;gap:10px}
+.arch .m{font-size:20px;font-weight:600;padding:12px 18px;border-radius:12px;border:1px solid var(--border-emphasis);background:var(--bg-elevated);color:var(--text-primary)}
+.arch .m.p1{border-color:rgba(0,184,122,.6);background:rgba(0,184,122,.10)}
+.arch .m.p2{border-color:rgba(91,143,255,.6);background:rgba(43,106,255,.10)}
+.arch .m.p3{border-color:rgba(240,185,11,.6);background:rgba(240,185,11,.10)}
 
 /* ===== 水印：概念稿必加 ===== */
 .wm{position:absolute;right:112px;top:92px;padding:8px 16px;border:1px solid rgba(240,185,11,.5);color:var(--color-warning);border-radius:999px;font-size:16px;letter-spacing:1px;background:var(--color-warning-bg)}
@@ -168,33 +305,137 @@ table.plain{width:100%;border-collapse:collapse;font-size:18px;margin-top:10px}
 
 <div id="stage">
 
-<!-- P1 封面：一句判断做标题，开场问题做副标题，三个大数做反差 -->
+<!-- P1 封面三机：一句判断（三个口号）做标题，开场问题做副标题，三台手机各配一句预告三步。封面不放大数；成果类才用 .bignums -->
 <section class="slide cover" data-seconds="40" data-title="封面">
-  <div class="kicker">MEXC · 2026.10 · 会议名称</div>
-  <h1 class="slide-title">一句判断做标题：<em>框架名写在这里</em></h1>
+  <div class="kicker">MEXC · 产品规划 · 2026.10</div>
+  <h1 class="slide-title">一句判断做标题：<em>口号一、口号二、口号三</em></h1>
   <p class="question">开场问题写在这里：会议室现在没有答案的那个缺口？</p>
-  <div class="bignums">
-    <div class="bignum"><div class="v">12 万 → 190 万</div><div class="l">大数一：从多少到多少，带时间跨度</div></div>
-    <div class="bignum"><div class="v gold">15.8 倍</div><div class="l">大数二：反差本身</div></div>
-    <div class="bignum"><div class="v">$ 待填</div><div class="l">大数三：和我们有关的那个数</div></div>
+  <div class="cover-strip">
+    <div><div class="pw xs"><div class="phone"><div class="placeholder">390×844 设计稿或录屏整帧<br>不裁切，不套局部放大</div></div></div><div class="lab">第一步一句</div></div>
+    <div><div class="pw xs"><div class="phone"><div class="placeholder">390×844 设计稿或录屏整帧<br>不裁切，不套局部放大</div></div></div><div class="lab">第二步一句</div></div>
+    <div><div class="pw xs"><div class="phone"><div class="placeholder">390×844 设计稿或录屏整帧<br>不裁切，不套局部放大</div></div></div><div class="lab">第三步一句</div></div>
   </div>
-  <div class="src">数据来源：写一行，来源写不出的数不上页</div>
 </section>
 
-<!-- P2 反差页：旧路径 vs 新路径 -->
-<section class="slide" data-seconds="50" data-title="第一件事 · 路径变了">
-  <div class="kicker">PART 1 · 别人为什么赢</div>
+<!-- P2 合并页：左边三家真机，右边我们的现状加两块大字（两页密度都低时合成一页） -->
+<section class="slide" data-seconds="60" data-title="别人带上了，我们还没有">
+  <h1 class="slide-title">标题是判断句：头部平台都做了 X，<em>我们还没有</em></h1>
+  <div class="merge">
+    <div class="shots-3">
+      <div class="shotcard"><div class="cap"><b>竞品 A</b><span>2026-10</span></div><div class="shot"><span>官方产品图或真机</span></div><p>一句，<em>关键词金色</em></p></div>
+      <div class="shotcard"><div class="cap"><b>竞品 B</b><span>2026-10-21 真机</span></div><div class="shot"><span>真机截图</span></div><p>一句，<em>关键词金色</em></p></div>
+      <div class="shotcard"><div class="cap"><b>竞品 C</b><span>2025-05</span></div><div class="shot"><span>官方博客图</span></div><p>一句，<em>关键词金色</em></p></div>
+    </div>
+    <div class="divider"></div>
+    <div>
+      <div class="ourslab">我们今天</div>
+      <div class="ours">
+        <div class="pw"><div class="phone"><div class="placeholder">390×844 设计稿或录屏整帧<br>不裁切，不套局部放大</div></div></div>
+        <div class="tiles">
+          <div class="tile"><b>已有的</b><span>一句</span></div>
+          <div class="tile wide"><b>缺的那个：0</b><span>一句</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- P3 三步页：三台大手机加箭头，每台上面步骤名，下面时间 chip；三段步骤带全亮 -->
+<section class="slide" data-seconds="60" data-title="三步 · 主线">
+  <h1 class="slide-title">三步：<em>口号一 → 口号二 → 口号三</em></h1>
+  <div class="steps3 l">
+    <div class="col"><div class="stephead">一、口号一</div><div class="pw l"><div class="phone"><div class="placeholder">390×844 设计稿或录屏整帧<br>不裁切，不套局部放大</div></div></div><span class="chip now">12 月版本 · 评审准备中</span></div>
+    <div class="ar">→</div>
+    <div class="col"><div class="stephead">二、口号二</div><div class="pw l"><div class="phone"><div class="placeholder">390×844 设计稿或录屏整帧<br>不裁切，不套局部放大</div></div></div><span class="chip next">2027 Q1</span></div>
+    <div class="ar">→</div>
+    <div class="col"><div class="stephead">三、口号三</div><div class="pw l"><div class="phone"><div class="placeholder">390×844 设计稿或录屏整帧<br>不裁切，不套局部放大</div></div></div><span class="chip">2027 Q2</span></div>
+  </div>
+</section>
+
+<!-- P4 三栏大手机页：一个功能的三步流程，右侧三块价值 -->
+<section class="slide" data-seconds="60" data-title="第一件事">
+  <h1 class="slide-title">格局句标题：<em>每一笔 X 都是 Y</em></h1>
+  <div class="band"><span class="on1">一、第一件事（口号）</span><span class="">二、第二件事（口号）</span><span class="">三、第三件事（口号）</span></div>
+  <span class="wm">左图 概念 · 示意数据</span>
+  <div class="withval">
+  <div class="steps3">
+    <div class="col"><div class="stephead">入口在哪</div><div class="pw m"><div class="phone"><div class="placeholder">390×844 设计稿或录屏整帧<br>不裁切，不套局部放大</div></div></div><span class="chip">一句 chip</span></div>
+    <div class="ar">→</div>
+    <div class="col"><div class="stephead">中间一步</div><div class="pw m"><div class="phone"><div class="placeholder">390×844 设计稿或录屏整帧<br>不裁切，不套局部放大</div></div></div><span class="chip">一句 chip</span></div>
+    <div class="ar">→</div>
+    <div class="col"><div class="stephead g">落到交易</div><div class="pw m"><div class="phone"><div class="placeholder">390×844 设计稿或录屏整帧<br>不裁切，不套局部放大</div></div></div><span class="chip now">开仓生成，平仓写回</span></div>
+  </div>
+  <div class="vals">
+    <div class="vt v1"><b>内容从哪来</b><span>一句说明，22 像素白字</span></div>
+    <div class="vt v1"><b>用户为什么来</b><span>一句说明</span></div>
+    <div class="vt v1"><b>交易从哪来</b><span>一句说明</span></div>
+  </div>
+  </div>
+</section>
+
+<!-- P5 图加手机页：一张图示加一台手机，底部三块价值 -->
+<section class="slide" data-seconds="50" data-title="第二件事">
+  <h1 class="slide-title">格局句标题：<em>每个 X，都是一群 Y</em></h1>
+  <div class="band"><span class="">一、第一件事（口号）</span><span class="on2">二、第二件事（口号）</span><span class="">三、第三件事（口号）</span></div>
+  <span class="wm">概念 · 示意数据</span>
+  <div class="diag-phone small">
+    <div class="dph" style="width:720px;height:608px">720×608 的图示 PNG（聚人 / 分层 / 时间线）<br>字母头像、星标中心、chip 标签</div>
+    <div class="pcol"><div class="pw s"><div class="phone"><div class="placeholder">390×844 设计稿或录屏整帧<br>不裁切，不套局部放大</div></div></div><div class="pcap big">手机下面一行粗体名</div></div>
+  </div>
+  <div class="valband">
+    <div class="vt v2"><b>价值一</b><span>一句说明</span></div>
+    <div class="vt v2"><b>价值二</b><span>一句说明</span></div>
+    <div class="vt v2"><b>价值三</b><span>一句说明</span></div>
+  </div>
+</section>
+
+<!-- P6 图加价值带页：一张宽图示（时间线、底座），底部三块价值 -->
+<section class="slide" data-seconds="50" data-title="第三件事 · 能力句">
+  <h1 class="slide-title">不大言不惭的能力句：<em>可以跑在 X 上，赛完人还在</em></h1>
+  <div class="band"><span class="">一、第一件事（口号）</span><span class="">二、第二件事（口号）</span><span class="on3">三、第三件事（口号）</span></div>
+  <div class="diag small"><div class="dph" style="width:1391px;height:520px">1700×660 的宽图示 PNG，按高 520 缩</div></div>
+  <div class="valband">
+    <div class="vt v3"><b>价值一</b><span>一句说明</span></div>
+    <div class="vt v3"><b>价值二</b><span>一句说明</span></div>
+    <div class="vt v3"><b>价值三</b><span>一句说明</span></div>
+  </div>
+</section>
+
+<!-- P7 价值总览页：三步各自带来什么，每列一句结论加两块 -->
+<section class="slide" data-seconds="50" data-title="三步之后是什么">
+  <h1 class="slide-title">三步之后，<em>产品是什么</em></h1>
+  <div class="valcols">
+    <div class="valcol c1"><h3>一、口号一</h3><div class="lead">一句结论</div><div class="vt"><b>支撑一</b></div><div class="vt"><b>支撑二</b><span>一句</span></div></div>
+    <div class="valcol c2"><h3>二、口号二</h3><div class="lead">一句结论</div><div class="vt"><b>支撑一</b></div><div class="vt"><b>支撑二</b><span>一句</span></div></div>
+    <div class="valcol c3"><h3>三、口号三</h3><div class="lead">一句结论</div><div class="vt"><b>支撑一</b></div><div class="vt"><b>支撑二</b><span>一句</span></div></div>
+  </div>
+</section>
+
+<!-- P8 路线页：一句能被转述的话做标题，三期三条错开的色块，模块做 chip；规划同步到这页为止 -->
+<section class="slide" data-seconds="40" data-title="路线">
+  <h1 class="slide-title"><em>一句能被转述的话</em></h1>
+  <div class="band"><span class="on1">一、第一件事（口号）</span><span class="on2">二、第二件事（口号）</span><span class="on3">三、第三件事（口号）</span></div>
+  <div class="rm"><div class="tl"><span class="g" style="left:16%">12 月版本</span><span class="b" style="left:50%">2027 Q1</span><span class="y" style="left:84%">2027 Q2</span></div></div>
+  <div class="gantt" style="margin-top:10px">
+    <div class="lab g">一期<small>12 月版本 · 评审准备中</small></div><div class="bar g"><span>模块</span><span>模块</span><span>模块</span><span>模块</span></div>
+    <div class="lab b">二期<small>2027 Q1</small></div><div class="bar b"><span>模块</span><span>模块</span><span>模块</span><span>模块</span></div>
+    <div class="lab y">三期<small>2027 Q2</small></div><div class="bar y"><span>模块</span><span>模块</span><span>模块</span></div>
+  </div>
+</section>
+
+<!-- 旧有类型，调研类、拍板类、成果类用：反差页、曲线页、矩阵页、选项页、讨论页 -->
+<section class="slide" data-seconds="50" data-title="反差页（调研类）">
   <h1 class="slide-title">标题是判断句：用户的路径从 <em>A 变成了 B</em></h1>
+  <div class="band"><span class="on1">一、第一件事（口号）</span><span class="">二、第二件事（口号）</span><span class="">三、第三件事（口号）</span></div>
   <div class="visual paths">
     <div class="path"><span class="tag">传统</span><div class="chain">发现币<span>→</span>研究行情<span>→</span>下单</div><p class="note">一句话说旧路径的问题</p></div>
     <div class="path new"><span class="tag">新</span><div class="chain">看谁赚钱<span>→</span>他买啥<span>→</span>还能上车吗</div><p class="note">一句话说新路径为什么更短</p></div>
   </div>
 </section>
 
-<!-- P3 曲线加事件页：一条曲线，三个事件编号 -->
-<section class="slide" data-seconds="60" data-title="第一件事 · 三个拐点">
-  <div class="kicker">PART 1 · 别人为什么赢</div>
+<section class="slide" data-seconds="60" data-title="曲线加事件页（调研类 / 成果类）">
   <h1 class="slide-title">标题是判断句：三个拐点，<em>缩短三种距离</em></h1>
+  <div class="band"><span class="on1">一、第一件事（口号）</span><span class="">二、第二件事（口号）</span><span class="">三、第三件事（口号）</span></div>
   <div class="visual curve">
     <div class="chart">
       <svg viewBox="0 0 1000 420" aria-label="示例曲线，换成真实数据">
@@ -207,69 +448,18 @@ table.plain{width:100%;border-collapse:collapse;font-size:18px;margin-top:10px}
           <circle cx="640" cy="260" r="16" fill="#F0B90B"/><text x="640" y="267" text-anchor="middle" fill="#0B0E11">2</text>
           <circle cx="820" cy="110" r="16" fill="#F0B90B"/><text x="820" y="117" text-anchor="middle" fill="#0B0E11">3</text>
         </g>
-        <g fill="#5E6673" font-size="16" font-family="sans-serif"><text x="60" y="405">起点月</text><text x="940" y="405">最近月</text><text x="20" y="35">指标</text></g>
+        <g fill="#EAECEF" font-size="18" font-family="sans-serif"><text x="60" y="405">起点月</text><text x="940" y="405">最近月</text><text x="20" y="35">指标</text></g>
       </svg>
     </div>
     <ul class="events">
-      <li><span class="n">1</span><div>事件一：功能或动作名<span class="d">2026-01 · 来源：官方公告</span></div></li>
-      <li><span class="n">2</span><div>事件二<span class="d">2026-07 · 来源：官方教程</span></div></li>
-      <li><span class="n">3</span><div>事件三<span class="d">2026-08 · 来源：媒体报道，原帖未回读</span></div></li>
-    </ul>
-  </div>
-  <div class="src">同期对照，不代表已验证因果 · 口径见附录</div>
-</section>
-
-<!-- P4 矩阵页：我们一列全叉就是反差 -->
-<section class="slide" data-seconds="70" data-title="第二件事 · 功能差距">
-  <div class="kicker">PART 2 · 跟我们有什么关系</div>
-  <h1 class="slide-title">标题是判断句：已有买卖和基础行情，<em>分析工具仍有差距</em></h1>
-  <div class="visual">
-    <table class="matrix">
-      <thead><tr><th>功能</th><th class="us">MEXC</th><th>竞品 A</th><th>竞品 B</th><th>竞品 C</th><th>竞品 D</th></tr></thead>
-      <tbody>
-        <tr><td>功能一（点名称看截图）</td><td class="no us">✕</td><td class="ok">✓</td><td class="ok">✓</td><td class="partial">△</td><td class="ok">✓</td></tr>
-        <tr><td>功能二</td><td class="no us">✕</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="unknown">?</td></tr>
-        <tr><td>功能三</td><td class="no us">✕</td><td class="ok">✓</td><td class="partial">△</td><td class="ok">✓</td><td class="ok">✓</td></tr>
-        <tr><td>功能四</td><td class="ok us">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td></tr>
-        <tr><td>功能五</td><td class="no us">✕</td><td class="ok">✓</td><td class="no">✕</td><td class="ok">✓</td><td class="partial">△</td></tr>
-      </tbody>
-    </table>
-  </div>
-  <div class="src">✓ 界面或官方资料已确认 · △ 范围或证据有限 · ? 本轮未确认，不表示没有 · ✕ 确认没有 · 核对日期 2026-10-15</div>
-</section>
-
-<!-- P5 三栏案例页 -->
-<section class="slide" data-seconds="60" data-title="第二件事 · 三个案例">
-  <div class="kicker">PART 2 · 跟我们有什么关系</div>
-  <h1 class="slide-title">标题是判断句：竞品如何争夺用户的 <em>下一次交易</em></h1>
-  <div class="visual cols-3">
-    <div class="card"><span class="label">竞品 A</span><h3>机制一句话</h3><div class="shot"><span>真机截图 · 标端和日期</span></div><p>它证明了什么，一句</p></div>
-    <div class="card"><span class="label">竞品 B</span><h3>机制一句话</h3><div class="shot"><span>真机截图</span></div><p>它证明了什么，一句</p></div>
-    <div class="card"><span class="label">竞品 C</span><h3>机制一句话</h3><div class="shot"><span>真机截图</span></div><p>它证明了什么，一句</p></div>
-  </div>
-</section>
-
-<!-- P6 手机帧页：录屏或设计稿 + 价值清单 -->
-<section class="slide" data-seconds="70" data-title="第三件事 · 我们怎么做">
-  <div class="kicker">PART 3 · 我们怎么做</div>
-  <h1 class="slide-title">标题是判断句：P0 放在 <em>最接近下单的位置</em></h1>
-  <span class="wm">概念 · 示意数据</span>
-  <div class="visual phone-row">
-    <div class="phone">
-      <!-- 有录屏时：<video src="clip.mp4" autoplay muted loop playsinline></video>；有设计稿时：<img src="frame.png"> -->
-      <div class="placeholder">这里放 390×844 的录屏或设计稿整帧<br>不裁切，不套局部放大</div>
-    </div>
-    <ul class="values">
-      <li><span class="n">1</span><div><b>价值一，不超过 12 字</b><span>用户得到什么，灰字一句，老板版删</span></div></li>
-      <li><span class="n">2</span><div><b>价值二</b><span>为什么</span></div></li>
-      <li><span class="n green">3</span><div><b class="green">交易回流写绿色</b><span>转化在哪</span></div></li>
+      <li><span class="n">1</span><div>事件一：功能或动作名<span class="d">2026-01</span></div></li>
+      <li><span class="n">2</span><div>事件二<span class="d">2026-07</span></div></li>
+      <li><span class="n">3</span><div>事件三<span class="d">2026-08</span></div></li>
     </ul>
   </div>
 </section>
 
-<!-- P7 选项页：A/B/C 镜像，各自代价 -->
-<section class="slide" data-seconds="60" data-title="第三件事 · 三个选项">
-  <div class="kicker">PART 3 · 业务决策</div>
+<section class="slide" data-seconds="60" data-title="选项页（拍板类）">
   <h1 class="slide-title">标题是判断句：未来 3 到 6 个月，<em>做到哪一档</em></h1>
   <div class="visual cols-3">
     <div class="card"><span class="label">选项 A</span><h3>用户买得到</h3><p>一句说这档做什么</p><ul class="pros"><li>优势一句</li><li>可验收的点</li></ul><ul class="cons"><li>代价一句</li></ul></div>
@@ -278,20 +468,7 @@ table.plain{width:100%;border-collapse:collapse;font-size:18px;margin-top:10px}
   </div>
 </section>
 
-<!-- P8 三卡页：一句能被转述的话 + 三条变化 -->
-<section class="slide" data-seconds="40" data-title="展望">
-  <div class="kicker">PART 4 · 总结展望</div>
-  <h1 class="slide-title">一句能被老板转述的话：<em>框架名</em></h1>
-  <div class="visual cols-3">
-    <div class="card" style="min-height:300px"><span class="label">用户变了</span><h3>先看到谁赚钱，再买</h3></div>
-    <div class="card" style="min-height:300px"><span class="label">内容变了</span><h3>真实交易就是内容</h3></div>
-    <div class="card" style="min-height:300px"><span class="label">流量变了</span><h3>交易员造流量</h3></div>
-  </div>
-</section>
-
-<!-- P9 讨论页：三问；会上讨论型按 B 开看板 -->
-<section class="slide" data-seconds="60" data-title="讨论">
-  <div class="kicker">PART 4 · 讨论环节</div>
+<section class="slide" data-seconds="60" data-title="讨论页（会上讨论型）">
   <h1 class="slide-title">三个问题，每个自己先有倾向</h1>
   <ol class="visual questions">
     <li>竞争：别人都做了，我们凭什么赢？</li>
@@ -304,32 +481,55 @@ table.plain{width:100%;border-collapse:collapse;font-size:18px;margin-top:10px}
       <textarea id="bView" placeholder="核心看法（必填）"></textarea>
       <input id="bWhy" placeholder="理由 / 成立条件（选填）">
       <button onclick="boardAdd()">加入看板</button><button class="ghost" onclick="boardExport()">导出</button><button class="ghost" onclick="boardClear()">清空</button>
-      <div class="hint">只存在当前浏览器，不写入文件；会后导出备份</div>
+      <div class="hint">只存在当前浏览器，不写入文件，会后导出备份</div>
     </div>
     <div class="list" id="bList"><div class="hint">先听观点，不预设答案</div></div>
   </div>
 </section>
 
-<!-- P10 附录：档案链接 + 弹药页从这里往后加 -->
-<section class="slide" data-seconds="0" data-title="附录 · 档案与来源">
-  <div class="kicker">附录</div>
-  <h1 class="slide-title">档案与来源</h1>
-  <div class="visual links">
-    <a href="#">Lark 完整调研稿<span>全表、口径、免责</span></a>
-    <a href="#">竞品档案 ×N<span>每家一份，四态标记</span></a>
-    <a href="#">数据与计算<span>CSV、公式、端点、截止日</span></a>
+<!-- 附录从这里往后：矩阵、架构 chip、全表。附录页加 class appendix，允许 kicker 和 src -->
+<section class="slide appendix" data-seconds="0" data-title="附 1 · 矩阵">
+  <div class="kicker">附录 · 弹药页 1</div>
+  <h1 class="slide-title">六件基础件，三家都有，<em>我们这一列还是空的</em></h1>
+  <div class="visual">
+    <table class="matrix">
+      <thead><tr><th>基础件</th><th class="us">MEXC</th><th>竞品 A</th><th>竞品 B</th><th>竞品 C</th><th>竞品 D</th></tr></thead>
+      <tbody>
+        <tr><td>功能一</td><td class="no us">✕</td><td class="ok">✓</td><td class="ok">✓</td><td class="partial">△</td><td class="ok">✓</td></tr>
+        <tr><td>功能二</td><td class="no us">✕</td><td class="ok">✓</td><td class="ok">✓</td><td class="ok">✓</td><td class="unknown">?</td></tr>
+        <tr><td>功能三</td><td class="no us">✕</td><td class="ok">✓</td><td class="partial">△</td><td class="ok">✓</td><td class="ok">✓</td></tr>
+      </tbody>
+    </table>
   </div>
-  <table class="plain">
-    <thead><tr><th>弹药页</th><th>预判的追问</th><th>答案所在</th></tr></thead>
-    <tbody>
-      <tr><td>附 1</td><td>追问一</td><td>下一页 / Lark 第几节</td></tr>
-      <tr><td>附 2</td><td>追问二</td><td></td></tr>
-      <tr><td>附 3</td><td>追问三</td><td></td></tr>
-    </tbody>
-  </table>
+  <div class="src">✓ 官方资料或真机已确认 · △ 有但比例未公开 · ? 本轮未确认，不表示没有 · ✕ 确认没有 · 核对日期 2026-10-21</div>
 </section>
 
-<div id="footer"><span id="deckName"></span><span><b id="pageNo"></b> · 本页 <b id="secs"></b> 秒 · <span id="clock">0:00</span></span></div>
+<section class="slide appendix" data-seconds="0" data-title="附 2 · 产品架构">
+  <div class="kicker">附录 · 弹药页 2</div>
+  <h1 class="slide-title">产品架构：<em>五层 N 个模块</em></h1>
+  <div class="legend"><span class="p1">一期 N 个</span><span class="p2">二期 N 个</span><span class="p3">三期 N 个</span></div>
+  <div class="arch">
+    <div class="ly"><b>转化层<small>把看变成做</small></b><div class="ms"><span class="m p1">模块</span><span class="m p1">模块</span><span class="m p3">模块</span></div></div>
+    <div class="ly"><b>分发层<small>送到用户在看的位置</small></b><div class="ms"><span class="m p1">模块</span><span class="m p2">模块</span><span class="m p2">模块</span></div></div>
+    <div class="ly"><b>内容层<small>一笔交易变成一张卡</small></b><div class="ms"><span class="m p1">模块</span><span class="m p1">模块</span><span class="m p2">模块</span></div></div>
+    <div class="ly"><b>数据层<small>只认订单和事件</small></b><div class="ms"><span class="m p1">模块</span><span class="m p1">模块</span><span class="m p1">模块</span></div></div>
+  </div>
+</section>
+
+<section class="slide appendix" data-seconds="0" data-title="附 3 · 全表">
+  <div class="kicker">附录 · 弹药页 3</div>
+  <h1 class="slide-title">各家的做法与时间线</h1>
+  <table class="plain">
+    <thead><tr><th>平台</th><th>时间</th><th>做法</th><th>来源</th></tr></thead>
+    <tbody>
+      <tr><td>竞品 A</td><td>2026-03 内测，2026-10 全量</td><td>一句</td><td>官网、公告、真机</td></tr>
+      <tr><td>竞品 B</td><td>2026-03</td><td>一句</td><td></td></tr>
+    </tbody>
+  </table>
+  <div class="src">全表和口径的来源写在这里，正文页不写</div>
+</section>
+
+<div id="footer"><span id="deckName"></span><span><b id="pageNo"></b><span id="timing"> · 本页 <b id="secs"></b> 秒 · <span id="clock">0:00</span></span></span></div>
 </div>
 
 <div id="toc"><h2>目录（点页跳转，G 关闭）</h2><ol id="tocList"></ol></div>

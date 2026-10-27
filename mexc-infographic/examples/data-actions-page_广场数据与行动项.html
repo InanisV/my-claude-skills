@@ -1,0 +1,155 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>广场数据与行动项 截至 10/25</title><style>@font-face{font-family:"SQ Sans";src:local("PingFang SC"),url("file:///home/claude/sq/fonts/NotoSansSC.ttf");font-weight:100 900}
+@font-face{font-family:"SQ Num";src:local("DIN Alternate Bold"),url("file:///home/claude/sq/fonts/Barlow-Bold.ttf");font-weight:700}
+:root{--bg:#0B0E11;--card:#14171C;--card2:#191D23;--line:#2A2F38;--line2:#3A404A;--t1:#EAECEF;--t2:#AEB5C0;--t3:#7D8592;--gold:#2B6AFF;--gold2:#5B8FFF;--blue:#2B6AFF;--bluet:rgba(43,106,255,.13);--red:#B84A57;--redl:#E07582;--redt:rgba(184,74,87,.16)}
+*{margin:0;padding:0;box-sizing:border-box} html,body{width:1920px;height:1080px;background:var(--bg)}
+body{font-family:"SQ Sans","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;color:var(--t1);-webkit-font-smoothing:antialiased}
+.slide{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--bg)}
+.num{font-family:"SQ Num","DIN Alternate","Barlow",sans-serif;font-weight:700}
+svg{display:block} .ico{fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
+.tag{position:absolute;left:80px;top:40px;padding:5px 16px;border-radius:999px;border:1px solid var(--line2);color:var(--t2);font-size:19px;font-weight:700}
+h1{position:absolute;left:80px;top:82px;font-size:54px;font-weight:900;letter-spacing:1px;white-space:nowrap}
+h1 em,h1 .r{font-style:normal;color:#fff;padding:0 14px;border-radius:12px;margin:0 4px} h1 em{background:var(--blue)} h1 .r{background:var(--red)}
+.note{position:absolute;right:80px;top:100px;padding:5px 16px;border-radius:999px;border:1px solid var(--line2);font-size:20px;font-weight:800;color:var(--t2)}
+
+.card{position:absolute;border-radius:22px;background:var(--card);border:1px solid var(--line)}
+#C{left:80px;top:176px;width:1230px;height:420px}
+.lg{position:absolute;left:110px;top:194px;display:flex;gap:26px;align-items:center;font-size:21px;font-weight:900}
+.lg span{display:inline-flex;align-items:center;gap:10px} .lg .bar{width:16px;height:22px;border-radius:4px;background:#6F94E8} .lg .ln{width:34px;height:5px;border-radius:3px;background:var(--red)}
+.full{position:absolute;right:640px;top:190px;padding:5px 16px;border-radius:999px;border:1px solid var(--line2);color:var(--t2);font-size:20px;font-weight:900}
+.ch{position:absolute;left:0;top:0}
+.ch .band{font-size:21px;font-weight:900;fill:#8B93A1;text-anchor:middle}
+.ch .ax{font-family:"SQ Num","DIN Alternate",sans-serif;font-size:19px;font-weight:700;fill:#7D8592} .ch .ax.l{text-anchor:end} .ch .ax.r{text-anchor:start}
+.ch .xl{font-family:"SQ Num","DIN Alternate",sans-serif;font-size:21px;font-weight:700;fill:#AEB5C0;text-anchor:middle}
+.ch .cl{font-family:"SQ Num","DIN Alternate",sans-serif;font-size:27px;font-weight:700;fill:#FFFFFF;text-anchor:middle}
+.ch .vl{font-family:"SQ Num","DIN Alternate",sans-serif;font-size:25px;font-weight:700;fill:#EAECEF;text-anchor:middle} .ch .vl.dim{fill:#AEB5C0;font-size:22px}
+.kc{position:absolute;left:1330px;width:510px;padding:22px 26px;display:flex;flex-direction:column;gap:12px}
+#K1{top:176px;height:202px;border:2px solid var(--blue)} #K2{top:394px;height:202px;border:2px solid var(--red)}
+.kh{display:flex;align-items:center;gap:12px;font-size:25px;font-weight:900}
+.kh .ii{width:46px;height:46px;border-radius:14px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:var(--t1)}
+#K2 .kh .ii{border-color:var(--red);color:var(--red)} #K1 .kh .ii{border-color:var(--blue);color:var(--blue)}
+.kv{display:flex;align-items:baseline;gap:14px} .kv .a{font-size:44px;color:var(--t2)} .kv .to{color:var(--t3);align-self:center} .kv .b{font-size:58px;color:var(--t1)}
+#K2 .kv .b{color:var(--red)} .big{display:inline-flex;align-items:center;gap:6px;font-size:70px;line-height:1} .big.up{color:var(--blue)}
+.kd{display:flex;align-items:center;gap:12px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 14px;border-radius:999px;font-size:23px;font-weight:900;border:1px solid var(--line2)}
+#K2 .pill{border-color:var(--gold);color:var(--gold)} .pill.up{background:var(--gold);border-color:var(--gold);color:#0B0E11}
+.kd .w{font-size:22px;font-weight:800;color:var(--t1)}
+.act{position:absolute;left:80px;top:700px;width:1760px;height:316px;border-radius:22px;border:1px solid var(--line);background:var(--card);padding:18px 24px;display:flex;flex-direction:column;gap:12px}
+.ah{display:flex;align-items:center;gap:16px}
+.ah b{font-size:30px;font-weight:900;letter-spacing:1px} .ah b em{font-style:normal;color:var(--red)}
+.goal{margin-left:auto;display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:12px;border:2px solid var(--gold);color:var(--gold);font-size:22px;font-weight:900}
+.rw{flex:1;display:grid;grid-template-columns:400px 40px 470px 40px 1fr;align-items:center;gap:10px;border-top:1px solid var(--line);padding-top:10px}
+.why,.how{display:flex;align-items:center;gap:14px;min-width:0}
+.wi,.hi{width:52px;height:52px;border-radius:15px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;flex:none;color:var(--t2)} .wi{color:var(--red);border-color:rgba(217,115,127,.6)}
+.hi{border-color:var(--blue);color:var(--blue)}
+.why b,.how b{display:block;font-size:27px;font-weight:900;white-space:nowrap}
+.why span,.how span{display:block;margin-top:4px;font-size:20px;font-weight:800;color:var(--t2);white-space:nowrap}
+.ar2{color:var(--t3);display:flex;justify-content:center}
+.prog{display:flex;align-items:center;gap:14px;min-width:0}
+.pipe{flex:1;display:flex;align-items:center}
+.ps{display:inline-flex;align-items:center;gap:6px;padding:6px 13px;border-radius:999px;font-size:20px;font-weight:900;white-space:nowrap;border:1px solid var(--line2);color:var(--t1)}
+.ps.done{background:var(--t1);border-color:var(--t1);color:#0B0E11}
+.ps.end{border:2px solid var(--blue);color:var(--blue)}
+.ps.stop{background:var(--red);border-color:var(--red);color:#0B0E11}
+.ps.dim{border-style:dashed;color:var(--t3)}
+.pl{flex:1;min-width:12px;height:2px;background:var(--line2)} .pl.dim{background:repeating-linear-gradient(90deg,#3A404A 0 6px,transparent 6px 12px)}
+.need{display:inline-flex;align-items:center;gap:6px;padding:6px 13px;border-radius:999px;border:2px solid var(--red);color:var(--red);font-size:19px;font-weight:900;white-space:nowrap}
+
+.lg .bar{background:linear-gradient(180deg,#7D9DE6,#3F63B8)!important} .lg .ln{background:#E07582!important}
+#K1{border:3px solid var(--blue)!important;background:linear-gradient(180deg,rgba(43,106,255,.16),rgba(20,23,28,.95))!important}
+#K2{border:3px solid var(--red)!important;background:linear-gradient(180deg,rgba(184,74,87,.18),rgba(20,23,28,.95))!important}
+#K1 .kh .ii{background:var(--blue)!important;border-color:var(--blue)!important;color:#fff!important}
+#K2 .kh .ii{background:var(--red)!important;border-color:var(--red)!important;color:#fff!important}
+.big{color:#fff!important} .big svg{width:58px;height:58px;padding:9px;border-radius:50%;background:var(--blue);color:#fff;stroke-width:3.4}
+#K2 .kv .b{color:#fff!important} #K2 .kv .a{color:var(--t3)}
+.ah b em{color:#fff!important;background:var(--red);padding:0 12px;border-radius:10px;margin:0 2px}
+.wi{color:#E07582!important;border-color:rgba(224,117,130,.7)!important}
+.hi{background:var(--blue)!important;border-color:var(--blue)!important;color:#fff!important}
+.ps.end{background:var(--blue)!important;border-color:var(--blue)!important;color:#fff!important}
+.ps.stop{background:var(--red)!important;border-color:var(--red)!important;color:#fff!important}
+.need{background:var(--red)!important;border-color:var(--red)!important;color:#fff!important}
+
+/* calmer: color only where the point is */
+#K1{border:2px solid var(--blue)!important;background:linear-gradient(180deg,rgba(43,106,255,.10),rgba(20,23,28,.95))!important}
+#K2{border:2px solid var(--red)!important;background:var(--card)!important}
+#K2 .kh .ii{background:transparent!important;border-color:var(--red)!important;color:var(--redl)!important}
+.ah b em{background:none!important;padding:0!important;margin:0!important;color:#fff!important}
+.wi{color:var(--t2)!important;border-color:var(--line2)!important}
+.hi{background:transparent!important;border-color:var(--line2)!important;color:var(--t1)!important}
+.ps.done{background:transparent!important;border:2px solid var(--t1)!important;color:var(--t1)!important}
+.ps.end{background:var(--blue)!important;border:2px solid var(--blue)!important;color:#fff!important}
+.ps.stop{background:var(--red)!important;border-color:var(--red)!important;color:#fff!important}
+.need{background:transparent!important;border:2px solid var(--red)!important;color:#fff!important}
+.need svg{color:var(--redl)}
+.pl{background:var(--line2)!important}
+.ch .cl{fill:#FFFFFF!important}
+
+.act{top:656px!important;height:360px!important;gap:8px!important;padding:16px 24px!important}
+.rh{display:grid;grid-template-columns:420px 36px 470px 36px 1fr;gap:10px;font-size:20px;font-weight:900;color:var(--t2);padding:2px 0 0}
+.rw{grid-template-columns:420px 36px 470px 36px 1fr!important;padding-top:8px!important}
+.why{gap:14px!important;border-left:4px solid var(--red);padding-left:14px;height:56px;align-items:center}
+.wn{width:34px;height:34px;border-radius:50%;border:2px solid var(--t2);display:flex;align-items:center;justify-content:center;font-size:19px;flex:none;color:var(--t1)}
+.why b{font-size:26px!important} .how b{font-size:24px!important}
+.mets{display:flex;gap:10px}
+.met{display:inline-flex;align-items:center;gap:7px;padding:6px 13px;border-radius:999px;border:1px solid var(--line2);font-size:20px;font-weight:900;white-space:nowrap}
+.met svg{color:var(--t2)}
+.plan{margin-left:12px;padding:6px 13px;border-radius:999px;border:1px dashed var(--line2);color:var(--t2);font-size:19px;font-weight:900;white-space:nowrap}
+.prog .pipe{flex:none} .prog .need{margin-left:12px}
+.why .wn,.how .hi{display:flex!important;align-items:center;justify-content:center;margin-top:0!important;color:var(--t1)!important}
+.why .wn{font-size:19px!important}
+
+#K2{border:2px solid var(--line2)!important}
+#K2 .kh .ii{border-color:var(--line2)!important;color:var(--t2)!important}
+.ref{margin-left:10px;padding:2px 12px;border-radius:999px;border:1px solid var(--line2);font-size:19px;font-weight:900;color:var(--t2)}
+.lg .ln{background:#B7A0A6!important}
+.ch .cl{fill:#D9DDE3!important}
+.why{border-left:4px solid var(--line2)!important}
+.met{border-color:rgba(43,106,255,.75)!important} .met svg{color:#7FA6FF!important}
+
+.kc{padding:16px 24px!important;gap:10px!important}
+.big{font-size:62px!important} .big svg{width:52px!important;height:52px!important}
+#K2 .kv .a{font-size:40px!important} #K2 .kv .b{font-size:52px!important}
+.act{top:612px!important;height:404px!important;padding:18px 26px!important;gap:6px!important}
+.ah b{font-size:32px!important}
+.rh{grid-template-columns:470px 36px 560px 36px 1fr!important}
+.rw{grid-template-columns:470px 36px 560px 36px 1fr!important;padding-top:10px!important}
+.why{height:72px!important;border-left:4px solid var(--t2)!important;padding-left:16px!important}
+.why .wn{width:42px!important;height:42px!important;background:var(--t1)!important;border-color:var(--t1)!important;color:#0B0E11!important;font-size:22px!important}
+.why b{font-size:29px!important}
+.how .hi{width:56px!important;height:56px!important;background:var(--blue)!important;border-color:var(--blue)!important;color:#fff!important}
+.how b{font-size:27px!important}
+</style></head><body><div class="slide">
+<div class="tag">MEXC 广场 · 数据同步 · 数分看板截至 10/25</div>
+<h1>广场访问人数<em>一周涨了 34%</em>，接下来重点看发帖、讨论和停留时长</h1>
+<div class="card" id="C"></div>
+<div class="lg"><span><i class="bar"></i>广场访问人数</span><span><i class="ln"></i>推荐流点击率</span></div>
+<div class="full">10/26 已全量 · 数据下周同步</div>
+<svg class="ch" width="1920" height="1080" viewBox="0 0 1920 1080"><defs><linearGradient id="gb50" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7D9DE6"/><stop offset="1" stop-color="#3F63B8"/></linearGradient></defs><rect x="729.2592592592592" y="240" width="500.74074074074076" height="276" fill="rgba(234,236,239,.035)"/><line x1="710.0" y1="240" x2="710.0" y2="516" stroke="#3A404A" stroke-width="2" stroke-dasharray="6 6"/><text x="440.3703703703704" y="262" class="band">10% 放量</text><text x="979.6296296296296" y="262" class="band">50% 放量</text><line x1="190" y1="516.0" x2="1230" y2="516.0" stroke="rgba(234,236,239,0.16)" stroke-width="2"/><line x1="190" y1="454.0" x2="1230" y2="454.0" stroke="rgba(234,236,239,0.06)" stroke-width="1"/><line x1="190" y1="392.0" x2="1230" y2="392.0" stroke="rgba(234,236,239,0.06)" stroke-width="1"/><line x1="190" y1="330.0" x2="1230" y2="330.0" stroke="rgba(234,236,239,0.06)" stroke-width="1"/><line x1="190" y1="268.0" x2="1230" y2="268.0" stroke="rgba(234,236,239,0.06)" stroke-width="1"/><text x="1244" y="523.0" class="ax r">0%</text><text x="1244" y="461.0" class="ax r">3%</text><text x="1244" y="399.0" class="ax r">6%</text><text x="1244" y="337.0" class="ax r">9%</text><text x="1244" y="275.0" class="ax r">12%</text><rect x="197.3" y="510.0" width="24" height="6.0" rx="5" fill="#2E3D60"/><rect x="235.8" y="496.8" width="24" height="19.2" rx="5" fill="#2E3D60"/><rect x="274.3" y="491.6" width="24" height="24.4" rx="5" fill="#2E3D60"/><rect x="312.8" y="490.7" width="24" height="25.3" rx="5" fill="#2E3D60"/><rect x="351.3" y="494.4" width="24" height="21.6" rx="5" fill="#2E3D60"/><rect x="389.9" y="493.7" width="24" height="22.3" rx="5" fill="#2E3D60"/><rect x="428.4" y="489.0" width="24" height="27.0" rx="5" fill="#2E3D60"/><rect x="466.9" y="488.0" width="24" height="28.0" rx="5" fill="#2E3D60"/><rect x="505.4" y="488.2" width="24" height="27.8" rx="5" fill="#2E3D60"/><rect x="543.9" y="488.6" width="24" height="27.4" rx="5" fill="#2E3D60"/><rect x="582.4" y="489.2" width="24" height="26.8" rx="5" fill="#2E3D60"/><rect x="621.0" y="495.0" width="24" height="21.0" rx="5" fill="#2E3D60"/><rect x="659.5" y="495.9" width="24" height="20.1" rx="5" fill="#2E3D60"/><rect x="698.0" y="468.8" width="24" height="47.2" rx="5" fill="#3A4F7E"/><rect x="736.5" y="407.8" width="24" height="108.2" rx="5" fill="url(#gb50)"/><rect x="775.0" y="398.6" width="24" height="117.4" rx="5" fill="url(#gb50)"/><rect x="813.6" y="363.4" width="24" height="152.6" rx="5" fill="url(#gb50)"/><rect x="852.1" y="363.8" width="24" height="152.2" rx="5" fill="url(#gb50)"/><rect x="890.6" y="379.7" width="24" height="136.3" rx="5" fill="url(#gb50)"/><rect x="929.1" y="378.5" width="24" height="137.5" rx="5" fill="url(#gb50)"/><rect x="967.6" y="363.6" width="24" height="152.4" rx="5" fill="url(#gb50)"/><rect x="1006.1" y="366.2" width="24" height="149.8" rx="5" fill="url(#gb50)"/><rect x="1044.7" y="345.4" width="24" height="170.6" rx="5" fill="url(#gb50)"/><rect x="1083.2" y="354.6" width="24" height="161.4" rx="5" fill="url(#gb50)"/><rect x="1121.7" y="327.7" width="24" height="188.3" rx="5" fill="url(#gb50)"/><rect x="1160.2" y="294.5" width="24" height="221.5" rx="5" fill="url(#gb50)"/><rect x="1198.7" y="311.6" width="24" height="204.4" rx="5" fill="url(#gb50)"/><polyline points="209.3,276.7 247.8,274.4 286.3,311.9 324.8,397.6 363.3,346.2 401.9,380.7 440.4,421.2 478.9,387.1 517.4,361.7 555.9,370.7 594.4,413.4 633.0,386.1 671.5,362.7 710.0,300.0 748.5,306.9 787.0,367.7 825.6,356.7 864.1,394.8 902.6,368.0 941.1,376.2 979.6,401.8 1018.1,400.9 1056.7,396.8 1095.2,413.7 1133.7,433.9 1172.2,443.5 1210.7,441.7" fill="none" stroke="#B7A0A6" stroke-width="4" stroke-dasharray="2 0" stroke-linejoin="round" stroke-linecap="round"/><circle cx="209.3" cy="276.7" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="247.8" cy="274.4" r="7" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="286.3" cy="311.9" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="324.8" cy="397.6" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="363.3" cy="346.2" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="401.9" cy="380.7" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="440.4" cy="421.2" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="478.9" cy="387.1" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="517.4" cy="361.7" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="555.9" cy="370.7" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="594.4" cy="413.4" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="633.0" cy="386.1" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="671.5" cy="362.7" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="710.0" cy="300.0" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="748.5" cy="306.9" r="7" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="787.0" cy="367.7" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="825.6" cy="356.7" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="864.1" cy="394.8" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="902.6" cy="368.0" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="941.1" cy="376.2" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="979.6" cy="401.8" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="1018.1" cy="400.9" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="1056.7" cy="396.8" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="1095.2" cy="413.7" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="1133.7" cy="433.9" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="1172.2" cy="443.5" r="4.5" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><circle cx="1210.7" cy="441.7" r="7" fill="#B7A0A6" stroke="#0B0E11" stroke-width="2"/><text x="748.5" y="288.9" class="cl">10.1%</text><text x="1180.7" y="481.7" class="cl">3.6%</text><text x="209.3" y="548.0" class="xl">9/29</text><text x="440.4" y="548.0" class="xl">10/5</text><text x="710.0" y="548.0" class="xl">10/12</text><text x="979.6" y="548.0" class="xl">10/19</text><text x="1210.7" y="548.0" class="xl">10/25</text></svg>
+<div class="card kc" id="K1"><div class="kh"><span class="ii"><svg class="ico" width="28" height="28" viewBox="0 0 24 24" style="stroke-width:2.1"><circle cx="9" cy="8" r="3.6"/><path d="M2.5 20.2c0-3.7 2.9-6.6 6.5-6.6s6.5 2.9 6.5 6.6"/><circle cx="17.2" cy="9" r="2.9"/><path d="M16 13.8c3.2.3 5.6 3 5.6 6.3"/></svg></span>日均访问人数</div>
+  <div class="kv num"><span class="big up"><svg class="ico" width="44" height="44" viewBox="0 0 24 24" style="stroke-width:3"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg>34%</span></div>
+  <div class="kd"><span class="w">同样 50% 放量，第二周比第一周</span></div></div>
+<div class="card kc" id="K2"><div class="kh"><span class="ii"><svg class="ico" width="28" height="28" viewBox="0 0 24 24" style="stroke-width:2.1"><path d="M9 9l11 4.2-4.6 1.8-1.8 4.6z"/><path d="M5 3.5v3M2.5 6h3M8.8 4.2l-1.9 1.9M3.5 9.5h3"/></svg></span>推荐流点击率<span class="ref">参考</span></div>
+  <div class="kv num"><span class="a">7.1%</span><span class="to"><svg class="ico" width="28" height="28" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></span><span class="b">4.5%</span></div>
+  <div class="kd"><span class="w">广场以浏览为主，刷帖不一定点进详情</span></div></div>
+<div class="act">
+  <div class="ah"><b>三个问题，和对应的解法</b></div>
+  <div class="rh"><span>问题</span><span></span><span>解法</span><span></span><span>进展</span></div><div class="rw">
+  <div class="why"><span class="wn num">1</span><b>只看点击率，看不出内容好坏</b></div>
+  <span class="ar2"><svg class="ico" width="28" height="28" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></span>
+  <div class="how"><span class="hi"><svg class="ico" width="26" height="26" viewBox="0 0 24 24" style="stroke-width:2.1"><path d="M4 20V10M10 20V4M16 20v-7"/><path d="M2.5 20.5h19"/></svg></span><b>看板补上发帖、讨论、停留、留存</b></div>
+  <span class="ar2"><svg class="ico" width="28" height="28" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></span>
+  <div class="prog"><div class="pipe"><span class="ps done"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" style="stroke-width:3"><path d="M5 12.5l4.2 4.2L19 7"/></svg>已和数分对齐</span><span class="pl"></span><span class="ps end">预计本周五 10/30 更新</span></div></div>
+</div><div class="rw">
+  <div class="why"><span class="wn num">2</span><b>AI 内容雷同、重复</b></div>
+  <span class="ar2"><svg class="ico" width="28" height="28" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></span>
+  <div class="how"><span class="hi"><svg class="ico" width="26" height="26" viewBox="0 0 24 24" style="stroke-width:2.1"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.5 17.5l3 3 5.8-5.8a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg></span><b>修内容管线，批量更新 AI 人设</b></div>
+  <span class="ar2"><svg class="ico" width="28" height="28" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></span>
+  <div class="prog"><div class="pipe"><span class="ps done"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" style="stroke-width:3"><path d="M5 12.5l4.2 4.2L19 7"/></svg>评审</span><span class="pl"></span><span class="ps todo">研发 10/29</span><span class="pl"></span><span class="ps todo">提测 11/04</span><span class="pl"></span><span class="ps end">上线 11/13</span></div></div>
+</div><div class="rw">
+  <div class="why"><span class="wn num">3</span><b>热点讨论分散，没有焦点</b></div>
+  <span class="ar2"><svg class="ico" width="28" height="28" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></span>
+  <div class="how"><span class="hi"><svg class="ico" width="26" height="26" viewBox="0 0 24 24" style="stroke-width:2.1"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg></span><b>运营指定热点，AI 账号集中发帖</b></div>
+  <span class="ar2"><svg class="ico" width="28" height="28" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></span>
+  <div class="prog"><div class="pipe"><span class="ps done"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" style="stroke-width:3"><path d="M5 12.5l4.2 4.2L19 7"/></svg>评审</span><span class="pl"></span><span class="ps stop"><svg class="ico" width="17" height="17" viewBox="0 0 24 24" style="stroke-width:3"><path d="M9 6v12M15 6v12"/></svg>待排期</span></div><span class="need"><svg class="ico" width="18" height="18" viewBox="0 0 24 24" style="stroke-width:2.4"><circle cx="9" cy="8" r="3.6"/><path d="M2.5 20.2c0-3.7 2.9-6.6 6.5-6.6s6.5 2.9 6.5 6.6"/><circle cx="17.2" cy="9" r="2.9"/><path d="M16 13.8c3.2.3 5.6 3 5.6 6.3"/></svg>后端仅 1 人，在做更高优需求</span></div>
+</div>
+</div>
+</div></body></html>

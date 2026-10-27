@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>MEXC 广场 10/26 同步</title>
+<style>
+@font-face{font-family:"SQ Sans";src:local("PingFang SC"),url("file:///home/claude/sq/fonts/NotoSansSC.ttf");font-weight:100 900}
+@font-face{font-family:"SQ Num";src:local("DIN Alternate Bold"),url("file:///home/claude/sq/fonts/Barlow-Bold.ttf");font-weight:700}
+:root{
+  --bg:#0B0E11;--card:#151920;--card2:#1B2028;--bd:rgba(234,236,239,.09);--bd2:rgba(234,236,239,.16);
+  --t1:#EAECEF;--t2:#CDD2DA;
+  --gold:#F0B90B;--gold2:#F8D33A;--green:#00B87A;--green2:#20D59C;--blue:#2B6AFF;--blue2:#6B9BFF;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1920px;height:1080px;background:var(--bg)}
+body{font-family:"SQ Sans","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;color:var(--t1);-webkit-font-smoothing:antialiased}
+.slide{position:relative;width:1920px;height:1080px;overflow:hidden;
+  background:
+    radial-gradient(900px 560px at 6% -12%,rgba(43,106,255,.17),transparent 62%),
+    radial-gradient(760px 620px at 104% 112%,rgba(240,185,11,.11),transparent 62%),
+    var(--bg)}
+.num{font-family:"SQ Num","DIN Alternate","Barlow",sans-serif;font-weight:700}
+svg{display:block}
+.ico{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+
+/* 顶部 */
+.tag{position:absolute;left:80px;top:50px;display:inline-flex;align-items:center;gap:10px;padding:7px 18px;border-radius:999px;
+  background:rgba(43,106,255,.14);border:1px solid rgba(43,106,255,.4);color:var(--blue2);font-size:20px;font-weight:700;letter-spacing:.5px}
+.tag .num{font-size:21px}
+h1{position:absolute;left:80px;top:98px;font-size:60px;font-weight:900;letter-spacing:1px;line-height:1.18;white-space:nowrap}
+h1 em{font-style:normal;background:linear-gradient(90deg,#F0B90B,#F8D33A);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* 区块标题 */
+.ph{position:absolute;top:214px;display:flex;align-items:center;gap:14px;font-size:30px;font-weight:900;letter-spacing:.5px}
+.ph::before{content:"";width:7px;height:30px;border-radius:4px;background:var(--gold)}
+
+.card{position:absolute;background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--bd);border-radius:20px}
+
+/* 左侧：两件事 */
+#cA{left:80px;top:272px;width:620px;height:370px;padding:30px 30px 28px;display:flex;flex-direction:column;justify-content:space-between}
+#cB{left:80px;top:664px;width:620px;height:352px;padding:30px 30px 28px;display:flex;flex-direction:column;justify-content:space-between}
+.ctop{display:flex;align-items:center;gap:22px}
+.big{font-size:124px;line-height:.9;letter-spacing:-2px;background:linear-gradient(180deg,#3BE3A8,#00B87A);-webkit-background-clip:text;background-clip:text;color:transparent}
+.big span{font-size:76px;letter-spacing:0}
+.ct{font-size:40px;font-weight:900;letter-spacing:1px;line-height:1.1}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;font-size:20px;font-weight:700;white-space:nowrap}
+.chip.blue{background:rgba(43,106,255,.15);border:1px solid rgba(43,106,255,.42);color:var(--blue2)}
+.ccol{display:flex;flex-direction:column;gap:14px;align-items:flex-start}
+
+.stepper{position:relative;display:grid;grid-template-columns:repeat(4,1fr);padding-top:4px}
+.track{position:absolute;left:12.5%;right:12.5%;top:56px;height:4px;border-radius:2px;
+  background:linear-gradient(90deg,rgba(0,184,122,.45),#00B87A 70%,#20D59C)}
+.st{display:flex;flex-direction:column;align-items:center;gap:12px;position:relative}
+.sd{font-size:24px;font-weight:700;color:var(--t1);height:30px;line-height:30px}
+.sd.num{font-size:26px}
+.dot{width:22px;height:22px;border-radius:50%;background:#0B0E11;border:4px solid var(--green);margin-top:2px}
+.st.on .dot{width:34px;height:34px;margin-top:-4px;background:var(--green);border-color:#7FF0C6;box-shadow:0 0 0 7px rgba(0,184,122,.22),0 0 26px rgba(0,184,122,.65)}
+.sv{font-size:24px;font-weight:800;height:32px;line-height:32px}
+.sv.num{font-size:30px}
+.st.on .sv{color:var(--green2)}
+.st.on .sd{color:var(--green2)}
+
+.itile{width:70px;height:70px;border-radius:18px;display:flex;align-items:center;justify-content:center;flex:none}
+.itile.gold{background:rgba(240,185,11,.13);border:1px solid rgba(240,185,11,.42);color:var(--gold);position:relative}
+.pz{position:absolute;right:-10px;top:-10px;width:30px;height:30px;border-radius:50%;background:#F6465D;border:3px solid #151920;display:flex;align-items:center;justify-content:center;gap:4px}
+.pz i{width:4px;height:11px;border-radius:2px;background:#fff}
+.chain{display:flex;align-items:stretch;justify-content:space-between}
+.cb{width:164px;border-radius:16px;background:rgba(234,236,239,.035);border:1px solid var(--bd2);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:22px 8px;text-align:center}
+.cb .t{font-size:23px;font-weight:800;line-height:1.35}
+.cb svg{color:var(--t1)}
+.cb.gate{background:rgba(240,185,11,.08);border-color:rgba(240,185,11,.55)}
+.cb.gate svg{color:var(--gold)}
+.cb.gate .t{color:var(--gold2)}
+.carr{display:flex;align-items:center;color:var(--gold)}
+
+/* 中缝 */
+.divider{position:absolute;left:729px;top:214px;width:2px;height:802px;background:linear-gradient(180deg,transparent,rgba(234,236,239,.12) 12%,rgba(234,236,239,.12) 88%,transparent)}
+.dvbtn{position:absolute;left:707px;top:622px;width:46px;height:46px;border-radius:50%;background:#0B0E11;border:2px solid rgba(240,185,11,.6);
+  display:flex;align-items:center;justify-content:center;color:var(--gold)}
+
+/* 右侧：三条路 */
+.lane{position:absolute;left:760px;width:780px;padding:24px 26px;display:flex;gap:24px;align-items:center}
+#L1{top:272px;height:220px}
+#L2{top:512px;height:266px}
+#L3{top:798px;height:218px}
+.lh{width:292px;flex:none;display:flex;flex-direction:column;gap:12px}
+.lrow{display:flex;align-items:center;gap:12px}
+.nb{width:34px;height:34px;border-radius:50%;background:var(--gold);color:#0B0E11;font-size:20px;font-weight:900;display:flex;align-items:center;justify-content:center}
+.src{padding:4px 14px;border-radius:999px;font-size:20px;font-weight:800;background:rgba(43,106,255,.15);border:1px solid rgba(43,106,255,.42);color:var(--blue2)}
+.lname{display:flex;align-items:center;gap:14px}
+.lname .li{width:48px;height:48px;border-radius:14px;background:rgba(234,236,239,.06);border:1px solid var(--bd2);display:flex;align-items:center;justify-content:center;color:var(--t1);flex:none}
+.ln{font-size:32px;font-weight:900;letter-spacing:.5px;white-space:nowrap}
+.lv{font-size:23px;font-weight:800;color:var(--gold);line-height:1.35}
+.lb{flex:1;display:flex;flex-direction:column;gap:18px;align-items:flex-start}
+.flow{display:flex;align-items:flex-start;gap:0}
+.fn{width:118px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.fi{width:62px;height:62px;border-radius:16px;background:rgba(43,106,255,.13);border:1px solid rgba(43,106,255,.38);color:var(--blue2);display:flex;align-items:center;justify-content:center}
+.fn.end .fi{background:rgba(0,184,122,.13);border-color:rgba(0,184,122,.5);color:var(--green2)}
+.fl{font-size:22px;font-weight:800;white-space:nowrap}
+.fa{width:34px;height:62px;display:flex;align-items:center;justify-content:center;color:var(--t2)}
+.stt{display:inline-flex;align-items:center;gap:10px;padding:6px 16px;border-radius:999px;background:rgba(234,236,239,.06);border:1px solid var(--bd2);font-size:21px;font-weight:700;white-space:nowrap}
+.stt i{width:11px;height:11px;border-radius:50%;flex:none}
+.stt i.g{background:var(--green2);box-shadow:0 0 8px rgba(32,213,156,.8)}
+.stt i.b{background:var(--blue2);box-shadow:0 0 8px rgba(107,155,255,.8)}
+.stt i.y{background:var(--gold);box-shadow:0 0 8px rgba(240,185,11,.8)}
+.stt.fl-c{align-self:center}
+.rows{display:flex;flex-direction:column;gap:12px;width:100%}
+.rw{display:flex;align-items:center;gap:16px}
+.bz{width:156px;flex:none;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:rgba(43,106,255,.11);border:1px solid rgba(43,106,255,.36);font-size:22px;font-weight:900;white-space:nowrap}
+.bz svg{color:var(--blue2);flex:none}
+.rd{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.rt{font-size:22px;font-weight:800;white-space:nowrap}
+.rd .stt{font-size:20px;padding:3px 13px}
+
+/* 目标 */
+#T{position:absolute;left:1634px;top:272px;width:206px;height:744px;border-radius:24px;
+  background:linear-gradient(180deg,rgba(240,185,11,.16),rgba(240,185,11,.05) 55%,rgba(240,185,11,.10));
+  border:2px solid rgba(240,185,11,.7);box-shadow:0 0 40px rgba(240,185,11,.12) inset;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;text-align:center}
+.ttag{padding:6px 20px;border-radius:999px;background:var(--gold);color:#0B0E11;font-size:22px;font-weight:900;letter-spacing:3px}
+.tico{width:120px;height:120px;border-radius:50%;background:rgba(240,185,11,.14);border:1px solid rgba(240,185,11,.5);display:flex;align-items:center;justify-content:center;color:var(--gold2)}
+.tt{font-size:40px;font-weight:900;line-height:1.15;letter-spacing:1px}
+.tg{font-size:60px;font-weight:900;line-height:1;letter-spacing:1px;background:linear-gradient(180deg,#FFE27A,#F0B90B);-webkit-background-clip:text;background-clip:text;color:transparent}
+.tchips{display:flex;flex-direction:column;gap:12px;align-items:center}
+.tchips span{padding:8px 26px;border-radius:999px;border:1px solid rgba(240,185,11,.6);background:rgba(11,14,17,.6);font-size:26px;font-weight:800}
+
+svg#ov{position:absolute;left:0;top:0;width:1920px;height:1080px;pointer-events:none}
+</style>
+</head>
+<body>
+<div class="slide">
+
+  <div class="tag">MEXC 广场 · <span class="num">10/26</span></div>
+  <h1>广场今天全量，接下来把<em>真人用户</em>拉进来、用起来</h1>
+
+  <!-- 左：今天定了两件事 -->
+  <div class="ph" style="left:80px">今天定了两件事</div>
+
+  <div class="card" id="cA">
+    <div class="ctop">
+      <div class="big num">100<span>%</span></div>
+      <div class="ccol">
+        <div class="ct">全量放量</div>
+        <div class="chip blue">与内容运营（SEO）共识</div>
+      </div>
+    </div>
+    <div class="stepper">
+      <div class="track"></div>
+      <div class="st"><div class="sd num">9/23</div><div class="dot"></div><div class="sv">白名单上线</div></div>
+      <div class="st"><div class="sd">9 月底</div><div class="dot"></div><div class="sv num">10%</div></div>
+      <div class="st"><div class="sd num">10/12</div><div class="dot"></div><div class="sv num">50%</div></div>
+      <div class="st on"><div class="sd num">10/26</div><div class="dot"></div><div class="sv num">100%</div></div>
+    </div>
+  </div>
+
+  <div class="card" id="cB">
+    <div class="ctop">
+      <div class="itile gold">
+        <svg class="ico" width="40" height="40" viewBox="0 0 24 24"><path d="M3 10v4h3.5L13 18V6L6.5 10z"/><path d="M16.5 9.2a3.6 3.6 0 0 1 0 5.6"/><path d="M19 6.8a7 7 0 0 1 0 10.4" opacity=".55"/></svg>
+        <span class="pz"><i></i><i></i></span>
+      </div>
+      <div class="ccol">
+        <div class="ct">暂不宣发</div>
+        <div class="chip blue">与市场部共识</div>
+      </div>
+    </div>
+    <div class="chain">
+      <div class="cb">
+        <svg class="ico" width="40" height="40" viewBox="0 0 24 24"><path d="M12 3.5l1.9 4.8 4.8 1.9-4.8 1.9L12 16.9l-1.9-4.8-4.8-1.9 4.8-1.9z"/><path d="M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>
+        <div class="t">打磨产品<br>做站内运营</div>
+      </div>
+      <div class="carr"><svg class="ico" width="30" height="30" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></div>
+      <div class="cb">
+        <svg class="ico" width="40" height="40" viewBox="0 0 24 24"><path d="M3 20.5h18"/><path d="M6 20.5v-6"/><path d="M11 20.5V9"/><path d="M16 20.5v-9.5"/><path d="M5 9.5l5-4.5 5 3 5-4"/></svg>
+        <div class="t">积累使用<br>和留存数据</div>
+      </div>
+      <div class="carr"><svg class="ico" width="30" height="30" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></div>
+      <div class="cb gate">
+        <svg class="ico" width="40" height="40" viewBox="0 0 24 24"><path d="M3 10v4h3.5L13 18V6L6.5 10z"/><path d="M16.5 9.2a3.6 3.6 0 0 1 0 5.6"/><path d="M19 6.8a7 7 0 0 1 0 10.4"/></svg>
+        <div class="t">市场再评估<br>推广节奏</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="dvbtn"><svg class="ico" width="24" height="24" viewBox="0 0 24 24" style="stroke-width:2.8"><path d="M9 5l7 7-7 7"/></svg></div>
+
+  <!-- 右：三条路 -->
+  <div class="ph" style="left:760px">三条路把真人拉进来</div>
+
+  <div class="card lane" id="L1">
+    <div class="lh">
+      <div class="lrow"><span class="nb">1</span><span class="src">站外</span></div>
+      <div class="lname"><div class="li"><svg class="ico" width="28" height="28" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.6 2.6 3.9 5.6 3.9 9s-1.3 6.4-3.9 9c-2.6-2.6-3.9-5.6-3.9-9S9.4 5.6 12 3z"/></svg></div><div class="ln">广场 Web 端</div></div>
+      <div class="lv">SEO 自然流量带新用户进来</div>
+    </div>
+    <div class="lb">
+      <div class="flow">
+        <div class="fn"><div class="fi"><svg class="ico" width="30" height="30" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8"/></svg></div><div class="fl">站外搜索</div></div>
+        <div class="fa"><svg class="ico" width="26" height="26" viewBox="0 0 24 24" style="stroke-width:2.4"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></div>
+        <div class="fn"><div class="fi"><svg class="ico" width="30" height="30" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 8.5h18"/><path d="M7 12.5h10"/><path d="M7 16h6"/></svg></div><div class="fl">免登录看广场</div></div>
+        <div class="fa"><svg class="ico" width="26" height="26" viewBox="0 0 24 24" style="stroke-width:2.4"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></div>
+        <div class="fn end"><div class="fi"><svg class="ico" width="30" height="30" viewBox="0 0 24 24"><circle cx="9.5" cy="8" r="3.8"/><path d="M3 20c0-3.6 2.9-6.4 6.5-6.4s6.5 2.8 6.5 6.4"/><path d="M19 8.5v6"/><path d="M16 11.5h6"/></svg></div><div class="fl">注册 MEXC</div></div>
+      </div>
+      <div class="stt"><i class="b"></i>设计稿已出 · 评审后排期</div>
+    </div>
+  </div>
+
+  <div class="card lane" id="L2">
+    <div class="lh">
+      <div class="lrow"><span class="nb">2</span><span class="src">业务方</span></div>
+      <div class="lname"><div class="li"><svg class="ico" width="28" height="28" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="4.5" cy="5" r="2.2"/><circle cx="19.5" cy="5" r="2.2"/><circle cx="12" cy="20.5" r="2.2"/><path d="M6.2 6.6l3.6 3.4"/><path d="M17.8 6.6L14.2 10"/><path d="M12 15v3.3"/></svg></div><div class="ln">横向拉通</div></div>
+      <div class="lv">带着真实交易的用户进广场</div>
+    </div>
+    <div class="lb">
+      <div class="rows">
+        <div class="rw">
+          <div class="bz"><svg class="ico" width="26" height="26" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></svg>预测市场</div>
+          <div class="rd"><div class="rt">订单分享到广场</div><div class="stt"><i class="g"></i>PRD 和原型已出</div></div>
+        </div>
+        <div class="rw">
+          <div class="bz"><svg class="ico" width="26" height="26" viewBox="0 0 24 24"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>VVIP</div>
+          <div class="rd"><div class="rt">身份标识、发帖任务</div><div class="stt"><i class="b"></i>对接中</div></div>
+        </div>
+        <div class="rw">
+          <div class="bz"><svg class="ico" width="26" height="26" viewBox="0 0 24 24"><rect x="8" y="8" width="12.5" height="12.5" rx="2.2"/><path d="M16 8V5.2A1.7 1.7 0 0 0 14.3 3.5H5.2A1.7 1.7 0 0 0 3.5 5.2v9.1A1.7 1.7 0 0 0 5.2 16H8"/></svg>合约跟单</div>
+          <div class="rd"><div class="rt">带单员真人帖进广场</div><div class="stt"><i class="g"></i>已评审 · 排期中</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card lane" id="L3">
+    <div class="lh">
+      <div class="lrow"><span class="nb">3</span><span class="src">站内</span></div>
+      <div class="lname"><div class="li"><svg class="ico" width="28" height="28" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10.8 18.3h2.4"/></svg></div><div class="ln">首页新功能引导</div></div>
+      <div class="lv">把首页的流量转进广场</div>
+    </div>
+    <div class="lb">
+      <div class="flow">
+        <div class="fn"><div class="fi"><svg class="ico" width="30" height="30" viewBox="0 0 24 24"><path d="M3.5 11L12 4l8.5 7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5h4v5"/></svg></div><div class="fl">App 首页</div></div>
+        <div class="fa"><svg class="ico" width="26" height="26" viewBox="0 0 24 24" style="stroke-width:2.4"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></div>
+        <div class="fn"><div class="fi"><svg class="ico" width="30" height="30" viewBox="0 0 24 24"><path d="M4 5h16v10.5H10l-5 4v-4H4z"/><path d="M12 7.6l.9 1.9 1.9.9-1.9.9-.9 1.9-.9-1.9-1.9-.9 1.9-.9z"/></svg></div><div class="fl">新功能引导</div></div>
+        <div class="fa"><svg class="ico" width="26" height="26" viewBox="0 0 24 24" style="stroke-width:2.4"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></div>
+        <div class="fn end"><div class="fi"><svg class="ico" width="30" height="30" viewBox="0 0 24 24"><path d="M4 20h4.2L19.4 8.8a2.1 2.1 0 0 0 0-3l-1.2-1.2a2.1 2.1 0 0 0-3 0L4 15.8z"/><path d="M13.5 6.5l4 4"/></svg></div><div class="fl">进广场发帖</div></div>
+      </div>
+      <div class="stt"><i class="y"></i>规划中</div>
+    </div>
+  </div>
+
+  <!-- 目标 -->
+  <div id="T">
+    <div class="ttag">目标</div>
+    <div class="tico"><svg class="ico" width="66" height="66" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.6"/><path d="M2.5 20.2c0-3.7 2.9-6.6 6.5-6.6s6.5 2.9 6.5 6.6"/><circle cx="17.2" cy="9" r="2.9"/><path d="M16 13.8c3.2.3 5.6 3 5.6 6.3"/></svg></div>
+    <div class="tt">真人用户</div>
+    <div class="tg">用起来</div>
+    <div class="tchips"><span>发帖</span><span>评论</span></div>
+  </div>
+
+  <svg id="ov" viewBox="0 0 1920 1080"></svg>
+</div>
+
+<script>
+(function(){
+  const ov=document.getElementById('ov');
+  const NS='http://www.w3.org/2000/svg';
+  const R=id=>document.getElementById(id).getBoundingClientRect();
+  const L=[R('L1'),R('L2'),R('L3')], T=R('T');
+  const x0=L[0].right+2, bx=x0+40, r=16, tx=T.left-6;
+  const y=L.map(b=>b.top+b.height/2), yc=T.top+T.height/2;
+  const defs=document.createElementNS(NS,'defs');
+  defs.innerHTML='<marker id="ah" viewBox="0 0 10 10" refX="6.5" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#F0B90B"/></marker>'+
+    '<filter id="gl" filterUnits="userSpaceOnUse" x="0" y="0" width="1920" height="1080"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
+  ov.appendChild(defs);
+  function path(d,w,marker){const p=document.createElementNS(NS,'path');p.setAttribute('d',d);p.setAttribute('fill','none');
+    p.setAttribute('stroke','#F0B90B');p.setAttribute('stroke-width',w);p.setAttribute('stroke-linecap','round');p.setAttribute('stroke-linejoin','round');
+    p.setAttribute('filter','url(#gl)');if(marker)p.setAttribute('marker-end','url(#ah)');ov.appendChild(p);}
+  path(`M${x0},${y[0]} H${bx-r} Q${bx},${y[0]} ${bx},${y[0]+r} V${y[2]-r} Q${bx},${y[2]} ${bx-r},${y[2]} H${x0}`,4);
+  path(`M${x0},${y[1]} H${bx}`,4);
+  path(`M${bx},${yc} H${tx-16}`,6,true);
+  const c=document.createElementNS(NS,'circle');c.setAttribute('cx',bx);c.setAttribute('cy',yc);c.setAttribute('r',7);c.setAttribute('fill','#F0B90B');ov.appendChild(c);
+})();
+</script>
+</body>
+</html>

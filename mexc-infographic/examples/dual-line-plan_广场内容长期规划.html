@@ -1,0 +1,112 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>广场内容长期规划 v12</title><style>@font-face{font-family:"SQ Sans";src:local("PingFang SC"),url("file:///home/claude/sq/fonts/NotoSansSC.ttf");font-weight:100 900}
+@font-face{font-family:"SQ Num";src:local("DIN Alternate Bold"),url("file:///home/claude/sq/fonts/Barlow-Bold.ttf");font-weight:700}
+:root{--bg:#0B0E11;--card:#14171C;--card2:#191D23;--line:#2A2F38;--line2:#3A404A;--t1:#EAECEF;--t2:#AEB5C0;--t3:#7D8592;--gold:#2B6AFF;--gold2:#5B8FFF;--blue:#2B6AFF;--bluet:rgba(43,106,255,.13);--red:#B84A57;--redl:#E07582;--redt:rgba(184,74,87,.16)}
+*{margin:0;padding:0;box-sizing:border-box} html,body{width:1920px;height:1080px;background:var(--bg)}
+body{font-family:"SQ Sans","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;color:var(--t1);-webkit-font-smoothing:antialiased}
+.slide{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--bg)}
+.num{font-family:"SQ Num","DIN Alternate","Barlow",sans-serif;font-weight:700}
+svg{display:block} .ico{fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
+.tag{position:absolute;left:80px;top:40px;padding:5px 16px;border-radius:999px;border:1px solid var(--line2);color:var(--t2);font-size:19px;font-weight:700}
+h1{position:absolute;left:80px;top:82px;font-size:54px;font-weight:900;letter-spacing:1px;white-space:nowrap}
+h1 em,h1 .r{font-style:normal;color:#fff;padding:0 14px;border-radius:12px;margin:0 4px} h1 em{background:var(--blue)} h1 .r{background:var(--red)}
+.note{position:absolute;right:80px;top:100px;padding:5px 16px;border-radius:999px;border:1px solid var(--line2);font-size:20px;font-weight:800;color:var(--t2)}
+
+.card{position:absolute;border-radius:22px;background:var(--card);border:1px solid var(--line)}
+#M{left:80px;top:176px;width:1760px;height:620px;padding:16px 24px;display:flex;flex-direction:column;gap:8px}
+.hdr{display:grid;grid-template-columns:200px 1fr 36px 1fr 36px 1fr;gap:12px;align-items:center;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.hdr .c{display:flex;justify-content:center}
+.tp2{padding:4px 18px;border-radius:999px;font-size:21px;font-weight:900;border:1px solid var(--line2);color:var(--t2);white-space:nowrap}
+.tp2.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.hdr .lg2{font-size:20px;font-weight:900;color:var(--t2)}
+.hdr .c{gap:14px;align-items:center} .lg3{display:inline-flex;align-items:center;gap:6px;font-size:20px;font-weight:900;color:var(--t2)}
+.longrun{position:absolute;right:40px;top:190px;display:inline-flex;align-items:center;gap:6px;font-size:20px;font-weight:900;color:var(--t2)}
+.rw2{flex:1;display:grid;grid-template-columns:200px 1fr 36px 1fr 36px 1fr;gap:12px;align-items:stretch;padding:10px 0}
+.rw2+.rw2{border-top:1px solid var(--line)}
+.lane2{display:flex;flex-direction:column;justify-content:center;gap:8px;padding-left:4px}
+.li2{width:52px;height:52px;border-radius:15px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:var(--t1)}
+.lane2 b{font-size:30px;font-weight:900;letter-spacing:1px} .lane2 span:last-child{font-size:20px;font-weight:800;color:var(--t2)}
+.ar2{display:flex;align-items:center;justify-content:center;color:var(--t3)}
+.ph{border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;border:1px solid transparent;min-width:0}
+.ph.now{border:2px solid var(--blue);background:linear-gradient(180deg,rgba(43,106,255,.12),rgba(20,23,28,0))}
+.pt{display:flex;align-items:center;gap:12px}
+.pt b{font-size:28px;font-weight:900;white-space:nowrap}
+.wn{width:34px;height:34px;border-radius:50%;border:2px solid var(--t2);display:flex;align-items:center;justify-content:center;font-size:19px;flex:none;color:var(--t1)}
+.ph.now .wn{background:var(--blue);border-color:var(--blue);color:#fff}
+.ps2{font-size:20px;font-weight:800;color:var(--t1);white-space:nowrap}
+.pv{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}
+/* pictures (neutral, MEXC blue buttons) */
+.mc{width:100%;border-radius:14px;background:var(--card2);border:1px solid var(--line);padding:12px 16px;display:flex;flex-direction:column;gap:10px}
+.mh{display:flex;align-items:center;gap:9px}
+.av{width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;background:#3A404A;color:var(--t1);flex:none}
+.av.xs{width:22px;height:22px;font-size:11px}
+.mn{font-size:19px;font-weight:900}
+.mt{margin-left:auto;padding:1px 9px;border-radius:999px;border:1px solid var(--line2);font-size:15px;font-weight:800;color:var(--t2)}
+.lb2{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:7px;background:#232831;font-size:15px;font-weight:900;color:var(--t2);white-space:nowrap}
+.lb2.r{margin-left:auto;padding:2px 9px 2px 3px;border-radius:999px}
+.tcd{display:flex;align-items:center;gap:7px;border-radius:10px;background:#111418;border:1px solid var(--line);padding:8px 10px}
+.sym{font-size:18px} .pnl{margin-left:auto;font-size:26px;line-height:1;color:var(--t1)}
+.btn{padding:5px 11px;border-radius:8px;background:var(--blue);color:#fff;font-size:15px;font-weight:900;white-space:nowrap}
+.btn.sm{margin-left:auto;padding:3px 11px}
+.stats{display:flex;align-items:flex-end;gap:14px} .sb{display:flex;flex-direction:column;gap:2px} .sb b{font-size:26px;line-height:1} .sb i{font-style:normal;font-size:14px;font-weight:700;color:var(--t3)}
+.spark{margin-left:auto;width:100px}
+.cr{display:flex;align-items:center;justify-content:space-between}
+.avs{display:flex;align-items:center} .avs .av{margin-left:-8px;border:3px solid var(--card2)} .avs .av:first-child{margin-left:0}
+.more{margin-left:8px;font-size:21px}
+.ot{font-size:18px;font-weight:900} .cnt{margin-left:auto;font-size:21px}
+.pool{display:flex;gap:14px} .pa{display:inline-flex;flex-direction:column;align-items:center;gap:3px}
+.pa i{font-style:normal;font-size:12px;font-weight:900;padding:0 6px;border-radius:999px;background:#232831;color:var(--t2)}
+.lbd{display:flex;flex-direction:column;gap:4px} .lr{display:flex;align-items:center;gap:9px;font-size:17px;font-weight:800} .lr b{width:16px;text-align:center;color:var(--t2)} .lnm{width:54px}
+/* base band, same grammar as the data image's band */
+#B{left:80px;top:812px;width:1760px;height:204px;padding:16px 24px;display:flex;flex-direction:column;gap:12px}
+.bh{display:flex;align-items:center;gap:14px} .bh b{font-size:28px;font-weight:900;letter-spacing:1px} .bh span{font-size:20px;font-weight:900;color:var(--t2)}
+.bb{flex:1;display:grid;grid-template-columns:1fr 340px;gap:16px}
+.mets{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;align-content:center}
+.met{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;border:1px solid var(--line2);font-size:20px;font-weight:900;white-space:nowrap}
+.met svg{color:var(--t2)}
+.qp{border-radius:16px;border:2px solid var(--blue);background:linear-gradient(180deg,rgba(43,106,255,.14),rgba(20,23,28,.9));display:flex;align-items:center;gap:14px;padding:0 18px}
+.qi{width:50px;height:50px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;flex:none}
+.qt b{display:block;font-size:24px;font-weight:900} .qt span{display:block;font-size:20px;font-weight:900;color:var(--t1)}
+
+#M{height:700px!important}
+.rw2{padding:4px 0!important}
+.rw2.q{flex:none;height:140px;padding-top:10px!important}
+.ph{padding:10px 14px!important;gap:5px!important}
+.mc{padding:10px 14px!important;gap:8px!important}
+.qs{grid-column:2 / span 5;position:relative;border-radius:18px;border:2px solid var(--blue);background:linear-gradient(180deg,rgba(43,106,255,.12),rgba(20,23,28,.2));padding:14px 26px 0;display:flex;flex-direction:column}
+.qline{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.qn{display:flex;align-items:center;gap:12px;min-width:0}
+.qc{width:52px;height:52px;border-radius:50%;border:2px solid #5B8FFF;color:#8DB4FF;display:flex;align-items:center;justify-content:center;flex:none}
+.qn.hot .qc{background:var(--blue);border-color:var(--blue);color:#fff}
+.qn b{display:block;font-size:23px;font-weight:900;white-space:nowrap}
+.qn div span{display:block;margin-top:2px;font-size:19px;font-weight:800;color:var(--t1);white-space:nowrap}
+.qn .qc{display:flex!important;align-items:center;justify-content:center;margin:0!important}
+.qa{color:#5B8FFF;flex:none}
+.qret{width:100%;height:30px;margin-top:6px}
+.li2.qb{background:var(--blue);border-color:var(--blue);color:#fff}
+#B{top:890px!important;height:126px!important;padding:12px 24px!important;gap:10px!important}
+.mets.one{grid-template-columns:repeat(9,1fr)!important;gap:10px!important}
+.mets.one .met{padding:8px 10px;font-size:19px;justify-content:center}
+</style></head><body><div class="slide">
+  <div class="tag">MEXC 广场 · 产品 × 运营</div>
+  <h1>广场的长期规划：产品把<em>交易变成内容</em>，运营把<em>内容做成生态</em></h1>
+  <div class="note">界面小图为示意</div>
+  <div class="card" id="M">
+    <div class="hdr"><span class="lg2">两条线</span><span class="c"><span class="tp2 on">2026 Q4 · 现在</span></span><span></span><span class="c"><span class="tp2">2027 Q1</span></span><span></span><span class="c"><span class="tp2">2027 Q2 起</span><span class="lg3"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg>长期</span></span></div>
+    <div class="rw2"><div class="lane2"><span class="li2"><svg class="ico" width="28" height="28" viewBox="0 0 24 24" style="stroke-width:2.1"><path d="M12 3.5l9 4.8-9 4.8-9-4.8z"/><path d="M3 12.6l9 4.8 9-4.8"/><path d="M3 16.6l9 4.8 9-4.8" opacity=".55"/></svg></span><b>产品线</b><span>交易变成内容</span></div><div class="ph now"><div class="pt"><span class="wn num">1</span><b>交易行为内容化</b></div><div class="ps2">下单发、平仓发、高光时刻发、系统提示发</div><div class="pv"><div class="mc"><div class="mh"><span class="av">K</span><span class="mn">Kai</span><span class="mt">持仓中</span></div>
+ <div class="tcd"><span class="sym num">BTCUSDT</span><span class="lb2">多</span><span class="lb2 num">10x</span><b class="pnl num">+12.4%</b><span class="btn">快捷开仓</span></div></div></div></div><span class="ar2"><svg class="ico" width="28" height="28" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></span><div class="ph"><div class="pt"><span class="wn num">2</span><b>交易者资产化</b></div><div class="ps2">主页晒战绩、帖子带持仓、关注收开仓提醒</div><div class="pv"><div class="mc"><div class="mh"><span class="av">L</span><span class="mn">Lena</span><span class="lb2">带单员</span><span class="btn sm">关注</span></div>
+ <div class="stats"><div class="sb"><b class="num">+23.6%</b><i>30 日收益率</i></div><div class="sb"><b class="num">61%</b><i>胜率</i></div>
+ <svg class="spark" width="120" height="44" viewBox="0 0 150 56"><path d="M2 46 L22 40 L40 43 L58 30 L76 33 L94 20 L112 24 L130 10 L148 6" fill="none" stroke="#C9CED6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div></div></div><span class="ar2"><svg class="ico" width="28" height="28" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></span><div class="ph"><div class="pt"><span class="wn num">3</span><b>交易所闭环化</b></div><div class="ps2">带单员建圈、比赛跑在圈里、创作者分润</div><div class="pv"><div class="mc"><div class="mh"><span class="mn">BTC 波段圈</span><span class="lb2 r"><span class="av xs">L</span>圈主</span></div>
+ <div class="cr"><div class="avs"><span class="av">A</span><span class="av">M</span><span class="av">J</span><span class="av">R</span><span class="more num">+126</span></div><span class="btn">入圈</span></div></div></div></div></div>
+    <div class="rw2"><div class="lane2"><span class="li2"><svg class="ico" width="28" height="28" viewBox="0 0 24 24" style="stroke-width:2.1"><path d="M12 21v-8"/><path d="M12 13c0-4.4-3.2-7-7.5-7 0 4.4 3.2 7 7.5 7z"/><path d="M12 11c0-3.8 2.8-6.2 7-6.2 0 3.8-2.8 6.2-7 6.2z"/></svg></span><b>运营线</b><span>内容做成生态</span></div><div class="ph now"><div class="pt"><span class="wn num">1</span><b>运营策略验证</b></div><div class="ps2">先请品牌、预测市场、SEO 现成的 KOL 发帖</div><div class="pv"><div class="mc"><div class="mh"><span class="av">M</span><span class="mn">广场官方</span><span class="lb2">官方</span><span class="mt">置顶</span></div>
+ <div class="ot">非农落地 · 15 分钟速报</div></div></div></div><span class="ar2"><svg class="ico" width="28" height="28" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></span><div class="ph"><div class="pt"><span class="wn num">2</span><b>扩大创作者池</b></div><div class="ps2">VVIP 发帖、上新征文、合约大赛写周记</div><div class="pv"><div class="mc"><div class="mh"><span class="mn">创作者池</span><span class="cnt num">+86</span></div>
+ <div class="pool"><span class="pa"><span class="av">A</span><i>认证</i></span><span class="pa"><span class="av">J</span><i>认证</i></span><span class="pa"><span class="av">N</span><i>新秀</i></span><span class="pa"><span class="av">T</span><i>新秀</i></span></div></div></div></div><span class="ar2"><svg class="ico" width="28" height="28" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></span><div class="ph"><div class="pt"><span class="wn num">3</span><b>生态成熟</b></div><div class="ps2">创作者打分、优质内容变现、多语言创作者</div><div class="pv"><div class="mc"><div class="mh"><span class="mn">本周优质创作者</span></div>
+ <div class="lbd"><div class="lr"><b class="num">1</b><span class="av xs">M</span><span class="lnm">Mia</span><span class="lb2">EN</span></div>
+ <div class="lr"><b class="num">2</b><span class="av xs">周</span><span class="lnm">老周</span><span class="lb2">中文</span></div></div></div></div></div></div>
+    <div class="rw2 q"><div class="lane2"><span class="li2 qb"><svg class="ico" width="28" height="28" viewBox="0 0 24 24" style="stroke-width:2.4"><path d="M20 12a8 8 0 0 1-13.7 5.6"/><path d="M4 12a8 8 0 0 1 13.7-5.6"/><path d="M17.7 2.8v3.8h-3.8"/><path d="M6.3 21.2v-3.8h3.8"/></svg></span><b>内容品质</b><span>一直在优化</span></div>
+  <div class="qs"><div class="qline"><div class="qn hot"><span class="qc"><svg class="ico" width="26" height="26" viewBox="0 0 24 24" style="stroke-width:2.1"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4.5V8"/><circle cx="12" cy="3.8" r="1.1"/><circle cx="9.3" cy="13.3" r="1.2"/><circle cx="14.7" cy="13.3" r="1.2"/></svg></span><div><b>AI 内容</b><span>修管线，批量更新人设</span></div></div><span class="qa"><svg class="ico" width="26" height="26" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></span><div class="qn"><span class="qc"><svg class="ico" width="26" height="26" viewBox="0 0 24 24" style="stroke-width:2.1"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.2-7.5 9.5-4.3-1.3-7.5-4.9-7.5-9.5V6z"/><path d="M8.8 12l2.2 2.2 4.2-4.4"/></svg></span><div><b>审核与词库</b><span>AI 分级 + 敏感词库</span></div></div><span class="qa"><svg class="ico" width="26" height="26" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></span><div class="qn"><span class="qc"><svg class="ico" width="26" height="26" viewBox="0 0 24 24" style="stroke-width:2.1"><path d="M12 3.4l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8L3.5 9.6l5.9-.9z"/></svg></span><div><b>优质推荐</b><span>真人优质帖优先曝光</span></div></div><span class="qa"><svg class="ico" width="26" height="26" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M5 12h13"/><path d="M13 6l6 6-6 6"/></svg></span><div class="qn"><span class="qc"><svg class="ico" width="26" height="26" viewBox="0 0 24 24" style="stroke-width:2.1"><path d="M4 20V10M10 20V4M16 20v-7"/><path d="M2.5 20.5h19"/></svg></span><div><b>数据复盘</b><span>看板补发帖、讨论、停留</span></div></div></div><svg class="qret" viewBox="0 0 1000 30" preserveAspectRatio="none"><path d="M968 2 C968 24 950 26 930 26 H70 C50 26 32 24 32 8" fill="none" stroke="#5B8FFF" stroke-width="3" stroke-dasharray="8 7" stroke-linecap="round" vector-effect="non-scaling-stroke"/><path d="M24 14 L32 4 L40 14" fill="none" stroke="#5B8FFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg></div></div>
+  </div>
+  <div class="card" id="B">
+    <div class="bh"><b>底层基建</b><span>两条线共用</span></div>
+    <div class="mets one"><span class="met"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" style="stroke-width:2.2"><circle cx="12" cy="12" r="8.5"/><path d="M9.5 9.2h3.8a1.9 1.9 0 0 1 0 3.8H9.5m0 0h4.3a1.9 1.9 0 0 1 0 3.8H9.5zM11 7.5v1.7M11 16.8v1.7"/></svg>币种卡</span><span class="met"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" style="stroke-width:2.2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.6 2.6 3.9 5.6 3.9 9s-1.3 6.4-3.9 9c-2.6-2.6-3.9-5.6-3.9-9S9.4 5.6 12 3z"/></svg>Web 端</span><span class="met"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" style="stroke-width:2.2"><path d="M12 3c1.2 3.4 4.8 5.2 4.8 9.6a4.8 4.8 0 0 1-9.6 0c0-2.2 1.1-3.6 2.2-4.6.3 1.7 1.2 2.6 2.1 2.9C11 8.6 11.2 5.7 12 3z"/></svg>热点专区</span><span class="met"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" style="stroke-width:2.2"><path d="M9.5 3.5L7.5 20.5M16.5 3.5l-2 17M4.5 9h16M3.5 15h16"/></svg>话题</span><span class="met"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" style="stroke-width:2.2"><path d="M12 2.8l2.3 1.7 2.8-.2.9 2.7 2.3 1.6-.9 2.7.9 2.7-2.3 1.6-.9 2.7-2.8-.2L12 21.2l-2.3-1.7-2.8.2-.9-2.7-2.3-1.6.9-2.7-.9-2.7 2.3-1.6.9-2.7 2.8.2z"/><path d="M8.8 12.2l2.2 2.2 4.2-4.4"/></svg>身份认证</span><span class="met"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" style="stroke-width:2.2"><rect x="3.5" y="4.5" width="17" height="15" rx="2.4"/><circle cx="9" cy="9.5" r="1.8"/><path d="M20.5 15.5l-5-5-9 9"/></svg>自定义头像</span><span class="met"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" style="stroke-width:2.2"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><circle cx="16.5" cy="5.5" r="3" fill="currentColor" stroke="none"/><path d="M10.5 18.3h3"/></svg>推送</span><span class="met"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" style="stroke-width:2.2"><rect x="4" y="5" width="16" height="4.5" rx="1.6"/><rect x="4" y="14.5" width="10" height="4.5" rx="1.6"/><path d="M17 15.5l1.6 1.6 3-3.2"/></svg>投票</span><span class="met"><svg class="ico" width="20" height="20" viewBox="0 0 24 24" style="stroke-width:2.2"><circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="M8.3 10.8l7.4-4M8.3 13.2l7.4 4"/></svg>站外分享</span></div>
+  </div>
+</div></body></html>
