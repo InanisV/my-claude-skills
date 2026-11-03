@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>MEXC 交易社区的下一步</title>
+<style>
+:root{--bg:#0B0E11;--card:#14171C;--line:#2A2F38;--line2:#3A404A;--t1:#EAECEF;--t2:#AEB5C0;--t3:#7D8592;--blue:#2B6AFF;--blue2:#7FA6FF}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1920px;height:1080px;background:var(--bg)}
+body{font-family:"PingFang SC","Noto Sans CJK SC",sans-serif;color:var(--t1);-webkit-font-smoothing:antialiased}
+.slide{position:relative;width:1920px;height:1080px;overflow:hidden;background:radial-gradient(900px 520px at 4% -10%,rgba(43,106,255,.14),transparent 62%),radial-gradient(800px 560px at 102% 110%,rgba(43,106,255,.08),transparent 62%),var(--bg)}
+.num{font-family:"DIN Alternate","Barlow","Noto Sans CJK SC",sans-serif;font-weight:800}
+.ico{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.tag{position:absolute;left:80px;top:42px;padding:5px 16px;border-radius:999px;border:1px solid var(--line2);color:var(--t2);font-size:20px;font-weight:700}
+h1{position:absolute;left:80px;top:84px;font-size:56px;font-weight:900;letter-spacing:1px;white-space:nowrap;display:flex;align-items:center}
+h1 em{font-style:normal;color:#fff;background:var(--blue);padding:0 16px;border-radius:12px;margin:0 6px}
+h1 .s{font-size:32px;font-weight:800;color:var(--t2);margin-left:26px}
+.card{position:absolute;border-radius:22px;background:var(--card);border:1px solid var(--line)}
+.ch{font-size:29px;font-weight:900;display:flex;align-items:center;gap:14px}
+.ch::before{content:"";width:6px;height:28px;border-radius:3px;background:var(--blue)}
+/* 角色变化 */
+#R{left:80px;top:196px;width:1030px;height:390px;padding:28px 32px}
+.shift{position:absolute;left:32px;right:32px;top:84px;display:grid;grid-template-columns:1fr 90px 1fr;align-items:stretch}
+.st{border-radius:18px;padding:18px 24px;border:1px solid var(--line2);background:rgba(234,236,239,.03)}
+.st.now{border:2px solid var(--blue);background:rgba(43,106,255,.12)}
+.st .k{font-size:20px;font-weight:800;color:var(--t2)}
+.st .t{margin-top:4px;font-size:36px;font-weight:900}
+.st .d{margin-top:8px;font-size:22px;font-weight:700;color:var(--t2);line-height:1.45}
+.st.now .d{color:var(--t1)}
+.chips{margin-top:12px;display:flex;gap:10px}
+.chip{padding:5px 16px;border-radius:999px;background:var(--blue);color:#fff;font-size:20px;font-weight:900}
+.ar{display:flex;align-items:center;justify-content:center;color:var(--t3)}
+.ind{position:absolute;left:32px;right:32px;bottom:24px;font-size:20px;line-height:1.5;font-weight:700;color:var(--t2)}
+.ind b{color:#fff}
+/* 广场 */
+#S{left:1140px;top:196px;width:700px;height:390px;padding:28px 32px}
+.sq{margin-top:18px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.m{border-radius:16px;border:1px solid var(--line2);padding:18px 16px;text-align:center}
+.m b{display:block;font-size:44px;line-height:1.05}
+.m span{display:block;margin-top:8px;font-size:19px;font-weight:800;color:var(--t2)}
+.sqn{margin-top:10px;font-size:18px;font-weight:700;color:var(--t3)}
+.pg{margin-top:20px;padding:14px 18px;border-radius:14px;background:rgba(234,236,239,.04);border:1px solid var(--line2);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.pg .l{font-size:20px;font-weight:900}
+.pg .it{padding:4px 14px;border-radius:999px;border:1px solid var(--line2);font-size:19px;font-weight:800}
+.pg .x{margin-left:auto;font-size:18px;font-weight:800;color:var(--t2)}
+/* 目标 */
+#G{position:absolute;left:80px;top:610px;width:1760px;height:84px;border-radius:18px;background:linear-gradient(90deg,rgba(43,106,255,.28),rgba(43,106,255,.08));border:1px solid rgba(43,106,255,.6);display:flex;align-items:center;padding:0 32px;gap:22px}
+#G .gl{padding:5px 16px;border-radius:999px;background:var(--blue);font-size:20px;font-weight:900}
+#G .gt{font-size:30px;font-weight:900}
+#G .gt i{font-style:normal;color:var(--blue2)}
+/* 问题 */
+.qh{position:absolute;left:80px;top:722px;font-size:29px;font-weight:900;display:flex;align-items:center;gap:14px}
+.qh::before{content:"";width:6px;height:28px;border-radius:3px;background:var(--blue)}
+.qs{position:absolute;left:80px;top:772px;width:1760px;height:244px;display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.q{border-radius:20px;background:var(--card);border:1px solid var(--line);padding:28px 30px;position:relative}
+.q .n{font-size:22px;font-weight:900;color:var(--blue2)}
+.q .tx{margin-top:12px;font-size:32px;font-weight:900;line-height:1.35}
+.q .qi{position:absolute;right:26px;top:24px;width:56px;height:56px;border-radius:16px;border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;color:var(--t2)}
+</style></head><body><div class="slide">
+<div class="tag">产品创新工作坊 · 议题</div>
+<h1>从交易工具，到<em>交易者的聚集地</em><span class="s">MEXC 交易社区的下一步</span></h1>
+
+<div class="card" id="R">
+  <div class="ch">交易所的角色，正在变化</div>
+  <div class="shift">
+    <div class="st"><div class="k">过去</div><div class="t">交易工具</div><div class="d">用户来了，下完单就走</div></div>
+    <div class="ar"><svg class="ico" width="54" height="54" viewBox="0 0 24 24" style="stroke-width:2.4"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></svg></div>
+    <div class="st now"><div class="k">正在变成</div><div class="t">交易者的聚集地</div><div class="d">看别人在做什么，聊自己怎么看</div><div class="chips"><span class="chip">来看</span><span class="chip">来聊</span><span class="chip">来交易</span></div></div>
+  </div>
+  <div class="ind">竞争正从"交易什么币"转向"跟着谁交易"，Robinhood、OKX 今年都上线了真实交易者社区。<b>谁先成为交易者每天都想来的地方，谁就握住了留存和转化。</b></div>
+</div>
+
+<div class="card" id="S">
+  <div class="ch">广场：交易社区的重要组成部分</div>
+  <div class="sq">
+    <div class="m"><b class="num">10/26</b><span>全量上线</span></div>
+    <div class="m"><b class="num">+184%</b><span>页面曝光人数</span></div>
+    <div class="m"><b class="num">+55%</b><span>真人发帖人数</span></div>
+  </div>
+  <div class="sqn">全量后对比全量前日均</div>
+  <div class="pg"><span class="l">已在推进</span><span class="it">交易分享</span><span class="it">交易者身份</span><span class="x">现场不展开</span></div>
+</div>
+
+<div id="G"><span class="gl">目标</span><span class="gt">让 MEXC 成为交易者每天都想来的地方：<i>来看、来聊、来交易</i></span></div>
+
+<div class="qh">带到现场讨论</div>
+<div class="qs">
+  <div class="q"><div class="qi"><svg class="ico" width="30" height="30" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></div><div class="n">01</div><div class="tx">交易者打开社区，<br>最想看到谁、聊什么？</div></div>
+  <div class="q"><div class="qi"><svg class="ico" width="30" height="30" viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="6" r="2.6"/><circle cx="18" cy="18" r="2.6"/><path d="M8.4 10.8l7.2-3.6M8.4 13.2l7.2 3.6"/></svg></div><div class="n">02</div><div class="tx">一笔交易、一个观点，<br>怎么在 MEXC 里传开？</div></div>
+  <div class="q"><div class="qi"><svg class="ico" width="30" height="30" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 20.5c0-4 3.4-7 7.5-7s7.5 3 7.5 7"/></svg></div><div class="n">03</div><div class="tx">什么能让一个交易者，<br>愿意在 MEXC 长期经营自己？</div></div>
+</div>
+</div></body></html>
