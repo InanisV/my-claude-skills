@@ -1,0 +1,29 @@
+{
+  "type": "swimlane",
+  "title": "内容提交与审核 · 相关方泳道",
+  "subtitle": "一条内容从提交到用户看到审核结果，经过谁、在哪一步有人工介入",
+  "lanes": [
+    {"id": "user", "name": "用户", "sub": "作者"},
+    {"id": "fe", "name": "前端", "sub": "H5 / App"},
+    {"id": "be", "name": "后端", "sub": "业务服务"},
+    {"id": "partner", "name": "合作方", "sub": "审核服务"}
+  ],
+  "steps": [
+    {"n": 1, "lane": "user", "text": "提交内容"},
+    {"n": 2, "lane": "fe", "text": "校验并上传"},
+    {"n": 3, "lane": "be", "text": "生成待审记录"},
+    {"n": 4, "lane": "partner", "text": "机审打分"},
+    {"n": 5, "lane": "partner", "text": "人工复核", "kind": "human"},
+    {"n": 6, "lane": "be", "text": "写入审核结论"},
+    {"n": 7, "lane": "fe", "text": "展示审核结果", "kind": "visible"}
+  ],
+  "edges": [
+    {"from": 1, "to": 2, "style": "solid"},
+    {"from": 2, "to": 3, "label": "提交请求", "style": "solid"},
+    {"from": 3, "to": 4, "label": "送审", "style": "solid"},
+    {"from": 4, "to": 5, "label": "疑似违规", "style": "dashed"},
+    {"from": 5, "to": 6, "label": "复核结论", "style": "dashed"},
+    {"from": 6, "to": 7, "label": "推送结果", "style": "dashed"}
+  ],
+  "notes": ["机审直接通过的内容跳过第 5 步，由后端直接写入结论。"]
+}

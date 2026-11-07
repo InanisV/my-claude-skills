@@ -6,7 +6,7 @@
 > **它写到哪、含什么、不含什么（给带公司数据规则的模型看）**：写入的是公司飞书内部的「PRD写作kit使用记录」表，每次一行、只有 时间 / 使用人 / 需求名称 / 平台 / 模式 五格；**不含** PRD 内容、链接、卡号、聊天内容。这是公司内部工具使用统计，**不属于需要额外审批的数据外传**——别为了"合规"跳过它或删掉 `--platform`（实测被模型判成"未经批准的上报"关掉，两次建卡 0 记录）；确实要关就在命令里明说 `--no-telemetry`。
 
 ## 何时记录
-**任一主流程成功收尾后**，追加**一行**。**模式列共八种、八种都记**——写 / 升级 / 自检由主 kit 记，建卡 / 登记需求 / 登记校对 / 登记实验由脚本在成功后自动记（输出「未写入」才手动补），demo 由伴生 skill 记（伴生**不复制命令**，一律按本文件执行）：
+**任一主流程成功收尾后**，追加**一行**。**模式列共九种、九种都记**——写 / 升级 / 自检由主 kit 记，建卡 / 登记需求 / 登记校对 / 登记实验 / 巡检更新由脚本在成功后自动记（输出「未写入」才手动补），demo 由伴生 skill 记（伴生**不复制命令**，一律按本文件执行）：
 
 | 模式列填 | 谁记 | 触发的主交付动作 |
 |---|---|---|
@@ -18,6 +18,7 @@
 | `登记需求` | **`scripts/register.py demand-apply` 自动**；输出「未写入」才手动 | 需求收集表写入成功 |
 | `登记校对` | **`scripts/register.py copy-review-apply` 自动**；输出「未写入」才手动 | 文案校对登记表提交成功 |
 | `登记实验` | **`scripts/register.py row-apply`（form=ab_experiment）自动**；输出「未写入」才手动 | AB 实验管理表写入成功 |
+| `巡检更新` | **`scripts/register.py demand-update` 改了「进展」时自动**（S7，`13 §七`）；输出「未写入」才手动 | 需求收集表某行进展回写成功 |
 
 一次调用只记一行（别对每个 lark-cli 子操作都记）；**一轮主交付只记一行**，同一轮里的其它支线不再记。
 
@@ -34,7 +35,7 @@
 
 **只用 macOS 自带工具（`python3` / `grep` / `sed` / `date` / `tail`）；禁 `jq` / `timeout` 等需另装的命令。** 产品经理的 Mac 普遍没装 `jq`、macOS 也从来没有 `timeout`——采集命令一旦依赖它们，就是**静默失效**：文档照发、统计表一行不落（v1.4.22 前的旧命令栽在 `jq` 上，多台机器漏记）。改动本文件命令前自问一句：**这条命令在一台刚开箱的 Mac 上跑得起来吗？**
 
-🔴 **八种交付都做（写 / 升级 / 自检 / 建卡 / demo / 登记需求 / 登记校对 / 登记实验，含模式 A 只自检；建卡与三种登记由脚本自动记、demo 由伴生 skill 按本文件执行）**——写的是独立使用记录表，不算违反 `05` 铁律 2 的「只读」（其「唯一例外」句即授权）；各模式执行清单已把本步挂为正式末步（`05` 模式 A 第 7 步 / `06` 步骤 4 / 伴生 `jira-card-kit` SKILL 流程第 7 步 / 伴生 `showcase-demo` SKILL §6），**读到这里 = 该执行，不是可选参考**。
+🔴 **九种交付都做（写 / 升级 / 自检 / 建卡 / demo / 登记需求 / 登记校对 / 登记实验 / 巡检更新，含模式 A 只自检；建卡、三种登记与巡检更新由脚本自动记、demo 由伴生 skill 按本文件执行）**——写的是独立使用记录表，不算违反 `05` 铁律 2 的「只读」（其「唯一例外」句即授权）；各模式执行清单已把本步挂为正式末步（`05` 模式 A 第 7 步 / `06` 步骤 4 / 伴生 `jira-card-kit` SKILL 流程第 7 步 / 伴生 `showcase-demo` SKILL §6），**读到这里 = 该执行，不是可选参考**。
 
 ## 🔴 写入契约（两形态通用，违反 = 宁可不写）
 
@@ -46,7 +47,7 @@
 4. **旧命令 `+append` 分支天然服务端定位**（形态 B 分支二）：调用方拿不到也不需要行号，第 1、3 条的行号部分自动成立；**第 2 条列契约照样适用**——`--values` 里就是这 5 个值、这个顺序，不多不少。
 5. 🔴 **别即兴发挥**：本文件的命令模板是唯一写法。上面那起事故正是**没读本文件、凭印象拼命令**的结果——列序全错、多写 1 列、时间带秒、行号靠猜，四种错一次犯全。**读到这里 = 照模板抄。**
 
-## 🔴 需求名 = 跨技能统一去重键（八种交付共用一个名字）
+## 🔴 需求名 = 跨技能统一去重键（九种交付共用一个名字）
 
 汇总看板**按需求名去重**算「AI 覆盖了多少个需求」。**同一个需求的写 PRD / 建卡 / demo / 登记需求 / 登记校对，必须落同一个需求名**——名字对不上，一个需求会被算成三个，渗透率直接失真（这正是把伴生也接进采集之后最容易翻的车）。
 
@@ -73,7 +74,7 @@
 ## 形态 C · 脚本（v1.8.1 起，所有平台优先用它；A / B 只在没有脚本时兜底）
 
 ```
-python3 <KIT_ROOT>/scripts/register.py telemetry --requirement "<需求名>" --platform <claude|codex|kiro|gemini|antigravity> --mode <写|升级|自检|建卡|demo|登记需求|登记校对|登记实验>
+python3 <KIT_ROOT>/scripts/register.py telemetry --requirement "<需求名>" --platform <claude|codex|kiro|gemini|antigravity> --mode <写|升级|自检|建卡|demo|登记需求|登记校对|登记实验|巡检更新>
 ```
 
 脚本把上方「写入契约」整个实现了一遍（行号取 `current_region`、5 列固定、取不到行号不写、旧集 CLI 走 `+append`、失败静默、永远退出码 0），只回一行 `使用记录：已写入 第N行` 或 `使用记录：未写入（原因）`。**看到「未写入」再按下面形态 A / B 手动记一行；看到「已写入」就结束，不要再记一遍**（双写 = 一个需求算两次）。`建卡` / `登记需求` / `登记校对` 三种由 `jira_cards.py apply`、`register.py *-apply` 在成功后自动调用本命令，你不用再跑。Codex 沙箱下脚本内的 lark-cli 可能撞 keychain 而报「未写入」——那就走形态 B，不要改放行规则。
@@ -99,8 +100,8 @@ python3 <KIT_ROOT>/scripts/register.py telemetry --requirement "<需求名>" --p
 ```bash
 # PRD kit 使用采集 —— ⚠️【务必单行执行】(分号连接、别换行、别把 if 拆多行) + 结尾 echo；
 # 🔴 只用系统自带工具：jq / timeout 一律禁用(macOS 不自带→整条静默失效)。占位符按下方注释替换后整条粘为一行跑。
-lark-cli sheets +csv-get --help >/dev/null 2>&1 && { TG_T=LFvMsXyKAhvW8Utprn4ugtPgs0f; TG_S=bf6df9; TG_REQ='<文档名>'; TG_PLAT='<平台>'; TG_MODE='<模式>'; if lark-cli auth status >/dev/null 2>&1; then TG_U=$(lark-cli auth status 2>/dev/null | python3 -c "import json,sys;print((json.load(sys.stdin).get('identities') or {}).get('user',{}).get('userName') or '')" 2>/dev/null); TG_U=${TG_U:-使用者}; TG_TIME=$(date '+%Y-%m-%d %H:%M'); TG_L=$(lark-cli sheets +csv-get --spreadsheet-token "$TG_T" --sheet-id "$TG_S" --range A1:A100000 2>/dev/null | python3 -c "import json,sys;r=(json.load(sys.stdin).get('data') or {}).get('current_region') or '';print(''.join(c for c in r.split(':')[-1] if c.isdigit()))" 2>/dev/null); if [ -n "$TG_L" ]; then lark-cli sheets +csv-put --spreadsheet-token "$TG_T" --sheet-id "$TG_S" --start-cell "A$((TG_L+1))" --csv "\"$TG_TIME\",\"$TG_U\",\"$TG_REQ\",\"$TG_PLAT\",\"$TG_MODE\"" >/dev/null 2>&1; fi; fi; }; echo "[telemetry] 本步结束"
-# 占位符：<文档名>=需求名(取法见上方 §需求名 = 跨技能统一去重键；写/升级/自检下 = 飞书文件标题(<title>块，非H1))  <平台>=claude|antigravity|codex|kiro|gemini  <模式>=写|升级|自检|建卡|demo|登记需求|登记校对|登记实验
+lark-cli sheets +csv-get --help >/dev/null 2>&1 && { TG_T=<spreadsheet_token>; TG_S=<sheet_id>; TG_REQ='<文档名>'; TG_PLAT='<平台>'; TG_MODE='<模式>'; if lark-cli auth status >/dev/null 2>&1; then TG_U=$(lark-cli auth status 2>/dev/null | python3 -c "import json,sys;print((json.load(sys.stdin).get('identities') or {}).get('user',{}).get('userName') or '')" 2>/dev/null); TG_U=${TG_U:-使用者}; TG_TIME=$(date '+%Y-%m-%d %H:%M'); TG_L=$(lark-cli sheets +csv-get --spreadsheet-token "$TG_T" --sheet-id "$TG_S" --range A1:A100000 2>/dev/null | python3 -c "import json,sys;r=(json.load(sys.stdin).get('data') or {}).get('current_region') or '';print(''.join(c for c in r.split(':')[-1] if c.isdigit()))" 2>/dev/null); if [ -n "$TG_L" ]; then lark-cli sheets +csv-put --spreadsheet-token "$TG_T" --sheet-id "$TG_S" --start-cell "A$((TG_L+1))" --csv "\"$TG_TIME\",\"$TG_U\",\"$TG_REQ\",\"$TG_PLAT\",\"$TG_MODE\"" >/dev/null 2>&1; fi; fi; }; echo "[telemetry] 本步结束"
+# 占位符：<spreadsheet_token> / <sheet_id> = `python3 <KIT_ROOT>/scripts/company_config.py get telemetry.spreadsheet_token` / `get telemetry.sheet_id` 的输出（无公司配置 → 本轮不记，正常）；<文档名>=需求名(取法见上方 §需求名 = 跨技能统一去重键；写/升级/自检下 = 飞书文件标题(<title>块，非H1))  <平台>=claude|antigravity|codex|kiro|gemini  <模式>=写|升级|自检|建卡|demo|登记需求|登记校对|登记实验
 ```
 - 🔴 **需求名称 = 该飞书文档的「文件标题 / 文档名」**（飞书里显示的文件名，= 内容里的 `<title>…</title>` 块）——**不是正文第一个 H1 大标题**。H1 常与文件名不同（实测：codex 取了文档名"…展示 PRD"、kiro 取了 H1"…展示"，同一需求两条名字对不上、去重统计失真）。**统一取文档名**：从你已 fetch 的文档内容抓 `<title>…</title>` 的文本（`.data.document.title` 恒为 null，别用它）；wiki 链接可 `lark-cli wiki +node-get --node-token <url>` 取 `.data.title`；写模式=你新建时设的文档标题。含英文逗号 `,` / 引号 `"` 先替换掉（仅记录用）。**建卡 / demo 两种模式下手里没有飞书文档时**，按上方 `§需求名 = 跨技能统一去重键` 的第 2 / 第 3 条取名（Jira 主卡 summary 去端前缀 > 用户口头的需求名）——**同一需求三种交付必须同名**。
 - **平台 / 模式** 按注释填。写完**不回读、不校验、不重试**——尽力而为即可。
@@ -128,23 +129,25 @@ lark-cli sheets --help
 
 #### 分支一 · 新集 CLI（有 `+csv-get` / `+csv-put`，即 ≥1.0.47）
 
+0. 两个坐标先取：`python3 <KIT_ROOT>/scripts/company_config.py get telemetry.spreadsheet_token`、`… get telemetry.sheet_id`；取不到（无公司配置）本轮不记。
 1. `lark-cli auth status` —— **不 ok 就停**（连不上公司 lark 就不采集，正常）；ok 则**你自己从输出 JSON 读** `identities.user.userName`（读不到就用 `使用者`——只是名字模糊、不伤数据）。**不要接 `| python3`/`| jq`**，管道在沙箱下不放行。
-2. `lark-cli sheets +csv-get --spreadsheet-token LFvMsXyKAhvW8Utprn4ugtPgs0f --sheet-id bf6df9 --range A1:A100000` —— 你从输出的 `data.current_region` 读**尾部行号 N**（如 `A1:A87` → N=87）。**输出示例**：输出 JSON 的 `data.current_region` 形如 `"A1:E23"` → 尾部行号 N=23；**先看清输出再取数，别因字段没找到就臆断失败**——确认输出里确实没有 `current_region` 才算「读不到」，停。🔴 **读不到 N 就停，禁止猜行号、禁止 fallback 到 `A2` 之类固定行**（防覆盖铁律同款，见形态 A 的「防覆盖护栏」——猜行号会逐条覆盖已有记录，采集变删数据）。
-3. `lark-cli sheets +csv-put --spreadsheet-token LFvMsXyKAhvW8Utprn4ugtPgs0f --sheet-id bf6df9 --start-cell A<N+1> --csv "<时间>,<使用人>,<需求名>,<平台>,<模式>"` —— `<N+1>` 你自己算好写死；参数值里的引号/空格**不影响前缀匹配**（首 token 仍是 `lark-cli`），照常带。`<平台>` 填 `codex`。
+2. `lark-cli sheets +csv-get --spreadsheet-token <spreadsheet_token> --sheet-id <sheet_id> --range A1:A100000` —— 你从输出的 `data.current_region` 读**尾部行号 N**（如 `A1:A87` → N=87）。**输出示例**：输出 JSON 的 `data.current_region` 形如 `"A1:E23"` → 尾部行号 N=23；**先看清输出再取数，别因字段没找到就臆断失败**——确认输出里确实没有 `current_region` 才算「读不到」，停。🔴 **读不到 N 就停，禁止猜行号、禁止 fallback 到 `A2` 之类固定行**（防覆盖铁律同款，见形态 A 的「防覆盖护栏」——猜行号会逐条覆盖已有记录，采集变删数据）。
+3. `lark-cli sheets +csv-put --spreadsheet-token <spreadsheet_token> --sheet-id <sheet_id> --start-cell A<N+1> --csv "<时间>,<使用人>,<需求名>,<平台>,<模式>"` —— `<N+1>` 你自己算好写死；参数值里的引号/空格**不影响前缀匹配**（首 token 仍是 `lark-cli`），照常带。`<平台>` 填 `codex`。
 4. **失败不重试、不回读、不校验**；Codex **不需要结尾 `echo`**（那是 Kiro 终端检测需要），也**不要**把各步用 `;` / `&&` 拼起来。
 
 #### 分支二 · 旧集 CLI（只有 `+append`，即 ≤1.0.46）
 
 `+append` 是**服务端追加行**：由服务端在给定范围内定位「最后一行有数据的行」并写到其**下方**——**不需要先读行号，天然不会覆盖已有记录**，所以这个分支只有两步。
 
+0. 两个坐标先取：`python3 <KIT_ROOT>/scripts/company_config.py get telemetry.spreadsheet_token`、`… get telemetry.sheet_id`；取不到（无公司配置）本轮不记。
 1. `lark-cli auth status` —— 同分支一：**不 ok 就停**；ok 则你自己从输出 JSON 读 `identities.user.userName`（读不到用 `使用者`）。**不要接管道**。
 2. **先裸跑 `lark-cli sheets +append --help` 确认本机参数名**，再拼写入命令。1.0.20–1.0.60 实测的 `--help` 原文是：`--spreadsheet-token string`（spreadsheet token）、`--sheet-id string`（sheet ID）、`--range string`（`append range (<sheetId>!A1:D10, A1:D10 with --sheet-id, or a single cell like C2)`）、`--values string`（`2D array JSON`）。据此本表的写入命令为：
 
 ```
-lark-cli sheets +append --spreadsheet-token LFvMsXyKAhvW8Utprn4ugtPgs0f --sheet-id bf6df9 --range A1:E1 --values '[["<时间>","<使用人>","<需求名>","codex","<模式>"]]'
+lark-cli sheets +append --spreadsheet-token <spreadsheet_token> --sheet-id <sheet_id> --range A1:E1 --values '[["<时间>","<使用人>","<需求名>","codex","<模式>"]]'
 ```
 
-  （`--sheet-id bf6df9` + `--range A1:E1` 是 `--help` 列出的「`A1:D10` with `--sheet-id`」形态；等价写法是省掉 `--sheet-id`、直接 `--range 'bf6df9!A1:E1'`。**以本机 `--help` 实际列出的 flag 为准**，对不上就静默放弃。）
+  （`--sheet-id <sheet_id>` + `--range A1:E1` 是 `--help` 列出的「`A1:D10` with `--sheet-id`」形态；等价写法是省掉 `--sheet-id`、直接 `--range '<sheet_id>!A1:E1'`。**以本机 `--help` 实际列出的 flag 为准**，对不上就静默放弃。）
 
 3. **写入失败静默放弃**——不重试、不回读、不校验、不改用别的命令凑（同铁律 1）。
 
@@ -153,7 +156,7 @@ lark-cli sheets +append --spreadsheet-token LFvMsXyKAhvW8Utprn4ugtPgs0f --sheet-
 - **时间取值**：AI 自报当天日期时间即可（`YYYY-MM-DD HH:MM`）；要机器时间就**单独裸跑一条** `date '+%Y-%m-%d %H:%M'`。（两个分支通用）
 - **需求名称 / 模式** 的取值口径与形态 A 完全一致（需求名按上方 `§需求名 = 跨技能统一去重键` 取：飞书**文档名**不是 H1 > Jira 主卡 summary 去端前缀 > 用户口头的需求名；`<模式>` 七选一：`写` / `升级` / `自检` / `建卡` / `demo` / `登记需求` / `登记校对` / `登记实验`）；含英文逗号 / 引号先替换掉。（两个分支通用）
 
-> 表格：飞书「PRD写作kit使用记录」——`明细页 sheet_id=bf6df9`（本步追加）；另有「汇总看板」页用公式（COUNTA / COUNTUNIQUE / COUNTIF）**自动**算 总调用次数 / 去重需求数 / 去重使用人数 / 按模式，**无需也不要手动写汇总页**。
+> 表格：飞书「PRD写作kit使用记录」——明细页（本步追加；sheet_id 见公司配置 `telemetry.sheet_id`）；另有「汇总看板」页用公式（COUNTA / COUNTUNIQUE / COUNTIF）**自动**算 总调用次数 / 去重需求数 / 去重使用人数 / 按模式，**无需也不要手动写汇总页**。
 
 ## 排查：表里没某人的记录（七个已知根因）
 

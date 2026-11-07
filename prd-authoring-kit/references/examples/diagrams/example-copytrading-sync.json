@@ -1,0 +1,27 @@
+{
+  "type": "flow",
+  "title": "跟单同步下单与结算",
+  "subtitle": "绑定进入监听后，带单员的开仓、平仓事件分别驱动跟单下单与结算",
+  "nodes": [
+    {"id": "listen", "text": "跟单监听中", "shape": "start"},
+    {"id": "calc", "text": "按比例或固定额换算保证金", "shape": "box"},
+    {"id": "ok", "text": "保证金充足\n且未超限额？", "shape": "decision"},
+    {"id": "order", "text": "划转保证金并下跟单单", "shape": "box"},
+    {"id": "pushok", "text": "推送下单成功/失败", "shape": "box", "kind": "visible"},
+    {"id": "skip", "text": "本次跳过，推送跟单失败", "shape": "box", "kind": "visible"},
+    {"id": "close", "text": "按持仓比例平掉跟单仓", "shape": "box"},
+    {"id": "settle", "text": "结算盈亏，退回保证金", "shape": "box"},
+    {"id": "pushset", "text": "推送平仓结算通知", "shape": "box", "kind": "visible"}
+  ],
+  "edges": [
+    {"from": "listen", "to": "close", "label": "带单员平仓"},
+    {"from": "listen", "to": "calc", "label": "带单员开仓"},
+    {"from": "calc", "to": "ok"},
+    {"from": "ok", "to": "order", "label": "是"},
+    {"from": "ok", "to": "skip", "label": "否"},
+    {"from": "order", "to": "pushok"},
+    {"from": "close", "to": "settle"},
+    {"from": "settle", "to": "pushset"}
+  ],
+  "notes": ["同一开仓事件只生效一次。"]
+}

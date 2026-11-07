@@ -1,8 +1,8 @@
 # 数分需求表单契约（快照 2026-08-27，线上为准）
 
 表单：数分需求表单 Data Request Form
-share_token `shrus14do4SlJYUXrNZr71RaBzd` → base `C70ZbCvLlaCkb4sLEMmuVZoosVc` / 表「需求池」`tblyvoRTpcxjmPQE`（约 9.6k 条，全公司共用）。
-换表单只需环境变量 `DR_SHARE_TOKEN / DR_BASE_TOKEN / DR_TABLE_ID`。任何时候以 `python3 scripts/dr.py contract` 的线上结果为准，本文是快照。
+坐标（share_token → base / 表「需求池」，约 9.6k 条，全公司共用）住公司配置 `~/.prd-authoring-kit/library.json` 的 `forms.data_request`（`npx pm-ai-kit config <飞书配置文档链接>` 导入；2.1 起不随公开包分发）。
+换表单改配置文档即可；测试可用环境变量 `DR_SHARE_TOKEN / DR_BASE_TOKEN / DR_TABLE_ID` 顶掉。任何时候以 `python3 scripts/dr.py contract` 的线上结果为准，本文是快照。
 
 ## 字段
 

@@ -1,0 +1,27 @@
+{
+  "type": "flow",
+  "title": "列表页加载流程",
+  "subtitle": "用户进入列表页后，登录与数据两道判定决定看到什么",
+  "nodes": [
+    {"id": "start", "text": "进入列表页", "shape": "start"},
+    {"id": "login", "text": "已登录？", "shape": "decision"},
+    {"id": "guide", "text": "引导登录", "shape": "box"},
+    {"id": "load", "text": "加载列表数据", "shape": "box"},
+    {"id": "has", "text": "有数据？", "shape": "decision"},
+    {"id": "show", "text": "展示列表", "shape": "box", "kind": "visible"},
+    {"id": "empty", "text": "展示空状态", "shape": "box", "kind": "visible"},
+    {"id": "end", "text": "结束", "shape": "end"}
+  ],
+  "edges": [
+    {"from": "start", "to": "login", "style": "solid"},
+    {"from": "login", "to": "load", "label": "是", "style": "solid"},
+    {"from": "login", "to": "guide", "label": "否", "style": "solid"},
+    {"from": "guide", "to": "login", "label": "登录成功", "style": "dashed"},
+    {"from": "load", "to": "has", "style": "solid"},
+    {"from": "has", "to": "show", "label": "是", "style": "solid"},
+    {"from": "has", "to": "empty", "label": "否", "style": "solid"},
+    {"from": "show", "to": "end", "style": "solid"},
+    {"from": "empty", "to": "end", "style": "solid"}
+  ],
+  "notes": []
+}

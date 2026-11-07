@@ -1,0 +1,26 @@
+{
+  "type": "flow",
+  "title": "洞察 tab 浏览主链路",
+  "subtitle": "用户进入洞察 tab 后，按有无重要事件分流，最终挑出一个标的去下单",
+  "nodes": [
+    {"id": "open", "text": "进入行情 tab", "shape": "start"},
+    {"id": "home", "text": "洞察 tab 首屏", "shape": "box"},
+    {"id": "event", "text": "近 48h 有\n重要事件？", "shape": "decision"},
+    {"id": "headline", "text": "头条信号：事件与关联币种", "shape": "box"},
+    {"id": "pulse", "text": "市场脉搏：情绪/爆仓/多空比", "shape": "box"},
+    {"id": "trend", "text": "大盘趋势：看品类强弱", "shape": "box"},
+    {"id": "rec", "text": "为你推荐：挑一个标的", "shape": "box"},
+    {"id": "kline", "text": "进 K 线页下单", "shape": "end"}
+  ],
+  "edges": [
+    {"from": "open", "to": "home"},
+    {"from": "home", "to": "event"},
+    {"from": "event", "to": "headline", "label": "有"},
+    {"from": "event", "to": "pulse", "label": "无"},
+    {"from": "headline", "to": "trend"},
+    {"from": "pulse", "to": "trend"},
+    {"from": "trend", "to": "rec"},
+    {"from": "rec", "to": "kline"}
+  ],
+  "notes": []
+}

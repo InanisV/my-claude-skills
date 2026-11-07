@@ -1,8 +1,8 @@
 # jira-card-kit
 
-把产品需求按 MEXC 房规拆成 Jira 卡并批量创建的 AI skill。**随 `prd-authoring-kit` 作为伴生 skill 分发（分发合并、触发分离）**：一个 npm 包装进来，装完仍是独立 skill 目录、独立触发词，两边互不稀释。**写 PRD 与建卡不分先后**，一个需求两件事都要做，做完哪件都会顺口提另一件。
+把产品需求按 MEXC 房规拆成 Jira 卡并批量创建的 AI skill。**随 npm 包 `pm-ai-kit`（2.0 前名为 prd-authoring-kit）作为伴生 skill 分发（分发合并、触发分离）**：一个 npm 包装进来，装完仍是独立 skill 目录、独立触发词，两边互不稀释。**写 PRD 与建卡不分先后**，一个需求两件事都要做，做完哪件都会顺口提另一件。
 
-**能建什么（v1）**：APP 双端标准包（iOS/Android 故事 + UI设计任务 + 国际化任务 + Cloners/Relates 链接）、WEB/H5 故事、跨端 Blocks 依赖链接。
+**能建什么（v1）**：APP 标准包（默认一张【Flutter】故事 + UI设计任务 + 国际化任务；原生 iOS/Android 双端 + Cloners/Relates 链接可选，切双端判据见 03 §2）、WEB/H5 故事、跨端 Blocks 依赖链接。
 **刻意不做**：删卡、改已有卡、建机器人负责的卡和字段（开发/测试任务、埋点子任务、负责人、排期字段——系统自动生成）。
 
 ## 安装
@@ -13,7 +13,7 @@
 
    | 谁做 | 做什么 |
    |------|-------|
-   | **AI** | 帮你打开建 token 的页面（`https://jira.mxcb.xyz` → Profile → **Personal Access Tokens**） |
+   | **AI** | 帮你打开建 token 的页面（公司 Jira → Profile → **Personal Access Tokens**；地址来自公司配置） |
    | **你** | ① 点 **Create token**（名字随便，比如 `jira-card-kit`）→ ② **点复制按钮**把 token 复制走 → ③ 回来说一句"复制好了" |
    | **AI** | 跑 `python3 scripts/jira_cards.py setup-token`——工具自己弹出系统密码框（标题「Jira Token 配置」） |
    | **你** | ④ 把 token **粘进那个框**（输入显示为圆点）→ 点「好」 |
@@ -57,7 +57,13 @@ python3 ~/.claude/skills/jira-card-kit/scripts/jira_cards.py whoami
 
 会**每批单独问你**两件事，且不给默认值、不替你推断：**受益方**（cf_16706，从 Jira 实时拉的选项里由你亲选；填错是别人替你的需求埋单）和 **Epic**（挂哪张史诗卡）。
 
-Epic 这一问从 **v1.6.3 起改成用名字问**：AI 先跑 `epic-candidates` 去读**你的主卡和历史关联需求实际挂的 Epic**，给你一张 **`Epic 名称 | 卡号 | 依据 | 状态`** 的候选表让你挑（已关闭/已完成的会标「不建议」），你也可以直接**说 Epic 的名字**，工具用 `epic-search` 帮你找卡号。**凡是给你看的 Jira 卡都会带卡名**——计划表、确认问句、汇报三处都一样，不再甩给你一串裸卡号。
+Epic 这一问从 **v1.6.3 起改成用名字问**、**v1.6.6 起只推荐相关的**：AI 跑 `epic-candidates` 去读**与这个需求相关的历史需求**（关键词同族卡 + 你给的历史卡号）和**主卡**实际挂的 Epic，按「①历史关联需求 → ②主卡」两级排序（已关闭/已完成的标「不建议」压后）。每个选项长这样、**依据就在选项里**：
+
+> 「<Epic 名称>」(APP-xxxxx)——历史需求「<历史需求名>」等 3 张挂它
+
+只有一个明显相关的候选时，它直接问「**建议挂「X」…… 就它 / 换一个 / 不挂**」，不再摆一排给你挑。**「上次用过的 Epic」不再当候选**（产品反馈：跟这个需求没关系的不该扔上来），只有一个相关候选都找不到时才提一句「上次用的是 X，但查不到关联，不建议沿用」。**主卡也会被校一道**：主卡名字跟需求关键词八竿子打不着时会提示你「这张卡号是不是拿错了？」。你也可以直接**说 Epic 的名字**，工具用 `epic-search` 帮你找卡号。**凡是给你看的 Jira 卡都会带卡名**——计划表、确认问句、汇报三处都一样，不再甩给你一串裸卡号。
+
+**从 v1.6.6 起少问四件事**：**是否需要UI / 是否涉及新页面 / 是否需要埋点 / 依赖交付情况**不再问你了——AI 按判据自己判（有 PRD 就读 PRD 的结论，没 PRD 就看有没有新页面、新入口、UI 改动），**判完连同一句依据摆在计划表的「推断项」区块里**（形如 `是否需要埋点=是，依据：新增 AI 机会卡片页面 + 2 个新入口`）。你扫一眼，不对就直接说改哪个。
 
 手动跑执行器也可以：
 
@@ -65,7 +71,7 @@ Epic 这一问从 **v1.6.3 起改成用名字问**：AI 先跑 `epic-candidates`
 python3 scripts/jira_cards.py setup-token          # 配/换 Jira token（弹系统密码框，自动验证）
 python3 scripts/jira_cards.py whoami               # 验证连通
 python3 scripts/jira_cards.py beneficiary-options APP   # 实时拉受益方线上选项（供产品亲选）
-python3 scripts/jira_cards.py epic-candidates --from <主卡卡号> --keyword "<需求关键词>" --project APP   # 捞 Epic 候选（名称+依据+状态）
+python3 scripts/jira_cards.py epic-candidates --main <主卡卡号> --from <历史需求卡号…> --keyword "<需求关键词>" --project APP   # 捞相关 Epic 候选（选项文本自带依据）
 python3 scripts/jira_cards.py epic-search --name "<Epic 名称片段>"   # 按名称找 Epic 卡号
 python3 scripts/jira_cards.py validate plan.json   # 校验+预览，不创建
 python3 scripts/jira_cards.py apply plan.json      # 创建（失败自动续传）
@@ -80,22 +86,28 @@ python3 scripts/jira_cards.py config-set product_role app   # 改本机配置（
 python3 scripts/jira_cards.py set-beneficiary "<线上选项原文>" WEB-19174 WEB-19181 --apply
 ```
 
+**新建 Epic（v1.8）**：新专项没有 Epic 可挂时，plan 里加一张 `issuetype: "Epic"` 的卡排最前，故事用 `epic_ref` 指它；`validate` 会把「新建 Epic「名称」（项目，预期交付 日期）」摆进计划表让产品点头，`apply` 建完 Epic 自动回填史诗链接。WEB 项目 Epic 必填预期交付日期（= 产品给的上线日期）。样例：`examples/plan-epic-web.json`。
+
+**查卡 / 看子任务（v1.8.3）**：`find --keyword <词> --project WEB` 查卡建了没；`show <KEY>` 看子任务与经办人（UI设计任务经办人为空是正常态，由项管分配）；`createmeta --project WEB --issuetype 故事` 看字段允许值。都走同一个 token，不需要浏览器。
+
 ## 目录
 
 - `SKILL.md` — AI 工作流入口
 - `references/01-card-model.md` — 标准包结构、机器人边界、summary 规范
 - `references/02-field-model.md` — 字段 ID/允许值/payload 形状（2026-08 createmeta 实测）
-- `references/03-workflow.md` — PRD 提取映射、提问纪律、Epic 名称化提问四步、汇报格式
+- `references/03-workflow.md` — PRD 提取映射（含四个**推断项**的判据）、提问纪律、Epic 名称化提问四步、汇报格式
 - `references/04-field-survey.md` — **7 位产品 97 张真卡的字段实证抽样**（哪些默认值是全组房规、哪些只是作者个人习惯）
 - `scripts/jira_cards.py` — 零依赖执行器
-- `examples/` — APP 双端包与 WEB 故事的 plan 示例
-- `config.example.json` — 本机配置样例（身份 `product_role`、埋点两件套经办人、上次用的 Epic（只作末位候选）；实际文件放 `~/.jira-card-kit/config.json`，由你手工填或由 kit 用 `config-set` 写。**不放 token**——token 单独一个 600 权限的文件，免得转发配置时把凭据一起发出去）
+- `examples/` — APP 默认单卡（Flutter）、原生双端、WEB 故事三份 plan 示例
+- `config.example.json` — 本机配置样例（身份 `product_role`、埋点两件套经办人、上次用的 Epic（**v1.6.6 起不再当候选**，仅零候选时提示一句）；实际文件放 `~/.jira-card-kit/config.json`，由你手工填或由 kit 用 `config-set` 写。**不放 token**——token 单独一个 600 权限的文件，免得转发配置时把凭据一起发出去）
 
 ## 已知边界
 
+- **支持新建 Epic（v1.8，一批一张；WEB 项目 Epic 必填预期交付日期）**——plan 里加一张 `issuetype: "Epic"` 的卡、故事用 `epic_ref` 挂它。**仍不做**：改已建卡字段（网页 Edit / Bulk Change）、AIL / OSS / OPT / GJH 等项目的卡（计划表里单列「缺口：需在 Jira 网页手建」）。
 - **职责硬分离（安全侧要求，2026-08-28）**：skill 只做行动规划与需求匹配，`scripts/jira_cards.py` 是**唯一的认证与 Jira 通道**。AI 被明令禁止：读/写/`ls`/`cat` `~/.jira-card-kit/` 下任何文件（token 与 config 都算）、以任何方式直连 Jira API（curl/httpie/内联 urllib）、在工具之外构造或传递 `Authorization` 头。密码框只由 `setup-token` 持有，文档里**不留脚本原文**（免得 AI 照着自己跑一遍绕过工具）。契约全文见 `SKILL.md` 顶部。
 - 字段模型是 2026-08 快照；Jira 管理员改配置后需重跑 createmeta 校对（见 02 头部说明）。**受益方 cf_16706 例外：不做快照，每次实时拉**（全组共用、各人不同，内置枚举=诱导错填）；拉不到就停下不建卡，不放行近似值。
 - 默认值经 **2026-08-27 抽样 7 位产品 97 张真卡**反查过一轮（`references/04-field-survey.md`）：优先级、版本、`是否需要APP端产品介入`、国际化默认、summary 前缀这 5 项原是作者个人习惯，已降级为「默认展示 + 计划表里一起确认」或按身份取值；其余默认值被 7 人抽样坐实。**如果你发现某个默认值和你们团队的习惯不符，以你们的习惯为准，直接在计划表里改。**
 - 其中 4 项已于 **2026-08-27 由 Noah 拍板定稿**（见 `references/04-field-survey.md` 的「四项拍板」表）：**summary＝一层全角`【端】需求名`**（无前缀会被 `validate` 拦下，两层/半角只提醒）；**版本不主动问**、APP 默认分端占位、WEB 不填；`是否需要APP端产品介入` 按 `product_role` 身份取值；Epic 校验强度维持现状。
 - 需要能连公司网络：`validate`/`apply` 会联网核对受益方选项和 Epic 卡号，离线跑不通（刻意没有 offline 开关）。
-- 仅支持自托管 jira.mxcb.xyz（Server 9.12，PAT Bearer 认证），不适配 Jira Cloud。createmeta 走该版本的分页接口（`/issue/createmeta/{项目}/issuetypes[/{类型id}]`；老的扁平 createmeta 在这台实例上已下线）。
+- 仅支持公司自托管 Jira Server 9.12（PAT Bearer 认证；地址来自公司配置 `jira.url` 或环境变量 `JIRA_URL`），不适配 Jira Cloud。createmeta 走该版本的分页接口（`/issue/createmeta/{项目}/issuetypes[/{类型id}]`；老的扁平 createmeta 在这台实例上已下线）。
+- 查询能力只有 find / show / createmeta 三个只读口；改卡只有 set-beneficiary 一个单字段口；其它一律网页，UI设计任务经办人由项管分配。

@@ -11,8 +11,6 @@
 |---|---------|--------------------|--------|-----------|-----------|------|
 | 1 | v1.0 | 初稿 | @产品负责人 | N | N | 2026-05-09 |
 
-> 读者路由：研发→模块地图+功能需求；QA→验收标准；运营→产品设计范式字典
-
 ---
 
 # Background & Business Values 背景与价值
@@ -44,19 +42,18 @@ $$洞察\ tab\ 模块点击率=\frac{洞察\ tab\ 内四板块点击\ UV}{洞察
 
 # 需求范围&风险点
 
-## 本期包含
+## 模块地图
 
-1. 发现 tab 更名为「洞察 tab」，整体框架与 tab 切换
-2. 顶部卡：头条信号（事件快讯 + 关联币种）与市场脉搏（三指标）
-3. 大盘趋势：1 张主卡片 + 最多 3 张次级卡片
-4. 为你推荐瀑布流：币种卡片、0 费率卡片、资源位卡片混排
-5. Futures/Spot 筛选器与设备维度的选择记忆
-6. 各模块跳 K 线页 / 品类板块列表 / 活动落地页
+| 模块（与 US-R 标题逐字同名） | 一句话干什么 | 本次（新增 / 修改 / 配置 / 沿用） |
+|---|---|---|
+| US1-R1 洞察 tab（头条信号 / 市场脉搏 / 大盘趋势 / 为你推荐） | 一屏回答「现在值得交易什么、为什么」，含头条信号 / 市场脉搏 / 大盘趋势 / 为你推荐四个板块 | 新增 |
+
+> 【注】本篇只有 1 个 US-R，按 `02 §模块地图` 本可豁免；此处保留一行只作形状示意。
 
 ## 本期不包含（Out of Scope）
 
 - 不做瀑布流分页加载——本期一次性返回 100 张卡片、滚动到底即止
-- 不改首页豆腐块——大盘趋势复用它的「品类列表 + 推荐币对列表」能力，豆腐块本身的展示与排序不动
+- 不改首页豆腐块的展示与排序（大盘趋势只复用其列表能力）
 - 不做洞察 tab 内的搜索与自定义订阅（推荐结果只由算法给，用户不可编辑）
 
 ## 需求关联方与依赖
@@ -65,28 +62,20 @@ $$洞察\ tab\ 模块点击率=\frac{洞察\ tab\ 内四板块点击\ UV}{洞察
 <tr><th>需求关联方</th><th>功能列表</th><th>产品对接人</th><th>技术对接人</th></tr>
 <tr><td>APP</td><td>
 <ol>
-<li>洞察 tab 整体框架与 tab 切换</li>
-<li>顶部卡（市场脉搏 + 头条信号）轮播与交互</li>
-<li>大盘趋势主卡片 + 次级卡片</li>
-<li>为你推荐瀑布流（币种卡片、独立 0 费率卡片、资源位卡片混排）</li>
-<li>Futures/Spot 筛选器与设备维度持久化记忆</li>
-<li>各模块跳转 K 线、跳转板块列表、跳转活动落地页</li>
+<li>洞察 tab 框架与四板块展示</li>
+<li>筛选器记忆与各模块跳转</li>
 </ol>
 </td><td>@产品对接人</td><td>@技术对接人</td></tr>
 <tr><td>运营</td><td>
 <ol>
-<li>头条信号接口（透传大数据筛选后的事件 + 关联币种行情补全）</li>
-<li>市场脉搏聚合接口（恐惧贪婪、24h 爆仓含环比、BTC 多空比，三指标统一返回）</li>
-<li>大盘趋势接口（复用首页豆腐块的「品类列表 + 推荐币对列表」能力）</li>
-<li>为你推荐聚合接口（协调大数据 / 算法 / 0Fee 三方数据，补全行情后回传 APP）</li>
+<li>四板块数据聚合接口</li>
+<li>行情补全后回传 APP</li>
 </ol>
 </td><td>@产品对接人</td><td>@技术对接人</td></tr>
 <tr><td>大数据</td><td>
 <ol>
-<li>为你推荐瀑布流的整体千人千面排序；币种推荐能力上限由 50 个扩展到 100 个</li>
-<li>0 费率卡片固定第 6 位、首个资源位固定第 3 位的硬性排序约束；资源位卡片占比约 20% 的混排算法（不连续分布、config 可配置）</li>
-<li>头条信号筛选能力（近 48h AI 快讯按重要性 Top 5、按时间倒序、关联币种 1 对 1 输出，含多语言）；市场脉搏 2 指标（恐惧贪婪、24h 爆仓及环比）</li>
-<li>币种卡片标签能力：FOMO 标签 + 第二信号槽位的 5 个事件标签计算；0Fee 卡片币对组装（合约侧「已交易 + 全部」去重）</li>
+<li>瀑布流排序混排与头条筛选</li>
+<li>币种标签与「已交易 + 全部」币对组装</li>
 </ol>
 </td><td>@产品对接人</td><td>@技术对接人</td></tr>
 </table>
@@ -95,31 +84,11 @@ $$洞察\ tab\ 模块点击率=\frac{洞察\ tab\ 内四板块点击\ UV}{洞察
 
 # Overall User Scenarios 用户场景总览
 
-house 原稿这里用的是**内嵌 mindnote 脑图**；kit 路径下写一段 ```mermaid fence 即可——经 `lark-cli` 导入后自动转成原生可编辑画板，正文不残留代码（见 `06`）。
-
-```mermaid
-flowchart LR
-  A([打开 APP，进入行情 tab]) --> B[洞察 tab 首屏]
-  B --> C{近 48h 有重要事件?}
-  C -- 有 --> D[头条信号：看事件解读 + 关联币种]
-  C -- 无 --> E[市场脉搏：看情绪/爆仓/多空比]
-  D --> F[大盘趋势：看品类强弱]
-  E --> F
-  F --> G[为你推荐：挑一个标的]
-  G --> H([点进 K 线页下单])
-```
+<画板：由 prd_diagram.py 发布，spec 见 diagrams/example-house-insight-tab-browse.json>
 
 ---
 
 # 功能需求 User Stories 用户故事
-
-## 模块地图
-
-| 模块（US-R 编号 + 模块名） | 一句话干什么 | 本次（新增 / 修改 / 沿用） | 研发重点 | 测试重点 |
-|---|---|---|---|---|
-| US1-R1 洞察 tab | 一屏回答「现在值得交易什么、为什么」，含头条信号 / 市场脉搏 / 大盘趋势 / 为你推荐四个板块 | 新增 | 四个板块各自的数据源与刷新时机 | 板块缺失即隐藏、涨跌色、刷新不闪 |
-
-> 【注】本篇只有 1 个 US-R，按 `02 §模块地图` 本可豁免；此处保留一行只作形状示意。
 
 ## US1: 作为用户，我希望进入行情洞察 tab 就看到现在值得交易什么、为什么
 
@@ -511,7 +480,7 @@ flowchart LR
 
 （产品可直接引用，注明使用字典中第几条第几点）
 
-<cite doc-id="basusJj0Nn5Rz68ftMgx9YRVJCb" file-type="bitable" table-id="tblntuACeDhenzKT" title="APP产品设计范式" type="doc" view-id="vewEOZHUHL"></cite>
+<cite doc-id="xxxxxxxx" file-type="bitable" table-id="xxxxxxxx" title="APP产品设计范式" type="doc" view-id="xxxxxxxx"></cite>
 
 ---
 
@@ -590,15 +559,15 @@ house 惯例是把埋点表另建 sheet 嵌入本章；下表为 kit 十列形�
    - [ ] Yes
    - [ ] No
    - [ ] N/A
-9. 是否登记了翻译/校对任务 @ https://l7jipx1bfq.larksuite.com/share/base/form/shrusgtZjx5c1kwN0rGMeBcB8ne
+9. 是否登记了翻译/校对任务 @ https://<tenant>.larksuite.com/share/base/form/xxxxxxxx
    - [ ] Yes
    - [ ] No
    - [ ] N/A
-10. FYI：校对前置任务填写手册：<cite doc-id="doxusT0tpnk9rphvWCU28jhciUh" file-type="docx" title="需求侧前置任务-英文翻译与校对流程" type="doc"></cite> https://l7jipx1bfq.larksuite.com/share/base/form/shrusjT9vJnjB1TdDPVwa6u7yNc
+10. FYI：校对前置任务填写手册：<cite doc-id="xxxxxxxx" file-type="docx" title="需求侧前置任务-英文翻译与校对流程" type="doc"></cite> https://<tenant>.larksuite.com/share/base/form/xxxxxxxx
     - [ ] Yes
     - [ ] No
     - [ ] N/A
-11. FYI：设计团队接口人：<cite doc-id="wikuslg1LESqG8S3U3i9lwmMSAe" file-type="wiki" title="产品设计部 - UI/UX 需求提交指南" type="doc"></cite>
+11. FYI：设计团队接口人：<cite doc-id="xxxxxxxx" file-type="wiki" title="产品设计部 - UI/UX 需求提交指南" type="doc"></cite>
     - [ ] Yes
     - [ ] No
     - [ ] N/A

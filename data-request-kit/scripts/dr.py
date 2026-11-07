@@ -20,16 +20,51 @@ import datetime as _dt
 import difflib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 
 # ---------------------------------------------------------------------------
-# 配置：这是「MEXC 数分需求表单」的坐标。换表单只需改环境变量或这里三行。
+# 配置：数分需求表单的坐标。2.1 起不随公开包分发：环境变量 DR_SHARE_TOKEN / DR_BASE_TOKEN / DR_TABLE_ID
+# → 公司配置 ~/.prd-authoring-kit/library.json 的 forms.data_request（`npx pm-ai-kit config <飞书配置文档链接>` 导入）
+# → 都没有就报错指路。坐标是资源定位符不是凭据，但不回显进对话。
 # ---------------------------------------------------------------------------
-SHARE_TOKEN = os.environ.get("DR_SHARE_TOKEN", "shrus14do4SlJYUXrNZr71RaBzd")
-BASE_TOKEN = os.environ.get("DR_BASE_TOKEN", "C70ZbCvLlaCkb4sLEMmuVZoosVc")
-TABLE_ID = os.environ.get("DR_TABLE_ID", "tblyvoRTpcxjmPQE")
+def _load_company_config():
+    """主 kit `scripts/company_config.py` 的 load_company_config；找不到模块 / 读失败 → None。
+    依次试：skills 根同级 `prd-authoring-kit/scripts`、仓库根 `scripts`、~/.prd-authoring-kit、~/.claude/skills、~/.agents/skills。"""
+    here = os.path.dirname(os.path.realpath(__file__))
+    kit = os.path.dirname(here); siblings = os.path.dirname(kit); repo = os.path.dirname(siblings)
+    for d in (os.path.join(siblings, "prd-authoring-kit", "scripts"), os.path.join(repo, "scripts"),
+              os.path.expanduser("~/.prd-authoring-kit/scripts"),
+              os.path.expanduser("~/.claude/skills/prd-authoring-kit/scripts"),
+              os.path.expanduser("~/.agents/skills/prd-authoring-kit/scripts")):
+        if os.path.isfile(os.path.join(d, "company_config.py")):
+            if d not in sys.path:
+                sys.path.insert(0, d)
+            break
+    try:
+        from company_config import load_company_config
+        cfg = load_company_config()
+    except Exception:
+        return None
+    return cfg if isinstance(cfg, dict) else None
+
+
+def _form_coords():
+    env = (os.environ.get("DR_SHARE_TOKEN"), os.environ.get("DR_BASE_TOKEN"), os.environ.get("DR_TABLE_ID"))
+    if all(env):
+        return env
+    f = ((_load_company_config() or {}).get("forms") or {}).get("data_request") or {}
+    vals = (env[0] or f.get("share_token"), env[1] or f.get("base_token"), env[2] or f.get("table_id"))
+    if all(vals) and all(re.fullmatch(r"[A-Za-z0-9_-]{1,64}", str(v)) for v in vals):
+        return tuple(str(v) for v in vals)
+    sys.stderr.write("ERROR: 没有数分需求表单坐标：跑一次 npx pm-ai-kit config <飞书配置文档链接>（链接在群公告），"
+                     "或设环境变量 DR_SHARE_TOKEN / DR_BASE_TOKEN / DR_TABLE_ID。\n")
+    sys.exit(2)
+
+
+SHARE_TOKEN, BASE_TOKEN, TABLE_ID = _form_coords()
 
 # spec 键 -> 表单字段 id。字段 id 稳定，标题会被人改；提交时用线上契约里的当前标题。
 FIELD_IDS = {

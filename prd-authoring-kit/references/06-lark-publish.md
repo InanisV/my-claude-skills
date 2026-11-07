@@ -57,7 +57,9 @@ if grep -qE 'Kit 自查清单|^> 【指引' /tmp/prd_clean.md; then echo "❌ �
 
 > 无法运行此脚本（如 PowerShell/无 awk sed 的环境）→ 按 ①-⑥ 清单**直接编辑文件逐项删除**，删完逐项搜索 `（填写：`、`> 【指引`、`Kit 自查清单` 确认零命中，效果等价。
 
-## 步骤 1（默认）· 新建文档，Markdown 导入
+## 步骤 1（轻量档默认）· 新建文档，Markdown 导入
+
+🔴 标准档（含元素四列表）默认走 XML 路径（列宽 / rowspan / @ 卡片都只有 XML 能写）；markdown 直发只给无元素表的轻量档（`07 §五` 第 13 条）。
 
 最稳的一次成型。用 **stdin** 传正文（避免 @file 绝对路径的坑）：
 
@@ -68,19 +70,19 @@ lark-cli docs +create --title "【AI】xxx PRD" --doc-format markdown --content 
 
 - 放指定位置：`--parent-token <wiki节点token或文件夹token>`（**用户指定了位置才传；默认建个人空间根，不主动问**——发布后在交付简报里告知位置、可按需 `drive +move` 挪，见 `00 §恒定规则 10`）。
 - 🔴 **正文章节层级照 house（产品本人两篇 PRD 实测一致）**：章 h1（`#`）、US h2、US-R h3、线框原型图 / UED设计稿 / 需求逻辑 / 前端说明 / 后端说明 / 兜底逻辑 h4、板块小节 h5；文档标题走 `--title`，正文不写标题行。
-- markdown 表格→飞书表格；标题层级、列表保留；**```mermaid fence 自动转成原生可编辑画板、fence 不残留**——所以 md 里照写 fence，**别在 fence 之外再贴一份 mermaid 源码或加「mermaid 文本供 XX 读取」说明**（实测用户点名是噪音）。
+- markdown 表格→飞书表格；标题层级、列表保留；**画板默认由 `prd_diagram.py publish` 写入空画板块（流程见 `14 §9`）；```mermaid fence 自动转原生画板只作无 node 兜底**（fence 不残留）——**别在画板之外再贴一份 mermaid 源码或加「mermaid 文本供 XX 读取」说明**（实测用户点名是噪音）。
 - 截图、@人、Figma bookmark、bitable 等富块 markdown 表达不了——先建文字版，再按步骤 2/3 补，或让产品在飞书手动贴。
 - 版本差异：本环境 `docs +create` 无 `--api-version` 参数、默认即新版；若你的 CLI 版本 docs 命令报需要 `--api-version v2`，按 `lark-cli skills read lark-doc` 的提示加。
 
 ### 元素表富块写法（格内列表，实测）
 
-markdown 里**内嵌 HTML `<table>`**，其单元格内的 `<ul><li>` / `<ol><li>`（含嵌套）经 `docs +create --doc-format markdown` 导入会 round-trip 成**真正的飞书项目符号/编号块**；而管道表格里 `<br>`+连字符只是假列表。元素表等需要格内列表的表**优先用内嵌 HTML 表格写法**（示例见 `02` 元素表、规范见 `07 §五`），不必为格内列表升级到 XML。
+markdown 里**内嵌 HTML `<table>`**，其单元格内的 `<ul><li>` / `<ol><li>`（含嵌套）经 `docs +create --doc-format markdown` 导入会 round-trip 成**真正的飞书项目符号/编号块**；而管道表格里 `<br>`+连字符只是假列表。元素表等需要格内列表的表**优先用内嵌 HTML 表格写法**（示例见 `02` 元素表、规范见 `07 §五`），不必为格内列表升级到 XML——但标准档因列宽 / rowspan / @ 卡片仍默认走 XML（见步骤 1 开头）。
 
 > 🔴 **埋点表按属性逐 `<tr>` 展开，别塌成一事件一行**：block_replace/insert 一张埋点表（XML）时，每个属性一个 `<tr>`、续行事件级列写空 `<td><p></p></td>`；`<tr>` 数 = 1 表头 + 属性总数（见 `09 §5`）。XML 手写路径最易把多属性分号挤进一格（markdown 导入不会），落地前按行数自查。
 
-## 步骤 2（可选，高保真）· DocxXML 富块 / 插图
+## 步骤 2（标准档默认，高保真）· DocxXML 富块 / 插图
 
-需要 house 风格 4 列元素表(rowspan)、@对接人、bookmark 时用默认 `--doc-format xml`。**写 XML 前先读** `lark-cli skills read lark-doc references/lark-doc-xml.md`。
+需要 house 风格 4 列元素表(rowspan)、@对接人、bookmark 时用默认 `--doc-format xml`。每张表的 `<colgroup>` 列宽按 `07 §五` 第 13 条「列宽固定」写，发布后跑 `scripts/table_widths.py` 核对（命令见该条），报不一致的表回修。**写 XML 前先读** `lark-cli skills read lark-doc references/lark-doc-xml.md`。
 
 **插图用 `+media-insert`（4 步编排 + 自动回滚），别用 `<img src="token">`：**
 ```bash
@@ -89,9 +91,9 @@ lark-cli docs +media-insert --doc <id> --file ./pic.png            # --file 用�
 ```
 > 🔴 **禁止在新 block 里写 `<img src="<旧token>">` 复用图片**——会被换成 512×512 占位垃圾图、真图丢失。图片重定位只能靠 `block_move_after`。
 
-**给已有文档补画板（block 级 patch 场景）**：先插入一个空画板块拿 block_token，再 `lark-cli whiteboard +update --input_format mermaid` 直接灌 mermaid（实测可靠；核验用 `whiteboard +query` 导图目检，须传 `--output` 目录）。**发布后核验**：fetch 回读 grep 无 ```mermaid 裸代码块、无「mermaid 文本供」说明句残留——有就删（逻辑已在文字规则里，代码块不留）。
+**画板写入（新建文档与给已有文档补画板同一流程，`14 §9`）**：在该位置放一个空画板块（`<whiteboard type="blank"></whiteboard>`）拿 block_token（返回的 `new_blocks[].block_token`，或 fetch 回读的 `<whiteboard token="…"/>`）→ `python3 <KIT_ROOT>/scripts/prd_diagram.py publish <spec> --whiteboard-token <token>` → `verify --whiteboard-token <token> --out <目录>` 导出云端预览目检。**发布后核验**：fetch 回读 grep 无 ```mermaid 裸代码块、无「mermaid 文本供」说明句残留——有就删（逻辑已在文字规则里，代码块不留）。
 
-> 建议：正文先用步骤1 markdown 建好，再对少数富块位置用步骤3 局部升级，别一上来全 XML。
+> 建议（无元素表的轻量档）：正文先用步骤1 markdown 建好，再对少数富块位置用步骤3 局部升级；标准档按步骤 1 开头的默认直接走 XML。
 
 ### 元素表「原型」格贴图（设计稿截图，实测编排）
 
@@ -171,13 +173,13 @@ AFTER=$(lark-cli docs +fetch --doc "<url>" --doc-format xml | grep -cE '<img |&l
 ```
 > ⚠️ **Codex 例外（管道/`$()` 不放行，见 §Codex 沙箱适配）**：改前改后各**裸跑一次** `lark-cli docs +fetch --doc "<url>" --doc-format xml`，**由你自己数输出里的 `<img` / `&lt;img` 条数**做同样的对比——**校验本身一次都不能省**，只是换形态。
 
-**迭代改稿标红惯例**：🔴 **标红看「是否已发布」不看「是否已评审」**：首发稿全黑（实测首发稿被整篇标红，产品：「不需要标红，因为我们还没有评审」）；**发布之后的任何增量改动都标红**，评审前也一样（实测产品：「v1.1 行加上，改动标红」）；评审后红字基线 = 上次与研发 / 测试同步的时点，多轮累计保留、整表重建或精简改写不得把红字洗黑，产品明说才转黑（`04 §需求变更 b`）。block patch 新增/修改的文本标红色（XML text style，语法读 `lark-doc-xml.md`；markdown 路径的 `block_replace` 表达不了颜色，则在交付简报里列「本轮改动清单」替代），交付时告知产品「红色为自上次评审 / 同步以来的改动」；新一轮修改默认保留上轮红字、本轮叠加标红，产品明说「转黑」才转。首发稿全黑、不标色。
+**迭代改稿标红惯例**：🔴 **红字 = 评审 / 与研发同步之后的改动**。首发稿全黑；**已发布但还没评审**的稿，第一轮改稿时问一次「还没评审——改动标红还是全黑？」，答案记进 decisions.md、后续轮次照用不再问；产品没表态默认全黑（产品两场原话：「还没有评审，所以全部置黑就行了，不用把改动的变成红色」「颜色全部用黑色吧，因为还没有评审」；也有过一次「v1.1 行加上，改动标红」——所以问一次，不猜）。全黑时交付简报仍附「本轮改动清单」，在读的研发照样知道哪里变了。评审之后（或产品明说「开始标红」之后）的任何增量改动都标红，红字基线 = 上次评审 / 产品点名的时点，只发了群、没开评审会不算基线，多轮累计保留、整表重建或精简改写不得把红字洗黑，产品明说才转黑（`04 §需求变更 b`）。🔴 **一旦产品说了全黑，之后每一轮都全黑，直到产品说评审过了**（实测 v2.5 置黑后下一版又冒出红字）。block patch 新增/修改的文本标红色（XML text style，语法读 `lark-doc-xml.md`；markdown 路径的 `block_replace` 表达不了颜色，则在交付简报里列「本轮改动清单」替代），交付时告知产品「红色为自上次评审 / 同步以来的改动」；新一轮修改默认保留上轮红字、本轮叠加标红，产品明说「转黑」才转。首发稿全黑、不标色。
 
 ## 步骤 4 · 收尾
 
 - 回给产品：飞书 URL + `05-self-review-gate.md` 自检简报 + 一句"改了哪几处/补了哪几块"清单（迭代时尤其要给，让产品知道人工内容没动）+ **发布位置**一句（默认个人空间根；「要挪到 wiki / 指定文件夹说一声，我用 `drive +move` 挪」）。
 - 🔴 **建卡确认提问（强制，产品 2026-08-26 定——一个需求 PRD 和 Jira 卡两件事都要做，此问是需求闭环硬闸，不适用规则 10 的「能不问就不问」）**：本会话**没建过 Jira 卡、且用户没说过不建** → 交付简报后**必须提问**：「这个需求的 Jira 卡建了吗？要我现在拆卡吗？（PRD 链接我直接带过去）」——**有结构化提问工具就用**（Claude Code 用 AskUserQuestion，选项：现在建卡 / 已建好（贴卡号我回填） / 本需求不建卡），**没有的平台以这个问句结束回合等答复**，不许把它降级成一句可跳过的顺带话。免问仅两种：本会话已建过 / 用户已明确说不建。🔴 提问在**对话里**，绝不写进 PRD 正文（`01 §0.5`）；收尾采集（`11`）在提问**前**执行完。🔴 **本机没装 jira-card-kit**（`~/.claude/skills/jira-card-kit` 与 `~/.agents/skills/jira-card-kit` 都不存在）→ **不问，静默省略**。
-- **需求收集表登记（流水线 S3，必问一次）**：本需求还没登记 → 按 `13 §三` 话术问「要登记吗？」+ 预览（优先级 / 迭代版本 / 进展让产品定，登记人默认本人），点头后跑 `scripts/register.py`（`12 §十`）；不建卡的需求也登记，Jira 列留空。随后 **S4**：本次 Localisation 表有新增 / 改动词条 → 只问优先级、提校对登记（`10 §校对登记`）。两问都答完，再更新 `13 §二` 闭环清单。
+- **需求收集表登记（流水线 S3，必问一次）**：本需求还没登记 → 按 `13 §三` 话术问「要登记吗？」+ 预览（优先级 / 迭代版本 / 进展让产品定；🔴 需求提出方 / 需求来源部门必问不默认本人，产品经理默认本人），点头后跑 `scripts/register.py`（`12 §十`）；不建卡的需求也登记，Jira 列留空。随后 **S4**：本次 Localisation 表有新增 / 改动词条 → 只问优先级、提校对登记（`10 §校对登记`）。两问都答完，再更新 `13 §二` 闭环清单。
 - **收尾采集**：**优先 `python3 <KIT_ROOT>/scripts/register.py telemetry --requirement "<文档名>" --platform <平台> --mode 写`（升级 / 变更回写填 `升级`；`11 §形态 C`），输出「未写入」再手动**；🔴 **文档发布成功的当轮立即记，不等"会话最终回复"**（`00` 规则 8 2026-08 改：按动作判、不按回合判——拿到文档链接的下一个动作就是采集，再回复用户；发布后被 建卡 / 补图 / 拉群 等支线打断也不影响，那时已经记过了）。按 `11` 记一条使用（失败静默）——这是收尾清单的正式一步，平台形态见 `11`（Codex=形态 B 分步裸跑）。
 - 回复之后才轮到**原型图补图环节**（独立、非必做；见上方元素表『原型』格贴图小节的**接管询问硬闸**）。
 - 大内容一次 create 报"内容过大/解析错"：先建带标题空壳，拿 url 后分段 `docs +update --command append` 兜底；不要预防性拆分。

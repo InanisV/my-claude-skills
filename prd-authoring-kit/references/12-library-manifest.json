@@ -1,237 +1,34 @@
 {
-  "_about": "PRD Authoring Kit · 历史需求库清单（背景自采集用）。判据与检索纪律见 references/12-context-recall.md。全程只读。",
+  "_about": "PRD Authoring Kit · 历史需求库清单（背景自采集用）。2.1 起本文件只保留 schema 与业务词表：各表坐标住公司配置 ~/.prd-authoring-kit/library.json（npx pm-ai-kit config <飞书配置文档链接> 导入；schema 见 _schema）。判据与检索纪律见 references/12-context-recall.md。全程只读。",
   "_schema": {
     "sources[]": "一个可查询的需求登记表。type=base 时用 base_token+table_id 走 lark-cli base +record-search / +record-list",
     "sources[].era": "current=现用（优先查） | 2025 / 2024=历史（现用未命中、或用户问「以前做过吗」才查）",
     "sources[].platform": "端路由用：app | web | both。APP 需求查 app+both，Web 需求查 web+both",
     "sources[].fields": "🔴 各表字段名不同，按本映射取值，别跨表照抄（如 Jira单号/链接 vs JIRA单号；进展 vs 需求状态）",
     "sources[].filter_module": "该表按端过滤时用的字段与取值；null=该表本身就是单端表、无需再过滤",
+    "sources[].local": "true = 本机补充的表（同事自己加的，不是配置文档下发的）；refresh / import 覆盖时原样保留（追加在远端条目之后，远端有同 id 以远端为准）。不标的条目会被远端配置覆盖",
     "wiki_spaces[]": "树浏览兜底：lark-cli wiki +node-list --space-id <id>（零新授权）",
+    "wiki_spaces[].local": "true = 本机补充的知识空间；刷新保留，规则同 sources[].local",
+    "forms": "登记用的表单 / 表，按键名分形态：copy_review 与 ab_experiment（register.py 读）、data_request（伴生 data-request-kit 的 dr.py 读），见下三条",
+    "forms.data_request": "{share_token, base_token, table_id}：数分需求表单（Data Request Form）→ 需求池表；dr.py 提交 / 先例检索用",
+    "forms.copy_review": "{name, form_token, url, rule}：文案登记表（S4 校对登记）。form_token = 表单 share token（register.py copy-review 提交用）；url = 表单链接；rule = 一句人话，登记时原样提示",
+    "forms.ab_experiment": "{kind=base_table, name, base_token, table_id, url, inherit_from_reference[], from_prd[], confirm[], fixed{}, leave_empty[], rule, reference_hint, telemetry_mode}：通用行登记（S6 AB 实验，register.py row-plan 驱动）。inherit_from_reference = 只有这些字段从参考行继承；from_prd = 从 PRD 取值的字段；confirm = 必须产品拍板的字段（缺一不写 plan）；fixed = 固定值（支持 {whoami.name} / {whoami.first_lower}）；leave_empty = 约定留空（回读被默认值填上会清成 null）；rule = 预览时原样打出的一句话；reference_hint = 参考行怎么找（给 AI 看）；telemetry_mode = 写成功后记使用记录的模式名",
+    "asked": "true = 首跑「问一次」时用户说跳过（12-context-recall.md §七.3 写入）；之后不再问。refresh / import 覆盖时保留",
     "alias": "模块受控词表，L0 抽检索键时对齐词汇用；运行时不必再拉选项",
-    "_empty_form": "sources 与 wiki_spaces 均为 [] 时 = 空清单形态 → 按 12-context-recall.md §manifest 机制「首跑问一次」分支走"
+    "_schema_version": "公司配置文件必带，当前 1",
+    "source_url / fetched_at": "config 命令写入：配置文档链接与拉取时间；refresh 据此静默刷新（24h）",
+    "telemetry": "{spreadsheet_token, sheet_id}：使用记录表坐标（11-usage-telemetry.md）",
+    "tracking": "{base_token, table_id, platform_url}：线上公参表坐标（09-tracking-gen.md §4）；platform_url = 公司埋点平台地址（不带结尾 /；09 §8 录入环节拼 /ai-tracking/<需求 id>）",
+    "jira": "{url}：公司 Jira 地址（jira-card-kit 读；环境变量 JIRA_URL 优先）",
+    "links": "模板 02 里 {{company.links.*}} 占位的真值：paradigm_dict（cite 块）/ paradigm_dict_url（同一表的 URL，markdown 直发路径用）/ copy_review_form_url / translation_guide（cite 块 + 空格 + 校对前置任务表单 URL）/ ui_guide；另有 lark_cli_guide_url（lark-cli 开通文档链接）/ lark_cli_contact（lark-cli 开通找的 IT 联系人，@人名）——00 §降级 第 4 条「装 lark-cli」指路说的就是这两项。键名以 _url 结尾的值只许 https 链接，paradigm_dict / translation_guide / ui_guide 只许单个 <cite> 块（company_config.py 校验）",
+    "releases": "{\"<x.y.z>\": \"sha512-…\"}：允许安装的版本白名单：版本 → 该版本 npm tarball 的 sha512（`npm view pm-ai-kit@<v> dist.integrity`）。update.sh 只装登记过且哈希一致的版本；check_update.sh 只对登记过的新版提示。键只许 x.y.z、值只许 sha512-<86 位 base64>==（company_config.py 校验，非法键名整份拒收）",
+    "source_owner": "config 命令写入：配置文档所有者 open_id（ou_ + 32 位十六进制）；refresh 据此核验来源（所有者变了 / 被非所有者编辑过 → 不刷新、保留旧文件）",
+    "_empty_form": "sources 与 wiki_spaces 均为 [] 且无公司配置 → 按 12-context-recall.md §七「首跑问一次」分支走"
   },
-  "generated": "2026-09-01",
-  "sources": [
-    {
-      "id": "backlog-current",
-      "label": "现用 backlog（Web + App 合表）",
-      "type": "base",
-      "era": "current",
-      "platform": "both",
-      "base_token": "RQmCbHS3maSShns8SRuuBL9Csib",
-      "table_id": "tbl0Dfehgj7xFwhw",
-      "url": "https://l7jipx1bfq.larksuite.com/base/RQmCbHS3maSShns8SRuuBL9Csib?table=tbl0Dfehgj7xFwhw",
-      "field_count": 17,
-      "fields": {
-        "name": "需求描述",
-        "module": "产品模块",
-        "prd": "PRD",
-        "status": "进展",
-        "jira": "Jira单号/链接",
-        "owner": "产品经理",
-        "iteration": "迭代版本",
-        "value": "需求价值",
-        "priority": "优先级"
-      },
-      "filter_module": {
-        "field": "产品模块",
-        "app": [
-          "App",
-          "App（DEX)"
-        ],
-        "web": [
-          "Web/H5"
-        ]
-      },
-      "module_options": [
-        "App",
-        "Web/H5",
-        "App（DEX)"
-      ],
-      "note": "选项只有端级三项、颗粒度粗；细分模块词用 alias.module_terms 对齐"
-    },
-    {
-      "id": "app-2025",
-      "label": "APP 2025 需求表",
-      "type": "base",
-      "era": "2025",
-      "platform": "app",
-      "base_token": "LfJGbOkhvaliKUsoo2Xug8ePsdg",
-      "table_id": "tblHTjZY5oQffRwN",
-      "field_count": 21,
-      "fields": {
-        "name": "需求描述",
-        "module": "业务模块",
-        "prd": "PRD",
-        "status": "需求状态",
-        "jira": "JIRA单号",
-        "owner": "产品经理",
-        "iteration": "所属迭代",
-        "value": "需求价值",
-        "priority": "优先级"
-      },
-      "filter_module": null,
-      "module_options": [
-        "合约交易",
-        "现货交易",
-        "资产钱包",
-        "法币",
-        "现货活动",
-        "合约活动",
-        "公共模块",
-        "交易模块"
-      ],
-      "note": "wiki 内嵌 base；另有「产品模块」字段但只有 APP 一个选项（单端表）。🔴 状态列叫「需求状态」不是「进展」，Jira 列叫「JIRA单号」不带「/链接」"
-    },
-    {
-      "id": "app-2025-apr",
-      "label": "APP 2025（4 月新建）",
-      "type": "base",
-      "era": "2025",
-      "platform": "app",
-      "base_token": "J9ftbNZc0apo0OsNKgauND7wske",
-      "table_id": "tbl03MjTer0FYbUI",
-      "field_count": 28,
-      "fields": {
-        "name": "需求描述",
-        "module": "产品模块",
-        "prd": "PRD",
-        "status": "进展",
-        "jira": "Jira单号/链接",
-        "owner": "产品经理",
-        "iteration": "迭代版本",
-        "value": "需求价值",
-        "priority": "优先级"
-      },
-      "filter_module": null,
-      "module_options": [
-        "App（20）",
-        "App（DEX)"
-      ],
-      "note": "wiki 内嵌 base；模块选项里另有 2 条空名选项（脏数据），别拿去当检索键"
-    },
-    {
-      "id": "web-2025",
-      "label": "Web 2025 总需求池",
-      "type": "base",
-      "era": "2025",
-      "platform": "web",
-      "base_token": "KCR6bPGhVaKP7DsujUZu50hMsim",
-      "table_id": "tblzT2A05Yfx5Zw1",
-      "field_count": 26,
-      "fields": {
-        "name": "需求描述",
-        "module": "产品模块",
-        "prd": "PRD",
-        "status": "进展",
-        "jira": "Jira单号/链接",
-        "owner": "产品经理",
-        "iteration": "迭代版本",
-        "brd": "BRD/MRD",
-        "value": "需求价值"
-      },
-      "filter_module": null,
-      "note": "wiki 内嵌 base；表名「总需求池」，约 665 条。模块选项 29 条（含 3 条人名选项，不入词表）"
-    },
-    {
-      "id": "web-2026",
-      "label": "Web 2026 总需求池",
-      "type": "base",
-      "era": "current",
-      "platform": "web",
-      "base_token": "Acu8bc8uBadbPYsM3v9uKNEVsdb",
-      "table_id": "tbl3YEFCFeJnHWVv",
-      "field_count": 23,
-      "fields": {
-        "name": "需求描述",
-        "module": "产品模块",
-        "prd": "PRD",
-        "status": "进展",
-        "jira": "Jira单号/链接",
-        "owner": "产品经理",
-        "iteration": "迭代版本",
-        "brd": "BRD/MRD",
-        "value": "需求价值"
-      },
-      "filter_module": null,
-      "note": "wiki 内嵌 base；表小（约 38 条），空结果是常态、不代表查询失败"
-    }
-  ],
-  "forms": {
-    "_about": "常规回合要填的公司表单；店铺版整删本文件，规则文本里已写明「没有本文件请产品给链接」",
-    "copy_review": {
-      "name": "文案登记表（词条校对需求）",
-      "form_token": "shrusgtZjx5c1kwN0rGMeBcB8ne",
-      "url": "https://l7jipx1bfq.larksuite.com/share/base/form/shrusgtZjx5c1kwN0rGMeBcB8ne",
-      "rule": "优先级先问产品再填；备注写本轮新增行号+校对重点；提交先 --dry-run"
-    },
-    "ab_experiment": {
-      "kind": "base_table",
-      "name": "AB 实验管理表",
-      "base_token": "BkcRbHvEwaLSPMsRqk0uo1Hjsqb",
-      "table_id": "tbldXh3FguG4VmcD",
-      "url": "https://l7jipx1bfq.larksuite.com/base/BkcRbHvEwaLSPMsRqk0uo1Hjsqb?table=tbldXh3FguG4VmcD",
-      "inherit_from_reference": [
-        "原始需求方",
-        "原始需求方职务",
-        "原始需求方部门",
-        "数分POC",
-        "流量分配方式",
-        "实验周期(天)",
-        "代码下线周期(天)"
-      ],
-      "from_prd": [
-        "实验名称",
-        "实验背景",
-        "分组说明",
-        "假设与预期收益",
-        "实验受众要求",
-        "jira单"
-      ],
-      "confirm": [
-        "上线初始流量%",
-        "实验主体",
-        "实验周期(天)",
-        "代码下线周期(天)",
-        "备注"
-      ],
-      "fixed": {
-        "备注": "{whoami.first_lower}"
-      },
-      "leave_empty": [
-        "实验状态",
-        "是否已提供key",
-        "实验key",
-        "实验ID",
-        "实验开始日期",
-        "实验结束日期",
-        "实验下线日期",
-        "代码下线时间",
-        "实验效果数据",
-        "实验结论"
-      ],
-      "rule": "从「实验状态」往右（含 key / ID / 各日期 / 效果 / 结论）由数据产品填，登记时留空；数分POC 例外要填；备注 = 登记人（小写英文名）；上线初始流量、实验主体、周期是需求变量，按本需求重判、由产品拍板，不抄参考行",
-      "reference_hint": "同表里同业务线最近一条实验（流程常量从它继承：需求方 / 职务 / 部门 / 数分POC / 分配方式 / 周期上限）",
-      "telemetry_mode": "登记实验"
-    }
-  },
-  "wiki_spaces": [
-    {
-      "id": "7623986191989214645",
-      "label": "现用知识库",
-      "era": "current"
-    },
-    {
-      "id": "7311584935679180806",
-      "label": "历史 APP 知识库",
-      "era": "2025"
-    },
-    {
-      "id": "7311612534761504773",
-      "label": "历史 Web 知识库",
-      "era": "2024"
-    }
-  ],
+  "generated": "2026-11-04",
+  "sources": [],
+  "forms": {},
+  "wiki_spaces": [],
   "alias": {
     "_note": "各源「产品模块 / 业务模块」选项的联合去重，2026-09-01 一次性拉全（--limit 200 分页拉尽，防 50 条截断）：74 条原始选项 → 去 2 条空名、去 6 条人名选项 → 归一掉末尾的（N）/（Share N）计数后缀 → 33 条。用途只有一个：L0 抽检索键时把口语词对齐到库里真实用的词。",
     "platform_terms": [

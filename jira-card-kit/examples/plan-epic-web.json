@@ -1,0 +1,83 @@
+{
+  "meta": {
+    "requirement": "广场支持按币种筛选动态",
+    "prd": "<PRD lark 链接>",
+    "biz_tag": "H5",
+    "beneficiary_confirmed_by": "<确认人姓名>（产品本人，YYYY-MM-DD 对话确认）",
+    "beneficiary_rationale": "<产品给出的判定依据，原话浓缩>",
+    "_comment": "新专项先建 Epic 再挂卡；一批一张 Epic；WEB Epic 必填预期交付日期=产品给的上线日期。Epic 卡排最前，故事用 `epic_ref` 指它，apply 建完 Epic 会自动把卡号回填进故事的史诗链接(cf_10102)——所以故事里**不要**再写 customfield_10102（两者二选一，同时写 validate 报错）。Epic 的 summary 是专项名，不带【端】前缀；不填受益方、不挂 Epic、不填 fixVersions。史诗名称(cf_10104) 不写就 = summary。",
+    "_comment_inference": "inference_notes = 四个**推断项**各一句依据，**不单独问产品**（判据见 references/03-workflow.md §1）；缺依据 validate 只 WARN 不拦建卡。",
+    "inference_notes": {
+      "ui": "PRD 有 UED 设计稿，广场动态流新增筛选栏",
+      "new_page": "只在已有广场页面上加筛选，无全新页面",
+      "tracking": "新增筛选入口与筛选结果曝光，需曝光·点击埋点",
+      "dependency": "PRD 关联方表有后端筛选接口条目"
+    }
+  },
+  "cards": [
+    {
+      "ref": "epic_square",
+      "project": "WEB",
+      "issuetype": "Epic",
+      "summary": "MEXC 广场",
+      "fields": {
+        "description": "MEXC 广场专项：实时交易广场相关的 H5 / 后台需求统一挂这张 Epic。",
+        "customfield_11319": {
+          "value": "业务需求"
+        },
+        "customfield_11802": "2026-09-29"
+      }
+    },
+    {
+      "ref": "h5_story",
+      "project": "WEB",
+      "issuetype": "故事",
+      "summary": "【H5】广场支持按币种筛选动态",
+      "epic_ref": "epic_square",
+      "fields": {
+        "description": "PRD：[【H5】广场支持按币种筛选动态|<PRD lark 链接>]",
+        "priority": {
+          "name": "P1+"
+        },
+        "assignee": {
+          "name": "<建卡人自己·whoami 的 name；WEB 故事房规是自己认领，抽样 26/28>"
+        },
+        "components": [
+          {
+            "name": "首页业务"
+          }
+        ],
+        "customfield_12002": {
+          "value": "该需求是派生需求"
+        },
+        "customfield_11319": {
+          "value": "业务需求"
+        },
+        "customfield_16706": {
+          "value": "<受益方·从线上选项中经产品确认后逐字填入>"
+        },
+        "customfield_11519": {
+          "value": "前端"
+        },
+        "customfield_11530": {
+          "value": "是"
+        },
+        "customfield_17200": {
+          "value": "否"
+        },
+        "customfield_15401": {
+          "value": "否"
+        },
+        "customfield_16301": {
+          "value": "是"
+        },
+        "customfield_15700": {
+          "value": "否"
+        },
+        "customfield_12902": {
+          "value": "无需SEO"
+        }
+      }
+    }
+  ]
+}

@@ -31,7 +31,7 @@ description: 把散落在聊天记录、口头描述、文档里的数据需求�
 
 ## 流程
 
-**0. 预检。** `whoami`（顺带确认 lark-cli 能跑；报找不到就 `npm i -g @larksuite/cli@latest`）、`contract`（线上字段为准，脚本快照可能过期；线上新增了必填字段就用 spec 的 `extra` 补）。
+**0. 预检。** `whoami`（顺带确认 lark-cli 能跑；报找不到就 `npm i -g @larksuite/cli@latest`）、`contract`（线上字段为准，脚本快照可能过期；线上新增了必填字段就用 spec 的 `extra` 补）。开场顺带跑 `python3 ../prd-authoring-kit/scripts/register.py demand-mine --daily`（路径相对本 skill 目录；每天首次一次）：输出 SKIP、0 行、没有 lark-cli、或主 kit 未安装（文件不存在）都静默跳过；有行就按 `../prd-authoring-kit/references/13-workflow.md §七` 出建议表，🔴 写回逐行确认。
 
 **1. 收集需求。** 来源通常是三种之一：和某人的聊天（`chat` 命令；看到截图先按打印出的命令下载、用 Read 看图再往下读——截图往往就是"对象"本身）、一份文档或周会纪要（`lark-cli docs +fetch --doc <url> --doc-format markdown --as user`）、用户口述。从材料里抽七要素：对象、指标、周期/拆分、对比对象、明确排除的东西、期限、已有产出。抽不出来的项进确认轮，不要脑补。细节见 `references/context-gathering.md`。
 

@@ -1,11 +1,18 @@
 {
   "meta": {
     "requirement": "AI快讯弹窗展示优化",
-    "prd": "https://l7jipx1bfq.larksuite.com/wiki/ZdK8wIGEuiUOB3kWgyUu8txlsPh",
+    "prd": "https://<tenant>.larksuite.com/wiki/<PRD-token>",
     "biz_tag": "AI",
     "beneficiary_confirmed_by": "<确认人姓名>（产品本人，YYYY-MM-DD 对话确认）",
     "beneficiary_rationale": "<产品给出的判定依据，原话浓缩：为什么收益归这条线、而不是照抄主卡或历史值>",
-    "_comment": "APP 双端标准包示例：4 卡 + 3 链接。字段形状见 references/02-field-model.md。⚠️ 尖括号占位一律要替换：受益方(cf_16706)必须先跑 `beneficiary-options APP` 拉线上选项、由产品本人亲选后逐字填；史诗链接(cf_10102)每批向产品要卡号，不许沿用本文件里的示例格式当默认值。summary 恒用**一层**全角前缀 `【端】需求名`（业务线并进需求名，别写成【iOS】【AI】…，Noah 2026-08-27 拍板）。fixVersions **分端占位**：iOS 卡填 iOS_、Android 卡填 安卓_；**不主动问版本**，用户主动给了版本号才换成真实值。"
+  "_comment_inference": "inference_notes = 四个**推断项**各一句依据（是否需要UI / 是否涉及新页面 / 是否需要埋点 / 依赖交付情况）。它们**不作为提问单独问产品**：有 PRD 就读 PRD 的结论，没 PRD 就按页面/UI 改动推断，推断完连同依据摆进计划表让产品扫一眼、要改直接说。判据全文见 references/03-workflow.md §1；缺依据 validate 只 WARN 不拦建卡。",
+  "inference_notes": {
+    "ui": "PRD 带 UED 设计稿链接，弹窗为改版视觉",
+    "new_page": "只改已有首页弹窗，没有新页面/新入口",
+    "tracking": "需要UI=是 且弹窗是用户可见入口，需曝光·点击埋点",
+    "dependency": "PRD 关联方表没有跨端/跨系统条目"
+  },
+    "_comment": "**原生双端包示例（切双端判据见 03 §2；默认请看 plan-app-flutter.json）**：4 卡 + 3 链接。字段形状见 references/02-field-model.md。⚠️ 尖括号占位一律要替换：受益方(cf_16706)必须先跑 `beneficiary-options APP` 拉线上选项、由产品本人亲选后逐字填；史诗链接(cf_10102)每批向产品要卡号，不许沿用本文件里的示例格式当默认值。summary 恒用**一层**全角前缀 `【端】需求名`（业务线并进需求名，别写成【iOS】【AI】…，Noah 2026-08-27 拍板）。fixVersions **分端占位**：iOS 卡填 iOS_、Android 卡填 安卓_；**不主动问版本**，用户主动给了版本号才换成真实值。"
   },
   "cards": [
     {
@@ -14,7 +21,7 @@
       "issuetype": "故事",
       "summary": "【iOS】AI快讯弹窗展示优化",
       "fields": {
-        "description": "https://l7jipx1bfq.larksuite.com/wiki/ZdK8wIGEuiUOB3kWgyUu8txlsPh",
+        "description": "https://<tenant>.larksuite.com/wiki/<PRD-token>",
         "priority": {
           "name": "P1+"
         },
@@ -39,7 +46,7 @@
           "value": "无需依赖"
         },
         "customfield_16301": {
-          "value": "否"
+          "value": "是"
         },
         "customfield_11530": {
           "value": "是"
@@ -67,7 +74,7 @@
       "issuetype": "故事",
       "summary": "【Android】AI快讯弹窗展示优化",
       "fields": {
-        "description": "https://l7jipx1bfq.larksuite.com/wiki/ZdK8wIGEuiUOB3kWgyUu8txlsPh",
+        "description": "https://<tenant>.larksuite.com/wiki/<PRD-token>",
         "priority": {
           "name": "P1+"
         },
@@ -92,7 +99,7 @@
           "value": "无需依赖"
         },
         "customfield_16301": {
-          "value": "否"
+          "value": "是"
         },
         "customfield_11530": {
           "value": "是"
@@ -122,10 +129,10 @@
       "summary": "【UI设计】AI快讯弹窗展示优化",
       "fields": {
         "assignee": {
-          "name": "Norman"
+          "name": "<设计师username>"
         },
         "customfield_10812": {
-          "name": "Norman"
+          "name": "<设计师username>"
         },
         "priority": {
           "name": "P1+"
@@ -140,7 +147,7 @@
       "summary": "【国际化】AI快讯弹窗展示优化",
       "fields": {
         "assignee": {
-          "name": "noah.zhan"
+          "name": "<username>"
         },
         "priority": {
           "name": "P1+"

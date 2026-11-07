@@ -1,0 +1,27 @@
+{
+  "type": "flow",
+  "title": "跟单绑定流程",
+  "subtitle": "用户从带单员详情页发起跟单，过权限与余额两道判定后完成绑定",
+  "nodes": [
+    {"id": "start", "text": "带单员详情页", "shape": "start"},
+    {"id": "perm", "text": "已登录且有\n合约权限？", "shape": "decision"},
+    {"id": "guide", "text": "引导登录/KYC/开通合约", "shape": "box", "kind": "visible"},
+    {"id": "click", "text": "点击「立即跟单」", "shape": "box"},
+    {"id": "setting", "text": "设置本金、跟单方式、止盈止损", "shape": "box"},
+    {"id": "bal", "text": "可用余额≥\n跟单本金？", "shape": "decision"},
+    {"id": "low", "text": "提示余额不足，引导划转", "shape": "box", "kind": "visible"},
+    {"id": "bind", "text": "创建绑定，状态=监听中", "shape": "box"},
+    {"id": "end", "text": "进入监听", "shape": "end"}
+  ],
+  "edges": [
+    {"from": "start", "to": "perm"},
+    {"from": "perm", "to": "click", "label": "是"},
+    {"from": "perm", "to": "guide", "label": "否"},
+    {"from": "click", "to": "setting"},
+    {"from": "setting", "to": "bal", "label": "参数校验通过"},
+    {"from": "bal", "to": "bind", "label": "是"},
+    {"from": "bal", "to": "low", "label": "否"},
+    {"from": "bind", "to": "end"}
+  ],
+  "notes": ["参数校验不通过：高亮错误项，不提交。", "比例或固定额二选一；止盈止损可选。"]
+}

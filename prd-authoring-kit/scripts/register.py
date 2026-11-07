@@ -13,24 +13,49 @@
 `apply` 成功后调本命令记 `建卡`。
 
 通用行登记 `row-plan` / `row-apply`（流水线 S6，服务 AB 实验管理表与以后任何登记表）由
-`references/12-library-manifest.json` 的 `forms.<key>` 驱动：只继承 `inherit_from_reference`
+公司配置（`~/.prd-authoring-kit/library.json`，schema 见 `references/12-library-manifest.json`）的 `forms.<key>` 驱动：只继承 `inherit_from_reference`
 列出的流程常量、`confirm` 里的产品拍板项缺一不写 plan、`leave_empty` 的格写完回读后显式置 null
 （防表默认值回填），成功后按 `telemetry_mode` 记一行使用记录。
+
+台账巡检 `demand-mine`（流水线 S7，规则见 references/13-workflow.md §七）：只读列出 `产品经理` 含登录本人、
+`进展` 未到终态的行；`--daily` 每天首次才查（stamp 在 ~/.prd-authoring-kit/demand-review.stamp），
+缺 lark-cli / 未登录 / 无公司配置一律打一行 `SKIP: <原因>`、退出码 0。写回仍走 `demand-update`
+（一行一条命令、一行一回读）；`进展` 被改时自动记一行使用记录（模式 `巡检更新`）。
+`user-find`：姓名 / 邮箱 → open_id 候选（只读），`demand-plan --proposer <姓名>` 复用同一解析。
 
 Python 3.9 兼容（本机 /usr/bin/python3 是 3.9）。
 """
 
 import argparse
+import datetime
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
 
+try:  # 公司配置统一入口（同目录 company_config.py）；缺了就按无配置处理
+    from company_config import load_company_config
+except ImportError:
+    def load_company_config():
+        return None
+
 # ---------------------------------------------------------------- 常量 / 配置
 
-JIRA_BROWSE = "https://jira.mxcb.xyz/browse/"
+
+def jira_browse_base():
+    """Jira 浏览前缀 `<地址>/browse/`：env JIRA_URL → 公司配置 jira.url；都没有返回 ""（Jira 格写纯 KEY、不成链）。"""
+    url = (os.environ.get("JIRA_URL") or "").strip()
+    if not url:
+        try:
+            url = str(((load_company_config() or {}).get("jira") or {}).get("url") or "").strip()
+        except Exception:
+            url = ""
+    return url.rstrip("/") + "/browse/" if url else ""
+
+
 JIRA_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")   # 形如 WEB-19856 / APP-37283
 
 # 需求收集表字段名（2026-09 表头；以 `lark-cli base +field-list` 读回为准）
@@ -58,6 +83,28 @@ NAME_TOO_LONG = "⚠ 过长（需求描述是短名，不是功能清单）"
 PREVIEW_HINT = "🔴 下面每一格都要先贴给产品看过（含自动填的需求描述 / PRD / Jira），点头后再 demand-apply。"
 # 写入后回读 `Jira单号/链接` 不以 `[` 开头时打这一句
 JIRA_NOT_LINKED = "⚠ Jira 格未成链"
+# 需求提出方 / 需求来源部门 必问（2.2.2）：没给就在预览格里打这一句、不写 plan
+ASK_PRODUCT = "？由产品指定"
+SOURCE_UNSET_HINT = "需求提出方 / 需求来源部门 未指定，apply 会拒绝"
+# 需求来源部门 全量选项的获取命令（坐标用占位，不回显）
+SOURCE_DEPT_OPTIONS_CMD = ('lark-cli base +field-search-options --base-token <公司配置 sources[0].base_token> '
+                           '--table-id <sources[0].table_id> --field-id 需求来源部门 --keyword "" --limit 200 --as user')
+# user-find 最多打印的候选行数
+USER_FIND_LIMIT = 10
+
+# 台账巡检（S7）：`进展` 终态集合（巡检默认不列）与「已到验收」集合（不标 ⚠ 过期）
+PROGRESS_DONE = ("9. 已上线", "0. 需求暂停", "0. 需求取消", "已归档", "已废弃")
+PROGRESS_ACCEPTED = ("8. 已验收", "9. 已上线")
+# 每日巡检 stamp：一行 YYYY-MM-DD（本机；每人每天首次调用才查表）
+DEMAND_STAMP = os.path.join(os.path.expanduser("~"), ".prd-authoring-kit", "demand-review.stamp")
+OVERDUE_MARK = "⚠ 迭代日期已过"
+# 迭代版本里的日期：`[APP]1111（6.32.0）` / `[WEB]0316` / `[vvip]1105` / `[APP]26/0210`（带两位年份）
+ITERATION_DATE_RE = re.compile(r"^\s*\[[^\]]+\]\s*(?:(\d{2})/)?(\d{2})(\d{2})(?!\d)")
+JIRA_KEY_FIND_RE = re.compile(r"(?<![A-Za-z0-9])[A-Z][A-Z0-9]+-\d+(?![0-9])")
+# 表里「最后修改」系统列的类型（有就投影，没有该列留空）
+MODIFIED_TYPES = ("modified_at", "last_modified_time")
+# demand-mine 拉表的翻页上限（表约几百行；超过就截断并提示）
+MINE_MAX_ROWS = 2000
 
 
 class LarkError(Exception):
@@ -76,35 +123,41 @@ def _load_json_file(path):
         return json.load(fh)
 
 
-def load_library():
-    """按优先级合并清单：内置 manifest < 用户级覆盖 < 环境变量 PRD_KIT_LIBRARY。
+LIBRARY_KEYS = ("sources", "forms", "wiki_spaces", "telemetry", "tracking", "jira", "links")
 
-    只有顶层键 `sources` / `forms` 参与覆盖（整键替换，不做深合并）。
+
+def load_library():
+    """按优先级合并清单：内置 manifest < 公司配置 < 环境变量 PRD_KIT_LIBRARY。
+
+    公司配置 = ~/.prd-authoring-kit/library.json（`npx pm-ai-kit config <链接>` 导入），经
+    company_config.load_company_config() 读（PRD_KIT_COMPANY_CONFIG=<路径> 可顶掉默认路径）。
+    参与覆盖的顶层键见 LIBRARY_KEYS（整键替换，不做深合并）。
     PRD_KIT_LIBRARY 是**测试专用**逃生口，正常回合不要设。
     """
     here = os.path.dirname(os.path.abspath(__file__))
     manifest = os.path.join(here, os.pardir, "references", "12-library-manifest.json")
     manifest = os.path.normpath(manifest)
 
-    lib = {"sources": [], "forms": {}}
-    layers = [manifest, os.path.expanduser("~/.prd-authoring-kit/library.json")]
+    lib = {"sources": [], "forms": {}, "wiki_spaces": [], "telemetry": {}, "tracking": {}, "jira": {}, "links": {}}
+    layers = []
+    if os.path.isfile(manifest):
+        layers.append(_load_json_file(manifest))
+    company = load_company_config()
+    if isinstance(company, dict):
+        layers.append(company)
     env_path = os.environ.get("PRD_KIT_LIBRARY")
-    if env_path:
-        layers.append(os.path.expanduser(env_path))
+    if env_path and os.path.isfile(os.path.expanduser(env_path)):
+        layers.append(_load_json_file(os.path.expanduser(env_path)))
 
-    found_any = False
-    for path in layers:
-        if not path or not os.path.isfile(path):
-            continue
-        found_any = True
-        data = _load_json_file(path)
-        for key in ("sources", "forms"):
+    for data in layers:
+        for key in LIBRARY_KEYS:
             if key in data:
                 lib[key] = data[key]
-    if not found_any:
+    if not layers:
         raise PlanError(
-            "找不到清单文件：既没有 %s，也没有 ~/.prd-authoring-kit/library.json。\n"
-            "店铺版等无清单环境请按 references/12-context-recall.md §十 手工填表。" % manifest
+            "找不到清单：内置 manifest 缺失，且没有公司配置 ~/.prd-authoring-kit/library.json。"
+            "跑一次 `npx pm-ai-kit config <飞书配置文档链接>`（链接在群公告），"
+            "或按 references/12-context-recall.md §七 手工填表。"
         )
     return lib
 
@@ -113,7 +166,8 @@ def demand_table(lib):
     """需求收集表坐标 = sources[0] 的 base_token + table_id。"""
     sources = lib.get("sources") or []
     if not sources:
-        raise PlanError("清单里 sources 为空，拿不到需求收集表坐标（sources[0]）。")
+        raise PlanError("清单里 sources 为空，拿不到需求收集表坐标（sources[0]）。"
+                        "没有公司配置请先跑 `npx pm-ai-kit config <链接>`。")
     src = sources[0]
     base_token = src.get("base_token")
     table_id = src.get("table_id")
@@ -129,7 +183,7 @@ def copy_review_token(lib):
     if not token:
         raise PlanError(
             "清单里没有 forms.copy_review.form_token。没有该文件的环境（店铺版）请产品给表单链接，"
-            "按 references/10-i18n-terms.md §校对登记 手工填。"
+            "按 references/10-i18n-terms.md §校对登记 手工填。没有公司配置请先跑 `npx pm-ai-kit config <链接>`。"
         )
     return token
 
@@ -345,6 +399,20 @@ def check_option(base_token, table_id, field, value, field_id=None):
     )
 
 
+def print_source_dept_options(base_token, table_id):
+    """`需求来源部门` 没给时：在线拉全量选项编号列出（让产品点，不猜），并打印获取命令；拉不到只打命令。"""
+    print("\n需求来源部门 必问：把线上选项原文列给产品点（获取命令：%s）" % SOURCE_DEPT_OPTIONS_CMD)
+    try:
+        data = run_lark(["base", "+field-search-options", "--base-token", base_token, "--table-id", table_id,
+                         "--field-id", F_SOURCE_DEPT, "--keyword", "", "--limit", "200",
+                         "--as", "user"]).get("data") or {}
+    except LarkError:
+        print("（选项没拉到，按上面的命令再拉一次。）")
+        return
+    names = [o.get("name", "") for o in (data.get("options") or []) if o.get("name")]
+    print_table(["编号", "需求来源部门 选项"], [[str(i), n] for i, n in enumerate(names, 1)])
+
+
 # ---------------------------------------------------------------- 字段元信息 / 单元格值
 
 # 系统列与派生列：一律不写（写了服务端也会忽略或报错）
@@ -451,7 +519,10 @@ def jira_link_text(raw):
     keys = [k.strip() for k in text.replace("，", ",").split(",") if k.strip()]
     if not keys or not all(JIRA_KEY_RE.match(k) for k in keys):
         return raw
-    return "\n".join("[%s](%s%s)" % (k, JIRA_BROWSE, k) for k in keys)
+    base = jira_browse_base()
+    if not base:
+        return raw
+    return "\n".join("[%s](%s%s)" % (k, base, k) for k in keys)
 
 
 def jira_cell_linked(value):
@@ -515,6 +586,85 @@ def whoami_open_id():
     return user["open_id"], user.get("name") or ""
 
 
+# ---------------------------------------------------------------- user-find（姓名 / 邮箱 → open_id）
+
+
+def missing_scope_hint(exc):
+    """LarkError 文本里有 missing_scope → 返回一句可转告的提示，否则返回 ""。"""
+    text = str(exc)
+    if "missing_scope" not in text and "missing required scope" not in text:
+        return ""
+    m = re.search(r"missing required scope\(s\):\s*([\w:.,\s-]+)", text)
+    scope = (m.group(1).strip().split()[0].rstrip('",') if m else "contact:user:search")
+    return ("缺 %s 授权：不为此申请授权，请产品直接给 open_id、在对话里 @ 出这个人，"
+            "或说「我自己提的」（12 §十 1f）。" % scope)
+
+
+def search_users(query, limit=USER_FIND_LIMIT):
+    """`contact +search-user --query` → [{"name","open_id","dept"}…]（最多 limit 条，只读）。"""
+    data = run_lark(["contact", "+search-user", "--query", query,
+                     "--page-size", str(limit), "--as", "user"]).get("data") or {}
+    found = []
+    for user in (data.get("users") or [])[:limit]:
+        if not isinstance(user, dict) or not user.get("open_id"):
+            continue
+        name = user.get("localized_name") or user.get("name") or user.get("en_name") or ""
+        dept = user.get("department") or user.get("department_name") or user.get("departments") or ""
+        found.append({"name": render(name), "open_id": user["open_id"], "dept": render(dept, 30)})
+    return found
+
+
+def resolve_proposer(raw, me_id):
+    """`--proposer` 三种值 → (open_id 或 None, 来源说明, 候选列表)。
+
+    `self` = 产品明说是自己提的 → 本人；`ou_…` 原样；其它当姓名 / 邮箱走 search_users，
+    **唯一命中才用**，多命中 / 零命中 / 查询失败 → None（预览打「？」并列候选）。
+    """
+    text = (raw or "").strip()
+    if not text:
+        return None, ASK_PRODUCT, []
+    if text.lower() == "self":
+        return me_id, "产品说是自己提的（self）", []
+    if text.startswith("ou_"):
+        return text, "参数", []
+    try:
+        hits = search_users(text)
+    except LarkError as exc:
+        return None, "%s（%s）" % (ASK_PRODUCT, missing_scope_hint(exc) or "通讯录查询失败"), []
+    if len(hits) == 1:
+        return hits[0]["open_id"], "参数「%s」→ 唯一命中 %s" % (text, hits[0]["name"]), hits
+    if not hits:
+        return None, "%s（「%s」零命中，换关键词或给 open_id）" % (ASK_PRODUCT, text), []
+    return None, "%s（「%s」命中 %d 人，见下方候选）" % (ASK_PRODUCT, text, len(hits)), hits
+
+
+def print_user_candidates(hits):
+    print_table(["姓名", "open_id", "部门"], [[h["name"], h["open_id"], h["dept"]] for h in hits])
+
+
+def cmd_user_find(args):
+    """按姓名 / 邮箱找 open_id 候选（只读）；零命中提示换关键词；缺 scope 打一句授权提示。"""
+    query = (args.query or "").strip()
+    if not query:
+        raise PlanError("user-find 要给姓名或邮箱关键词。")
+    try:
+        hits = search_users(query)
+    except LarkError as exc:
+        hint = missing_scope_hint(exc)
+        if hint:
+            raise PlanError(hint)
+        raise
+    if not hits:
+        print("「%s」零命中：换个关键词（全名 / 英文名 / 企业邮箱）再试，或请产品直接给 open_id。" % query)
+        return 0
+    print("「%s」命中 %d 人%s：" % (query, len(hits), "（只列前 %d）" % USER_FIND_LIMIT
+                                  if len(hits) >= USER_FIND_LIMIT else ""))
+    print_user_candidates(hits)
+    if len(hits) > 1:
+        print("多人命中：把候选列给产品点，别自己挑。")
+    return 0
+
+
 # ---------------------------------------------------------------- demand-find
 
 
@@ -543,12 +693,12 @@ def cmd_demand_plan(args):
     lib = load_library()
     base_token, table_id = demand_table(lib)
 
-    # ① 登记人默认 = lark-cli 登录本人
+    # ① 产品经理默认 = lark-cli 登录本人；🔴 需求提出方必问（2.2.2 起不默认本人）
     me_id, me_name = whoami_open_id()
     pm = args.pm or me_id
-    proposer = args.proposer or me_id
+    proposer, proposer_origin, proposer_hits = resolve_proposer(args.proposer, me_id)
 
-    # ② 单选值在线校验（六项必填里的四个单选 + 可选的来源部门）
+    # ② 单选值在线校验（五项必填里的四个单选 + 必问的来源部门）
     missing = []
     checked = {}
     for flag, field, value in [
@@ -585,6 +735,14 @@ def cmd_demand_plan(args):
         else:
             mode, record_id = "create", None
 
+    # ③b 必问两格：新建行、或既有行该格为空才必问；既有行已有值 → 不问、不打「？」、不覆盖
+    need_proposer = not proposer and (mode == "create" or is_empty(existing.get(F_PROPOSER)))
+    need_dept = not args.source_dept and (mode == "create" or is_empty(existing.get(F_SOURCE_DEPT)))
+    if need_proposer:
+        missing.insert(0, "--proposer")
+    if need_dept:
+        missing.insert(1 if need_proposer else 0, "--source-dept")
+
     # ④ 组装字段（写入形态见 lark-base cell-value：select = 选项名数组、user = [{"id": open_id}]、链接列 = 纯 URL 字符串）
     fields = {}
     source = {}
@@ -602,12 +760,14 @@ def cmd_demand_plan(args):
             put(field, [checked[field]], "参数")
     if args.jira:
         keys = [k.strip() for k in args.jira.replace("，", ",").split(",") if k.strip()]
-        put(F_JIRA, "\n".join("[%s](%s%s)" % (k, JIRA_BROWSE, k) for k in keys), "参数")
+        base = jira_browse_base()
+        put(F_JIRA, "\n".join(("[%s](%s%s)" % (k, base, k)) if base else k for k in keys), "参数")
     put(F_VALUE, args.value, "参数")
     put(F_BRD, args.brd, "参数")
     put(F_NOTE, args.note, "参数")
     put(F_PM, [{"id": pm}], "参数" if args.pm else "默认=本人")
-    put(F_PROPOSER, [{"id": proposer}], "参数" if args.proposer else "默认=本人")
+    if proposer:
+        put(F_PROPOSER, [{"id": proposer}], proposer_origin)
 
     # ⑤ 预览表：必填缺失的格打「？」；update 模式下既有非空格标「既有行保留」；需求描述超长标「⚠ 过长」
     too_long = len(args.name) > NAME_MAX_LEN and not args.allow_long
@@ -618,10 +778,19 @@ def cmd_demand_plan(args):
              F_ITERATION, F_PROGRESS, F_VALUE, F_SOURCE_DEPT, F_BRD, F_NOTE]
     required = {F_NAME: "--name", F_MODULE: "--module",
                 F_PRIORITY: "--priority", F_ITERATION: "--iteration", F_PROGRESS: "--progress"}
+    asked = {}
+    if need_proposer:
+        asked[F_PROPOSER] = (proposer_origin if args.proposer else "") or "缺 --proposer（必问，不默认本人）"
+    if need_dept:
+        asked[F_SOURCE_DEPT] = "缺 --source-dept（必问，不默认）"
     table = []
     for field in order:
         if field == F_NAME and too_long:
             table.append([field, render(fields[field], 90), NAME_TOO_LONG])
+        elif field in asked:
+            table.append([field, ASK_PRODUCT, asked[field]])
+        elif field in (F_PROPOSER, F_SOURCE_DEPT) and field not in fields and not is_empty(existing.get(field)):
+            table.append([field, render(existing.get(field), 90), "既有行保留（已有值，不再问）"])
         elif field in fields:
             keep = mode == "update" and not is_empty(existing.get(field))
             if keep:
@@ -634,16 +803,23 @@ def cmd_demand_plan(args):
             table.append([field, "—", "未给（不写）"])
     print_table(["字段", "将写入的值", "来源"], table)
 
+    if need_proposer and proposer_hits:
+        print("\n需求提出方候选（让产品点一个，再用 --proposer <open_id> 跑一次）：")
+        print_user_candidates(proposer_hits)
+    if need_dept:
+        print_source_dept_options(base_token, table_id)
     if missing:
         print("\n必填参数缺失：%s —— 预览里对应格已打「？」，不写 plan。" % "、".join(missing))
     if too_long:
         print("\n需求描述 %d 字 > %d —— 预览里该格已标「⚠ 过长」，不写 plan"
               "（需求描述是 ≤20 字的短需求名；确需长名加 --allow-long）。" % (len(args.name), NAME_MAX_LEN))
+    if need_proposer or need_dept:
+        print("%s。" % SOURCE_UNSET_HINT)   # 预览末行（必问两格没给）
     if missing or too_long:
         return 2
 
     plan = {"mode": mode, "record_id": record_id, "base_token": base_token,
-            "table_id": table_id, "fields": fields,
+            "table_id": table_id, "fields": fields, "placeholders": [],
             "telemetry": {"requirement": args.requirement or args.name,
                           "platform": args.platform}}
     with open(args.out, "w", encoding="utf-8") as fh:
@@ -665,6 +841,23 @@ def cmd_demand_apply(args):
     fields = plan.get("fields") or {}
     record_id = plan.get("record_id")
 
+    # 「？」不进下一步：只认 kit 自己打的占位格（plan.placeholders / 值就是「？」或「？由产品指定」），
+    # 不扫需求价值 / 备注等自由文本里的正常问号；必问两格：新建行必须有值，既有行只在线上该格为空时必须有值
+    current = None
+    if mode == "update" and record_id:
+        current = get_record(base_token, table_id, record_id)
+    placeholders = set(plan.get("placeholders") or [])
+    asked = [f for f, v in fields.items()
+             if f in placeholders or v in ("？", ["？"], ASK_PRODUCT, [ASK_PRODUCT])
+             or (isinstance(v, str) and v.startswith(ASK_PRODUCT))]
+    unset = [f for f in (F_PROPOSER, F_SOURCE_DEPT)
+             if is_empty(fields.get(f)) and (current is None or is_empty(current.get(f)))]
+    if unset or asked:
+        reasons = (["%s 未指定（必问，不默认本人）" % " / ".join(unset)] if unset else []) + \
+                  (["%s 仍是「？」" % "、".join(asked)] if asked else [])
+        print("拒绝执行：%s —— 回 demand-plan 补齐后重出 plan。" % "；".join(reasons))
+        return 1
+
     written = fields
     if mode == "create":
         payload = json.dumps({"create_records": [fields]}, ensure_ascii=False)
@@ -674,7 +867,6 @@ def cmd_demand_apply(args):
         if not record_id:
             print("plan 里 mode=update 却没有 record_id，拒绝执行。")
             return 1
-        current = get_record(base_token, table_id, record_id)
         subset = {}
         skipped = []
         for field, value in fields.items():
@@ -806,6 +998,209 @@ def cmd_demand_update(args):
     if stale:
         print("🔴 回读与将写入的值对不上：%s —— 不重试，请到表里人工核对。" % "、".join(stale))
         return 1
+    # S7 巡检：`进展` 真被改了 → 自动记一行使用记录（模式 巡检更新；永不抛、失败只一行「未写入」）
+    if (F_PROGRESS in changes and changes[F_PROGRESS] is not None
+            and cell_key(current.get(F_PROGRESS)) != cell_key(changes[F_PROGRESS])):
+        requirement = args.requirement or render(final.get(F_NAME) or current.get(F_NAME))
+        print(telemetry_line(requirement, args.platform, "巡检更新"))
+    return 0
+
+
+# ---------------------------------------------------------------- demand-mine（S7 台账巡检，只读）
+
+
+def fetch_my_rows(base_token, table_id, open_id, modified_col=""):
+    """`base +record-list --filter-json`：`产品经理` intersects 本人 open_id，按 offset 翻页拉全。
+
+    实测（lark-cli 1.0.91，2026-11-05）：user 列用 `["产品经理","intersects",[{"id":"ou_…"}]]` 能直接下推过滤，
+    返回形状同 +record-search（fields + data 行矩阵 + record_id_list + has_more）。
+    返回 (rows, truncated)；rows = [{"record_id", "cells"}]。
+    """
+    cols = [F_PM, F_NAME, F_PROGRESS, F_ITERATION, F_JIRA, F_PRD] + ([modified_col] if modified_col else [])
+    flt = json.dumps({"logic": "and", "conditions": [[F_PM, "intersects", [{"id": open_id}]]]},
+                     ensure_ascii=False)
+    rows, offset = [], 0
+    while True:
+        args = ["base", "+record-list", "--base-token", base_token, "--table-id", table_id,
+                "--filter-json", flt]
+        for col in cols:
+            args += ["--field-id", col]
+        args += ["--offset", str(offset), "--limit", "200", "--as", "user"]
+        data = run_lark(args).get("data") or {}
+        fields = data.get("fields") or []
+        matrix = data.get("data") or []
+        rec_ids = data.get("record_id_list") or []
+        for i, raw_row in enumerate(matrix):
+            cells = dict((name, raw_row[j] if j < len(raw_row) else None) for j, name in enumerate(fields))
+            rows.append({"record_id": rec_ids[i] if i < len(rec_ids) else "", "cells": cells})
+        offset += len(matrix)
+        if not data.get("has_more") or not matrix:
+            return rows, False
+        if offset >= MINE_MAX_ROWS:
+            return rows, True
+
+
+def modified_column(base_token, table_id):
+    """表里有「最后修改」系统列就返回列名，没有返回 ""（拿不到字段表也按没有处理）。"""
+    try:
+        for meta in list_fields(base_token, table_id):
+            if meta["type"] in MODIFIED_TYPES:
+                return meta["name"]
+    except (LarkError, PlanError):
+        pass
+    return ""
+
+
+def jira_keys(value):
+    """`Jira单号/链接` 格 → KEY 列表（去重保序；`[KEY](…/browse/KEY)` 只算一次）。"""
+    text = value if isinstance(value, str) else render(value)
+    keys = []
+    for key in JIRA_KEY_FIND_RE.findall(text or ""):
+        if key not in keys:
+            keys.append(key)
+    return keys
+
+
+def iteration_date(text, today):
+    """`迭代版本` 选项名里解析日期 → date；解析不出 / 跨年歧义 → None。
+
+    `[APP]1111（6.32.0）` / `[WEB]0316` 按当前年假定；月份与当前月相差 6 个月以上视为跨年歧义、不判；
+    `[APP]26/0210` 这类带两位年份的直接用该年份。`[WEB]26_S23`、`下个迭代`、`待排期` 等 → None。
+    """
+    m = ITERATION_DATE_RE.match(text or "")
+    if not m:
+        return None
+    yy, month, day = m.group(1), int(m.group(2)), int(m.group(3))
+    if yy:
+        year = 2000 + int(yy)
+    else:
+        if abs(month - today.month) > 6:
+            return None
+        year = today.year
+    try:
+        return datetime.date(year, month, day)
+    except ValueError:
+        return None
+
+
+def progress_rank(text):
+    """`进展` 序号（`5. 开发中` → 5）；没有序号的脏值排在最后。"""
+    m = re.match(r"^\s*(\d+)\.", text or "")
+    return int(m.group(1)) if m else 100
+
+
+def render_modified(value):
+    """「最后修改」格：毫秒 / 秒时间戳 → YYYY-MM-DD；其它原样渲染。"""
+    if isinstance(value, (int, float)) and value > 0:
+        seconds = value / 1000.0 if value > 1e11 else float(value)
+        return datetime.datetime.fromtimestamp(seconds).strftime("%Y-%m-%d")
+    return render(value, 20)
+
+
+def mine_view(rows, today, show_all=False, modified_col=""):
+    """把拉回的行变成巡检表：过滤终态（--all 不滤）→ 标 ⚠ → 排序 → 计数。纯函数，离线可测。"""
+    items = []
+    for row in rows:
+        cells = row["cells"]
+        progress = render(cells.get(F_PROGRESS)).strip()
+        done = progress in PROGRESS_DONE
+        if done and not show_all:
+            continue
+        iteration = render(cells.get(F_ITERATION))
+        due = iteration_date(iteration, today)
+        overdue = (not done and progress not in PROGRESS_ACCEPTED and due is not None and due < today)
+        items.append({
+            "record_id": row["record_id"],
+            "name": render(cells.get(F_NAME), 40),
+            "progress": progress,
+            "iteration": iteration,
+            "jira": jira_keys(cells.get(F_JIRA)),
+            "prd": "无" if is_empty(cells.get(F_PRD)) else "有",
+            "modified": render_modified(cells.get(modified_col)) if modified_col else "",
+            "overdue": overdue,
+            "done": done,
+        })
+    items.sort(key=lambda it: (0 if it["overdue"] else 1, progress_rank(it["progress"]), it["iteration"]))
+    open_items = [it for it in items if not it["done"]]
+    counts = {
+        "open": len(open_items),
+        "overdue": sum(1 for it in open_items if it["overdue"]),
+        "with_jira": sum(1 for it in open_items if it["jira"]),
+        "without_jira": sum(1 for it in open_items if not it["jira"]),
+    }
+    return items, counts
+
+
+def mine_summary(counts):
+    return "巡检 %d 行未完结：⚠ 过期 %d / 有 Jira %d / 无 Jira %d" % (
+        counts["open"], counts["overdue"], counts["with_jira"], counts["without_jira"])
+
+
+def read_stamp(path):
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return fh.readline().strip()
+    except (OSError, ValueError):
+        return ""
+
+
+def write_stamp(path, day):
+    """写今天的 stamp；写不进去不影响巡检本身（下次照样再查一次）。"""
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(day + "\n")
+    except OSError:
+        pass
+
+
+def cmd_demand_mine(args):
+    """S7 台账巡检：列本人未完结的需求行（只读）。`--daily` 下任何前置缺失都只打一行 SKIP、退出 0。"""
+    today = datetime.date.today()
+    day = today.isoformat()
+    if args.daily and not args.force:
+        last = read_stamp(DEMAND_STAMP)
+        if last == day:
+            print("SKIP: 今天已巡检（%s）" % last)
+            return 0
+    try:
+        if shutil.which("lark-cli") is None:
+            raise PlanError("无 lark-cli")
+        lib = load_library()
+        base_token, table_id = demand_table(lib)
+        try:
+            me_id, _ = whoami_open_id()
+        except LarkError:
+            raise PlanError("lark-cli 未登录")
+        modified_col = modified_column(base_token, table_id)
+        rows, truncated = fetch_my_rows(base_token, table_id, me_id, modified_col)
+    except (LarkError, PlanError) as exc:
+        if not args.daily:
+            raise
+        reason = str(exc).split("\n", 1)[0]
+        if "sources" in reason or "清单" in reason or "公司配置" in reason:
+            reason = "无公司配置"
+        print("SKIP: %s" % reason[:80])
+        return 0
+    except Exception as exc:   # 巡检是顺带动作：--daily 下任何意外都不许卡住主流程
+        if not args.daily:
+            raise
+        print("SKIP: 巡检失败（%s）" % type(exc).__name__)
+        return 0
+
+    items, counts = mine_view(rows, today, show_all=args.all, modified_col=modified_col)
+    if args.json:
+        print(json.dumps({"date": day, "rows": items, "counts": counts}, ensure_ascii=False))
+    else:
+        print("本人需求台账（%s；%s）" % (day, "全部行" if args.all else "只列未完结；--all 看全部"))
+        table = [[OVERDUE_MARK if it["overdue"] else "", it["record_id"], it["name"], it["progress"],
+                  it["iteration"], ",".join(it["jira"]), it["prd"], it["modified"]] for it in items]
+        print_table(["标记", "record_id", F_NAME, F_PROGRESS, F_ITERATION, "Jira", F_PRD, "最后修改"], table)
+        if truncated:
+            print("（行数超过 %d，已截断；到表里按产品经理筛一次看全）" % MINE_MAX_ROWS)
+    if args.daily or args.force:
+        write_stamp(DEMAND_STAMP, day)
+    print(mine_summary(counts))
     return 0
 
 
@@ -1175,22 +1570,30 @@ def cmd_copy_review_apply(args):
 # 🔴 契约全文见 references/11-usage-telemetry.md（行号唯一来源 = csv-get 的 data.current_region
 #    尾部行号 N，写到 A<N+1>；取不到 N 就不写，禁止 fallback 到固定行；只在 auth status ok 时记；
 #    失败静默、不重试、不回读）。PRD_KIT_TELEMETRY=<spreadsheet_token>:<sheet_id> 是**测试专用**
-#    逃生口（正常回合绝不要设，设了就写不进公司表）。
-TELEMETRY_SPREADSHEET = "LFvMsXyKAhvW8Utprn4ugtPgs0f"
-TELEMETRY_SHEET_ID = "bf6df9"
-TELEMETRY_MODES = ("写", "升级", "自检", "建卡", "demo", "登记需求", "登记校对", "登记实验")
+#    逃生口（正常回合绝不要设，设了就写不进公司表）。2.1 起表坐标不随包分发：住公司配置
+#    telemetry.spreadsheet_token / telemetry.sheet_id（npx pm-ai-kit config 导入），没有就不记。
+TELEMETRY_MODES = ("写", "升级", "自检", "建卡", "demo", "登记需求", "登记校对", "登记实验", "巡检更新")
 TELEMETRY_PLATFORMS = ("claude", "codex", "kiro", "gemini", "antigravity")
 TELEMETRY_MANUAL = "——按 references/11-usage-telemetry.md 形态 A/B 手动补一行"
 
 
 def telemetry_target():
-    """表坐标：默认公司表；PRD_KIT_TELEMETRY=<token>:<sheet_id> 可整体顶掉（测试专用）。"""
+    """表坐标：PRD_KIT_TELEMETRY=<token>:<sheet_id>（测试专用）→ 公司配置 telemetry.spreadsheet_token
+    + telemetry.sheet_id → 都没有返回 (None, None)（调用方按「未写入」走）。"""
     env = (os.environ.get("PRD_KIT_TELEMETRY") or "").strip()
     if ":" in env:
         token, _, sheet_id = env.partition(":")
         if token.strip() and sheet_id.strip():
             return token.strip(), sheet_id.strip()
-    return TELEMETRY_SPREADSHEET, TELEMETRY_SHEET_ID
+    try:
+        tel = (load_company_config() or {}).get("telemetry") or {}
+    except Exception:
+        tel = {}
+    token = str(tel.get("spreadsheet_token") or "").strip() if isinstance(tel, dict) else ""
+    sheet_id = str(tel.get("sheet_id") or "").strip() if isinstance(tel, dict) else ""
+    if token and sheet_id:
+        return token, sheet_id
+    return None, None
 
 
 def telemetry_run(args):
@@ -1242,6 +1645,10 @@ def telemetry_write(requirement, platform, mode):
     if not platform:
         return "使用记录：未写入（缺 --platform）" + TELEMETRY_MANUAL
 
+    token, sheet_id = telemetry_target()
+    if not token or not sheet_id:
+        return "使用记录：未写入（无公司配置）" + TELEMETRY_MANUAL
+
     ok, out = telemetry_run(["auth", "status"])
     if not ok:
         return "使用记录：未写入（未登录）" + TELEMETRY_MANUAL
@@ -1254,7 +1661,6 @@ def telemetry_write(requirement, platform, mode):
     if not has_csv and not has_append:
         return "使用记录：未写入（本机 sheets 命令集不支持）" + TELEMETRY_MANUAL
 
-    token, sheet_id = telemetry_target()
     row = [telemetry_clean(v) for v in
            (time.strftime("%Y-%m-%d %H:%M"), user, requirement, platform, mode)]
 
@@ -1323,20 +1729,28 @@ def build_parser():
     parser = argparse.ArgumentParser(
         prog="register.py",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description="需求收集表 / 文案校对登记表 / 通用登记表 登记脚本（流水线 S3 / S4 / S6）。只调本机 lark-cli，不碰密钥。\n"
+        description="需求收集表 / 文案校对登记表 / 通用登记表 登记脚本（流水线 S3 / S4 / S6 / S7 台账巡检）。只调本机 lark-cli，不碰密钥。\n"
                     "另有 telemetry 子命令（使用采集，见 references/11-usage-telemetry.md §形态 C）：\n"
                     "  python3 register.py telemetry --requirement \"<需求名>\" --platform <平台> --mode <模式>\n"
                     "  永远退出码 0、只打印一行「使用记录：已写入 第N行 / 未写入（原因）」；\n"
                     "  demand-apply / copy-review-apply / row-apply 写入成功后各自动记一行\n"
                     "  （登记需求 / 登记校对 / 登记实验）。",
-        epilog="表格 / 表单坐标来自 references/12-library-manifest.json（sources[0] / forms.copy_review）；\n"
+        epilog="表格 / 表单坐标来自公司配置（sources[0] / forms.copy_review；schema 见 references/12-library-manifest.json）；\n"
                "通用登记表（S6 AB 实验表等）坐标与规则来自 forms.<key>（kind=base_table）；\n"
-               "用户级覆盖 ~/.prd-authoring-kit/library.json；测试用 PRD_KIT_LIBRARY=<json 路径> 顶掉两者。",
+               "公司配置 ~/.prd-authoring-kit/library.json（npx pm-ai-kit config <链接> 导入）；测试用 PRD_KIT_LIBRARY=<json 路径> 顶掉。",
     )
     sub = parser.add_subparsers(dest="command")
 
-    p = sub.add_parser("whoami", help="打印 lark-cli 登录人「姓名 | open_id」（登记人默认值）")
+    p = sub.add_parser("whoami", help="打印 lark-cli 登录人「姓名 | open_id」（产品经理默认值）")
     p.set_defaults(func=cmd_whoami)
+
+    p = sub.add_parser("user-find", help="按姓名 / 邮箱找 open_id 候选（只读；需求提出方解析用）",
+                       description="调 lark-cli contact +search-user，打印「姓名 | open_id | 部门」候选表，最多 %d 行；\n"
+                                   "零命中提示换关键词；多人命中把候选列给产品点，别自己挑。\n"
+                                   "缺 contact:user:search 授权时打一句退路提示（请产品给 open_id / @ 出人；不发起授权）。" % USER_FIND_LIMIT,
+                       formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("query", help="姓名或企业邮箱关键词")
+    p.set_defaults(func=cmd_user_find)
 
     p = sub.add_parser("demand-find", help="需求收集表里找既有行（防重复登记）",
                        description="关键词依次试：PRD 链接最后一段 token → --name → Jira KEY；\n"
@@ -1352,13 +1766,15 @@ def build_parser():
         "demand-plan", help="出需求收集表登记预览 + 写 plan json（不写表）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="五项必填：--name --module --priority --iteration --progress；**--prd 可选**。\n"
+                    "🔴 两项必问（2.2.2 起不默认本人）：--proposer（需求提出方）与 --source-dept（需求来源部门）——\n"
+                    "缺任一：预览格打「？由产品指定」、列出来源部门全量线上选项、末行提示「apply 会拒绝」、不写 plan。\n"
                     "先建卡后写 PRD 的需求照常登记：--prd 留空 → PRD 格留空，匹配既有行靠 --name / --jira，\n"
                     "PRD 事后用 `demand-update <record_id> --set PRD=<url> --yes` 补。\n"
                     "单选值在线校验（+field-search-options，必须与选项名完全相等；选项会变，脚本不内置枚举）。\n"
                     "既有行恰好 1 条 → update；多条 → 要 --record-id；0 条 → create。\n"
                     "字段映射：需求描述=--name / 产品模块=--module / PRD=--prd（纯 URL 字符串）/ "
-                    "Jira单号/链接=--jira（写成 [KEY](https://jira.mxcb.xyz/browse/KEY)，多张换行）/ "
-                    "产品经理=--pm、需求提出方=--proposer（user 字段写 [{\"id\":\"ou_…\"}]，默认本人）/ "
+                    "Jira单号/链接=--jira（写成 [KEY](<公司 Jira 地址>/browse/KEY)，多张换行；地址取 JIRA_URL / 公司配置 jira.url，无则写纯 KEY）/ "
+                    "产品经理=--pm（默认本人）、需求提出方=--proposer（必问：ou_… / self / 姓名·唯一命中才用；user 字段写 [{\"id\":\"ou_…\"}]）/ "
                     "优先级=--priority、迭代版本=--iteration、进展=--progress、需求来源部门=--source-dept"
                     "（select 字段写单元素数组 [\"选项名\"]）/ 需求价值=--value / BRD/MRD=--brd / 备注=--note。")
     p.add_argument("--prd", default="", help="PRD 飞书链接（可选；先建卡后写 PRD 时留空，事后 demand-update 补）")
@@ -1371,10 +1787,12 @@ def build_parser():
     p.add_argument("--progress", default="", help="【必填】进展选项名（刚登记 = 「0. 未开始」，产品从线上选项里点）")
     p.add_argument("--jira", default="", help="Jira KEY，多张用逗号分隔（WEB-19856,APP-37283）")
     p.add_argument("--value", default="", help="需求价值一句话")
-    p.add_argument("--source-dept", default="", help="需求来源部门选项名")
+    p.add_argument("--source-dept", default="", help="【必问】需求来源部门选项名（线上选项原文，让产品点；不猜）")
     p.add_argument("--brd", default="", help="BRD/MRD 链接")
     p.add_argument("--note", default="", help="备注")
-    p.add_argument("--proposer", default="", help="需求提出方 open_id（默认 = lark-cli 登录本人）")
+    p.add_argument("--proposer", default="",
+                   help="【必问】需求提出方：open_id（ou_…）/ self（产品明说是自己提的）/ 姓名或邮箱（唯一命中才用，"
+                        "多命中 / 零命中 → 「？」+ 候选）")
     p.add_argument("--pm", default="", help="产品经理 open_id（默认 = lark-cli 登录本人）")
     p.add_argument("--record-id", default="", help="强制更新该行（命中多行时必给）")
     p.add_argument("--requirement", default="", help="采集用需求名（默认 = --name；跨技能去重键，见 11 §需求名）")
@@ -1400,11 +1818,33 @@ def build_parser():
                     "**值留空 = 清空该格**（`--set 备注=`）。无 --yes 只打印将改的格并以退出码 2 结束；\n"
                     "写后 `+record-get` 回读并打印改后值。典型用法：产品当场改优先级 / 迭代版本 / 进展，\n"
                     "或先建卡后写 PRD 时事后补 `--set PRD=<url>`。")
-    p.add_argument("record_id", help="要改的行 record_id（先用 demand-find 查）")
+    p.add_argument("record_id", help="要改的行 record_id（先用 demand-find / demand-mine 查）")
     p.add_argument("--set", action="append", default=None, metavar="字段=值",
                    help="要改的格，可重复；值留空 = 清空该格")
     p.add_argument("--yes", action="store_true", help="确认执行；不给只打印将改的格并以退出码 2 结束")
+    p.add_argument("--requirement", default="",
+                   help="采集用需求名（默认 = 该行需求描述；只在「进展」被改时记一行 巡检更新）")
+    p.add_argument("--platform", default=os.environ.get("PRD_KIT_PLATFORM", ""),
+                   help="采集用平台 claude|codex|kiro|gemini|antigravity（默认读环境变量 PRD_KIT_PLATFORM）")
     p.set_defaults(func=cmd_demand_update)
+
+    p = sub.add_parser(
+        "demand-mine", help="台账巡检：列本人未完结的需求行（只读；S7，--daily 每天首次才查）",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="列出「产品经理」含 lark-cli 登录本人的行；默认只列「进展」不在终态"
+                    "（9. 已上线 / 0. 需求暂停 / 0. 需求取消 / 已归档 / 已废弃）的行。\n"
+                    "列：标记 | record_id | 需求描述 | 进展 | 迭代版本 | Jira（只取 KEY）| PRD（有/无）| 最后修改（表无该系统列则空）。\n"
+                    "排序：迭代版本解析出的日期早于今天且进展未到 8. 已验收 / 9. 已上线 → 标「⚠ 迭代日期已过」排最前；\n"
+                    "其余按进展序号升序。末行固定「巡检 N 行未完结：⚠ 过期 a / 有 Jira b / 无 Jira c」。\n"
+                    "--daily：今天已巡检（~/.prd-authoring-kit/demand-review.stamp）→ 打「SKIP: 今天已巡检（日期）」退出 0；\n"
+                    "无 lark-cli / 未登录 / 无公司配置 → 打一行「SKIP: <原因>」退出 0（不卡主流程）。\n"
+                    "本命令不写表；写回用 demand-update，一行一条命令、一行一回读，产品逐行点头才写。")
+    p.add_argument("--all", action="store_true", help="终态行也列（默认只列未完结）")
+    p.add_argument("--daily", action="store_true", help="每天首次才查：读写 stamp；前置缺失只打一行 SKIP、退出 0")
+    p.add_argument("--force", action="store_true", help="忽略 stamp 照查（手动「查一下我的需求」用）")
+    p.add_argument("--json", action="store_true",
+                   help="首行输出一个 JSON 对象（date / rows / counts），末行仍是固定汇总行")
+    p.set_defaults(func=cmd_demand_mine)
 
     p = sub.add_parser(
         "row-plan", help="通用行登记预览 + 写 plan json（manifest forms.<key> 驱动，如 S6 AB 实验表）",
@@ -1482,7 +1922,7 @@ def build_parser():
     p.add_argument("--platform", default="", choices=list(TELEMETRY_PLATFORMS),
                    help="平台：claude|codex|kiro|gemini|antigravity（不给 = 未写入（缺 --platform））")
     p.add_argument("--mode", required=True, choices=list(TELEMETRY_MODES),
-                   help="模式：写|升级|自检|建卡|demo|登记需求|登记校对|登记实验")
+                   help="模式：写|升级|自检|建卡|demo|登记需求|登记校对|登记实验|巡检更新")
     p.set_defaults(func=cmd_telemetry)
 
     return parser

@@ -1,0 +1,20 @@
+{
+  "type": "state",
+  "title": "申请单状态流转",
+  "subtitle": "一张申请单有哪些状态、谁在什么条件下推动它变化",
+  "states": [
+    {"id": "pending", "text": "待处理", "final": false},
+    {"id": "approved", "text": "已通过", "final": true},
+    {"id": "rejected", "text": "未通过", "final": false},
+    {"id": "withdrawn", "text": "已撤回", "final": true}
+  ],
+  "initial": "pending",
+  "transitions": [
+    {"from": "pending", "to": "approved", "label": "系统校验通过", "by": "system", "style": "solid"},
+    {"from": "pending", "to": "rejected", "label": "运营人工驳回", "by": "human", "style": "solid"},
+    {"from": "rejected", "to": "pending", "label": "用户重新提交", "by": "system", "style": "solid"},
+    {"from": "pending", "to": "pending", "label": "补充材料", "by": "system", "style": "dashed"},
+    {"from": "pending", "to": "withdrawn", "label": "用户撤回", "by": "system", "style": "solid"}
+  ],
+  "notes": ["已通过 / 已撤回为终态，不再接受任何操作。"]
+}

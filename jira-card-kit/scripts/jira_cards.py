@@ -8,7 +8,8 @@
      唯一持有者：弹框、取值、落盘、验证全在工具内部，AI 与用户都不必碰终端）
   3) ~/.claude/settings.json 顶层 env 块（**已降级的兼容位**：老配置照读，但每次读到都打 WARN
      催迁移——该文件 AI 因别的任务会整份打开，token 放这里迟早进上下文）
-Base URL：环境变量 JIRA_URL → settings.json 的 env.JIRA_URL → 默认 https://jira.mxcb.xyz
+Base URL：环境变量 JIRA_URL → ~/.jira-card-kit/config.json 的 jira_url → 公司配置 jira.url（npx pm-ai-kit config）
+  → settings.json 的 env.JIRA_URL（兼容位）→ 无则报错
 🔴 职责分离（硬契约，SKILL.md 顶部同款）：**skill 只做行动规划与需求匹配，本工具是唯一的
    认证与 Jira 通道**。AI 绝对禁止：① 读/写/ls/cat ~/.jira-card-kit/ 下任何文件（token 与
    config 都算，config 的读写走 config-show / config-set）；② 以任何方式直连 Jira API
@@ -22,26 +23,50 @@ Base URL：环境变量 JIRA_URL → settings.json 的 env.JIRA_URL → 默认 h
                             token 不进 stdout、不进 argv、不进对话。无 GUI / 非 macOS /
                             osascript 被拦时打印终端引导并 exit 1。
   whoami                    验证认证，打印当前用户
+  pat-page                  打印本公司 Jira 建 token 页地址（只读）
   config-show               打印本机配置 ~/.jira-card-kit/config.json（AI 读配置的唯一入口）
   config-set <键> <值>       只合并指定键写回配置（键支持 a.b 嵌套，如 tracking_assignees.review）；
                             凭据类键一律拒收——token 不进 config
   user-search <关键词>       按名字搜用户（拿 assignee 用的 username）
-  beneficiary-options [项目] [--issue <KEY>]
+  find --keyword <词> [--project APP|WEB] [--mine] [--all-types] [--limit N]
+                            **只读**按关键词查卡（summary ~ 词，按创建时间倒序）：这个需求的卡
+                            建没建过。打印 卡号|类型|状态|summary|经办人|子任务数。
+                            🔴 **查不到 ≠ 没建**——换个说法再试，或让产品给卡号。
+  show <KEY>                **只读**看一张卡：主卡一行 + 子任务树（卡号|类型|summary|经办人|状态）。
+                            【UI设计任务】经办人为空会单独标一行「未指派设计师」。
+  createmeta --project APP|WEB --issuetype <类型名>
+                            **只读**打印该项目/类型的建单字段：fieldId|名称|required|允许值
+                            （级联字段把子项跟在父项后面）。apply 撞 400 查这里，别自己直发 REST。
+  beneficiary-options [项目] [--issue <KEY>] [--match "<简称>"]
                             实时拉取受益方(cf_16706)的线上选项原文（默认项目 APP），
                             供产品本人从中亲选。本 kit **不内置**受益方枚举——
                             此 skill 全组产品共用、各人受益方不同，写死等于诱导错填。
-  epic-candidates [--from KEY1,KEY2] [--keyword "词"…] [--project APP|WEB]
-                            **只读**捞 Epic 候选：读主卡/历史关联需求卡（--from）与同族卡
-                            （--keyword+--project，JQL 取最近 10 张）实际挂的 Epic，按出现
-                            次数排序，每个 Epic GET 一次取名称与状态（已收口的标「不建议」
-                            排后），配置里的 last_epic 只作**末位**候选标「上次用的」。
-                            输出「Epic 名称 | 卡号 | 依据 | 状态」候选表——**候选不是决定**，
-                            仍必须由产品确认；零候选就明说"未找到关联 Epic"，绝不编。
+                            `--match "<产品答的简称>"` 把简称切成 token（`Jackie-直客`
+                            → jackie + 直客）做全token包含匹配，只打命中的几条；
+                            多命中一律列给产品点，**不得自选**。
+  epic-candidates [--main KEY] [--from KEY1,KEY2] [--keyword "词"…] [--project APP|WEB]
+                            **只读**捞 Epic 候选，**相关性优先、只推荐相关的**（v1.6.6）：
+                            ① 历史关联需求挂的 Epic（--keyword 同族卡 + --from 的历史卡）；
+                            ② 主卡挂的 Epic（--main，或 --from 的**第一张**）——附**主卡合理性
+                               sanity**：主卡卡名与需求关键词零重合就提示"确认卡号？"并把它
+                               带出来的 Epic 降末位标注；
+                            ③ last_epic **不再是候选**，只在①②全空时提一句"上次用的是「X」，
+                               但与本需求查不到关联，不建议直接沿用"。
+                            输出每条**整行就是选项文本**：`「名称」(卡号)——依据`（依据进文本
+                            本身，不另起一列）。**单强候选**（关联卡 ≥2 张且无同级竞争）改出
+                            「建议挂 X / 换一个 / 不挂」的推荐形态，不再平铺一堆。
+                            **候选不是决定**，仍必须由产品确认；零候选就明说"未找到相关 Epic"，绝不编。
   epic-search --name "名称片段" [--project APP|WEB]
                             按**名称**找 Epic（≤10 条，名称|卡号|状态）——让产品用名字回答，
                             卡号由工具找。多命中一律列出来让他选，不许猜。
   validate <plan.json>      校验计划并打印建单计划表（不创建任何东西）
-  apply <plan.json>         执行创建；结果写 <plan>.result.json；中断后重跑自动续传
+  apply <plan.json> [--platform claude|codex|kiro|gemini|antigravity] [--no-telemetry]
+                            执行创建；结果写 <plan>.result.json；中断后重跑自动续传。
+                            **全部建成后自动记一行使用记录**（调主 kit 的
+                            `scripts/register.py telemetry --mode 建卡`，需求名 = plan.meta.requirement，
+                            平台 = --platform 或 plan.meta.platform），并把它那行状态原样转打在输出末尾；
+                            采集失败只打一行「未写入（原因）」，绝不影响本命令的退出码。
+                            `--no-telemetry` 明确关闭采集，打一行「按 --no-telemetry 未写入」。
   show-result <plan.json>   重新打印上次 apply 的结果清单
   discard <key...> --reason "去向说明" [--apply]
                             把卡转为「废弃」并留评论（团队惯例：不删卡，废弃留痕）。
@@ -64,14 +89,18 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-DEFAULT_JIRA_URL = "https://jira.mxcb.xyz"
 KIT_DIR = os.path.expanduser("~/.jira-card-kit")
 TOKEN_FILE = os.path.join(KIT_DIR, "token")
 CONFIG_FILE = os.path.join(KIT_DIR, "config.json")
 
 # PAT 建 token 页直达（Atlassian 内置 PAT 插件的 profile 标签，2026-08-27 实测可达）
-PAT_PAGE_URL = (DEFAULT_JIRA_URL + "/secure/ViewProfile.jspa"
-                "?selectedTab=com.atlassian.pats.pats-plugin:jira-user-personal-access-tokens")
+
+
+def pat_page_url(base):
+    return (base + "/secure/ViewProfile.jspa"
+            "?selectedTab=com.atlassian.pats.pats-plugin:jira-user-personal-access-tokens")
+
+
 # 主路（macOS）：系统原生密码框取 token，AppleScript 文件 API **进程内**直写落盘。
 # token 不进 stdout、不进 argv、不进 shell 历史、不进对话——这段脚本唯一的输出是
 # "OK"（落盘成功）或 "CANCELLED"（用户点了取消 / 留空）。
@@ -116,7 +145,7 @@ TOKEN_TERMINAL_GUIDE = (
 TOKEN_SETUP_HINT = (
     "找不到 Jira token。跑 `python3 scripts/jira_cards.py setup-token` 完成配置。\n"
     "  引导细节（用户不必碰终端，AI 也永远看不到 token）：\n"
-    "  1) 先帮用户打开建 token 的页面：open \"" + PAT_PAGE_URL + "\"\n"
+    "  1) 先帮用户打开建 token 的页面：open \"<PAT_PAGE_URL>\"\n"
     "  2) 告诉他只做两个动作：点 Create token（名字随便）→ 点复制按钮 → 回来说一句「复制好了」。\n"
     "     ⚠️ 明确告诉他：别把 token 贴给 AI，AI 不需要看到它。\n"
     "  3) 跑 setup-token：工具自己弹系统原生密码框（输入显示为圆点）、把取回的文本进程内直写\n"
@@ -192,7 +221,14 @@ STORY_REQUIRED_CF = {
 BENEFICIARY_FIELD = "customfield_16706"  # 业务板块（需求受益方）：成本归属，定额消费，错填=让别人埋单
 EPIC_FIELD = "customfield_10102"          # 史诗链接（裸字符串卡号）：每批必须由产品指定，不许推断
 SUBTASK_TYPES = {"子任务", "国际化任务", "UI设计任务", "UI验收任务"}
-KNOWN_TYPES = {"故事"} | SUBTASK_TYPES
+EPIC_TYPE = "Epic"                        # 新建 Epic（v1.8）：一批只建一张
+KNOWN_TYPES = {"故事", EPIC_TYPE} | SUBTASK_TYPES
+# Epic 建卡必填（createmeta 2026-09-16 实测）：史诗名称不给就 = summary（build_payload 兜底）；
+# WEB 还要需求类别 + 预期交付日期（= 产品给的上线日期，不许编）。
+EPIC_REQUIRED_CF = {"APP": ["customfield_10104"],
+                    "WEB": ["customfield_10104", "customfield_11319", "customfield_11802"]}
+EPIC_NAME_FIELD = "customfield_10104"     # 史诗名称
+EPIC_DUE_FIELD = "customfield_11802"      # 预期交付日期（WEB 必填，YYYY-MM-DD）
 KNOWN_LINK_TYPES = {"Cloners", "Relates", "Blocks", "Duplicate"}
 # summary 前缀 = 房规，恒用**一层全角**【端】（Noah 2026-08-27 拍板；抽样 94 张真卡里两层 0 张）。
 # 判定见 check_summary_prefix()：无前缀=ERROR、两层【】=WARN、半角 []=WARN。
@@ -229,6 +265,7 @@ ENUM_ALLOWED = {
     "customfield_11519": ["前端", "后端", "前后端", "配置变更"],
     "customfield_17200": ["是", "否"],
     "customfield_15700": ["是", "否"],
+    # cf_12902 是**级联字段**：这里列的是**父项**，子项见 SEO_CHILDREN（校验按父项判 child）
     "customfield_12902": ["无需SEO", "需SEO判断", "有公开落地页"],
     # customfield_16706（受益方）不列枚举——见上方红线，走线上实时拉取
 }
@@ -241,6 +278,15 @@ ENUM_LABELS = {
     "customfield_17200": "是否是合规站", "customfield_15700": "是否涉及运营配置",
     "customfield_12902": "是否需要SEO", "customfield_16706": "业务板块（受益方）",
 }
+
+# ---- WEB 故事的两处「隐藏必填」（2026-09-24 只读 createmeta + apply 400 实测）----
+# createmeta 的 required 标记**不等于**能不能不填：Jira 工作流校验器会在建卡时另外拦一道。
+NATIVE_FIELD = "customfield_12002"   # 是否为原生需求：createmeta required=False，
+                                     # 但缺它 apply 会 400「请确认「是否为原生需求」是否填写准确」
+SEO_FIELD = "customfield_12902"      # 是否需要SEO：**cascadingselect 级联字段**
+SEO_NO_CHILD_PARENT = "无需SEO"       # 唯一没有子项的父项；另两个父项缺 child → 400「is required.」
+SEO_CHILDREN = ["路由改动", "文案改动", "页面改动（模块改动/移除、代码改动、页面删除）",
+                "路由+文案改动", "路由+页面改动", "文案+页面改动"]
 
 
 def whitespace_hint(real, typed=None):
@@ -299,6 +345,52 @@ def read_token_file():
 _CREDS = {}
 
 
+def _load_company_config():
+    """公司配置（主 kit `scripts/company_config.py` 的 load_company_config）；模块找不到 / 读失败 → None。
+
+    主 kit scripts 目录按 register_script_path() 的布局找（skills 同级 / 仓库 `../../../scripts` / …）。
+    """
+    here = os.path.dirname(os.path.realpath(__file__))
+    reg = register_script_path()
+    for d in ([os.path.dirname(reg)] if reg else []) + [os.path.normpath(os.path.join(here, "..", "..", "..", "scripts"))]:
+        if os.path.isfile(os.path.join(d, "company_config.py")):
+            if d not in sys.path:
+                sys.path.insert(0, d)
+            break
+    try:
+        from company_config import load_company_config
+    except ImportError:
+        return None
+    try:
+        cfg = load_company_config()
+    except Exception:
+        return None
+    return cfg if isinstance(cfg, dict) else None
+
+
+def resolve_url():
+    """Jira 地址：env JIRA_URL → ~/.jira-card-kit/config.json 的 jira_url → 公司配置 jira.url
+    → settings.json 的 env.JIRA_URL（兼容位）→ 都没有 die。只解析地址、不碰 token（pat-page 共用）。"""
+    url = (os.environ.get("JIRA_URL") or "").strip()
+    if not url:
+        url = str(load_config().get("jira_url") or "").strip()
+    if not url:
+        jira = (_load_company_config() or {}).get("jira")
+        url = str((jira if isinstance(jira, dict) else {}).get("url") or "").strip()
+    if not url and os.path.exists(SETTINGS_JSON):
+        try:
+            env = json.load(open(SETTINGS_JSON)).get("env", {})
+            url = str(env.get("JIRA_URL") or "").strip()
+        except (json.JSONDecodeError, OSError, AttributeError):
+            pass
+    if not url:
+        die("没有 Jira 地址：跑一次 npx pm-ai-kit config <飞书配置文档链接>（链接在群公告），或设环境变量 JIRA_URL。")
+    # 形状校验：地址会拼进请求 URL 与 `open` 命令，不接受 shell 元字符 / 空白（配置文件被手改也挡住）
+    if not re.fullmatch(r"https://[A-Za-z0-9.-]+(?::[0-9]{2,5})?(?:/[A-Za-z0-9._~%/-]*)?", url):
+        die("Jira 地址形状不对（只接受 https://域名[:端口][/路径]，无空白与特殊字符）：请检查公司配置 jira.url 或环境变量 JIRA_URL。")
+    return url.rstrip("/")
+
+
 def load_credentials():
     """token 顺序：env JIRA_PAT / JIRA_PERSONAL_TOKEN → token 文件 → settings.json（**已降级的兼容位**）。
 
@@ -308,24 +400,22 @@ def load_credentials():
     """
     if _CREDS:
         return _CREDS["url"], _CREDS["token"]
-    url = os.environ.get("JIRA_URL")
+    url = resolve_url()
     token = os.environ.get("JIRA_PAT") or os.environ.get("JIRA_PERSONAL_TOKEN")
     if not token:
         token = read_token_file()
-    if not (url and token):
+    if not token:
         if os.path.exists(SETTINGS_JSON):
             try:
                 env = json.load(open(SETTINGS_JSON)).get("env", {})
-                url = url or env.get("JIRA_URL")
-                if not token:
-                    token = env.get("JIRA_PAT") or env.get("JIRA_PERSONAL_TOKEN")
-                    if token:
-                        warn_settings_json_token()
+                token = env.get("JIRA_PAT") or env.get("JIRA_PERSONAL_TOKEN")
+                if token:
+                    warn_settings_json_token()
             except (json.JSONDecodeError, OSError):
                 pass
     if not token:
-        die(TOKEN_SETUP_HINT)
-    _CREDS["url"] = (url or DEFAULT_JIRA_URL).rstrip("/")
+        die(TOKEN_SETUP_HINT.replace("<PAT_PAGE_URL>", pat_page_url(url)))
+    _CREDS["url"] = url
     _CREDS["token"] = token
     return _CREDS["url"], _CREDS["token"]
 
@@ -395,7 +485,7 @@ def split_allowed(meta, field, where):
 def fetch_field_options(project, issuetype="故事", field=BENEFICIARY_FIELD, sample_key=None):
     """实时拉取某项目/类型下某字段的线上允许值原文，返回 (可选, 已停用)。会话内缓存一次。
 
-    主路 = createmeta 分页接口（jira.mxcb.xyz 是 Jira Server 9.12，扁平 createmeta 已下线、
+    主路 = createmeta 分页接口（公司实例是 Jira Server 9.12，扁平 createmeta 已下线、
     直接 404 "Issue Does Not Exist"，2026-08-26 实测）：
         /rest/api/2/issue/createmeta/{项目}/issuetypes           → 按名字找类型 id
         /rest/api/2/issue/createmeta/{项目}/issuetypes/{类型id}   → 找字段的 allowedValues
@@ -473,6 +563,14 @@ def normalize(s):
     return " ".join(str(s).split())
 
 
+MATCH_TOKEN_SPLIT_RE = re.compile(r"[^0-9A-Za-z\u4e00-\u9fff]+")
+
+
+def match_tokens(s):
+    """把产品口头的简称（「Jackie-直客」）切成匹配 token：按非字母数字、非汉字切，统一小写。"""
+    return [t.lower() for t in MATCH_TOKEN_SPLIT_RE.split(s or "") if t]
+
+
 def check_summary_prefix(summary):
     """房规：summary 恒用**一层全角**【端】前缀（Noah 2026-08-27 拍板）。
 
@@ -505,8 +603,10 @@ def load_plan(path):
         plan = json.load(open(path))
     except json.JSONDecodeError as e:
         die(f"计划文件不是合法 JSON: {e}")
-    if not isinstance(plan.get("cards"), list) or not plan["cards"]:
-        die("plan.cards 必须是非空数组")
+    if not isinstance(plan.get("cards"), list) or (
+            not plan["cards"] and not plan.get("links")):
+        die("plan.cards 必须是非空数组"
+            "（只给已有卡补链接时 cards 可为 []，但 links 必须非空）")
     return plan
 
 
@@ -551,13 +651,38 @@ def check_beneficiary_live(plan, errors):
                           "让产品本人从中亲选一条，再逐字填回。")
 
 
+def subtask_only_parents(plan):
+    """纯子任务批次（本批只在**已有主卡**下建子任务、不建故事）→ 父卡号列表（去重保序）；否则 None。
+
+    判据：cards 非空，且每张都是子任务类型、带 `fields.parent.key`（已有卡号）、不用 parent_ref。
+    受益方 / Epic / 端范围是故事卡的字段，这种批次不问；validate 不报 Epic 警告（SKILL 步骤 3）。
+    """
+    keys = []
+    for c in plan.get("cards") or []:
+        parent = (c.get("fields") or {}).get("parent")
+        k = parent.get("key") if isinstance(parent, dict) else None
+        if (c.get("issuetype") not in SUBTASK_TYPES or c.get("parent_ref")
+                or not isinstance(k, str) or not k.strip()):
+            return None
+        if k.strip() not in keys:
+            keys.append(k.strip())
+    return keys or None
+
+
 def check_epics_live(plan, errors, warnings):
-    """Epic 建卡前必验：卡号不存在(404)就别建。返回 {key: {summary, type}} 供计划表展示。"""
+    """Epic 建卡前必验：卡号不存在(404)就别建。返回 {key: {summary, type}} 供计划表展示。
+
+    只核对**字面卡号**的 customfield_10102；用 `epic_ref` 挂本批新建 Epic 的卡跳过（卡号 apply 时才有）。
+    """
     keys = {}
     for i, c in enumerate(plan["cards"]):
         k = (c.get("fields") or {}).get(EPIC_FIELD)
         if isinstance(k, str) and k.strip():
             keys.setdefault(k.strip(), []).append(c.get("ref") or f"cards[{i}]")
+    if not keys and any(c.get("epic_ref") for c in plan["cards"]):
+        return {}  # 全批挂本轮新建的 Epic（epic_ref），卡号 apply 时才有，不算"没问 Epic"
+    if not keys and subtask_only_parents(plan):
+        return {}  # 纯子任务批次：Epic 是故事卡的字段，子任务不问 Epic，不报「没填史诗链接」
     if not keys:
         warnings.append(f"没有任何卡填史诗链接({EPIC_FIELD})——Epic 是每批必问项："
                         "确认过「这批卡挂哪个 Epic？（给卡号）」且产品明确说不挂，才可以留空。"
@@ -615,6 +740,30 @@ def check_link_targets_live(plan, warnings):
     return names
 
 
+def check_parent_cards_live(plan, warnings):
+    """纯子任务批次：把父卡（已有卡号）解析成卡名，供计划表「挂载」列按「名称」(卡号) 展示。
+
+    🔴 展示纪律同 check_link_targets_live：**只影响展示、不改校验强度**；
+    读不回卡名只 WARN，挂载列退回裸卡号。
+    """
+    names = {}
+    for k in subtask_only_parents(plan) or []:
+        try:
+            summary = (api("GET", f"/rest/api/2/issue/{k}",
+                           params={"fields": "summary"}).get("fields") or {}).get("summary") or ""
+            why = "" if summary else "卡名为空"
+        except (AuthError, NetworkError):
+            raise
+        except (HttpError, RuntimeError) as e:
+            summary, why = "", short_err(e)
+        if summary:
+            names[k] = summary
+        else:
+            warnings.append(f"父卡「{k}」读不回卡名（{why}）——卡号写错的话 apply 建子任务会失败，"
+                            "确认一下；计划表挂载列先显示裸卡号。")
+    return names
+
+
 def check_versions_live(plan, errors, warnings):
     """fixVersions 必须是该项目线上**真实存在**的版本名（占位版本也一样要对得上）。
 
@@ -660,8 +809,8 @@ def check_versions_live(plan, errors, warnings):
                               f"（{whitespace_hint(hit, name)}）——整条复制线上版本名。")
             else:
                 errors.append(f"{who}: fixVersions「{name}」在项目 {proj} 里不存在"
-                              f"（线上共 {len(table)} 个版本）。占位是**分端**的：iOS 卡填 iOS_ 那条、"
-                              "Android 卡填 安卓_ 那条、Flutter 卡填 Flutter_ 那条；"
+                              f"（线上共 {len(table)} 个版本）。占位是**分端**的：Flutter 卡填 Flutter_ 那条、"
+                              "原生双端时 iOS 卡填 iOS_ 那条、Android 卡填 安卓_ 那条；"
                               "已排期就填真实版本号——一律以线上版本名为准。")
             continue
         if v.get("archived"):
@@ -692,8 +841,9 @@ def validate_plan(plan, online=True):
                 errors.append(f"{tag}: 缺 {k}")
         if c.get("issuetype") and c["issuetype"] not in KNOWN_TYPES:
             errors.append(f"{tag}: 未知 issuetype「{c['issuetype']}」(支持: {sorted(KNOWN_TYPES)})")
-        if c.get("summary"):
+        if c.get("summary") and c.get("issuetype") != EPIC_TYPE:
             # 房规＝一层全角【端】（Noah 2026-08-27 拍板）。无前缀拦、两层与半角只提醒。
+            # Epic 的 summary 是**专项名**（如「MEXC 广场」），不带【端】前缀——跳过本检查。
             hit = check_summary_prefix(c["summary"])
             if hit:
                 (errors if hit[0] == "error" else warnings).append(f"{tag}: {hit[1]}")
@@ -723,8 +873,65 @@ def validate_plan(plan, online=True):
                 errors.append(f"{tag}: v1 只支持项目 APP / WEB，收到「{c.get('project')}」")
             if missing:
                 errors.append(f"{tag}: 故事缺必填字段 {missing}")
+            if c.get("project") == "WEB" and "customfield_11506" in fields:
+                errors.append(f"{tag}: WEB 项目没有「依赖交付情况」(customfield_11506) 字段，"
+                              "填了 apply 会 400——WEB 故事删掉这个键")
+            if c.get("project") == "WEB":
+                # 两处**隐藏必填**：createmeta 都不标 required，但工作流校验器会 400（2026-09-24 实测）
+                if NATIVE_FIELD not in fields:
+                    errors.append(f"{tag}: WEB 故事缺「是否为原生需求」({NATIVE_FIELD})——"
+                                  "createmeta 不标必填但 Jira 校验器会 400；"
+                                  "值：该需求是原生需求 / 该需求是派生需求 / 待确认")
+                seo = fields.get(SEO_FIELD)
+                if isinstance(seo, dict) and seo.get("value"):
+                    sv = seo["value"]
+                    kid = (seo.get("child") or {}).get("value")
+                    if sv != SEO_NO_CHILD_PARENT and not kid:
+                        errors.append(f"{tag}: 是否需要SEO({SEO_FIELD})「{sv}」是级联字段，"
+                                      "必须带 child——子项：" + " / ".join(SEO_CHILDREN))
+                    elif sv == SEO_NO_CHILD_PARENT and kid:
+                        warnings.append(f"{tag}: 是否需要SEO({SEO_FIELD})「{sv}」是**无子项**的父项，"
+                                        f"却带了 child「{kid}」——删掉 child（只有 需SEO判断 / "
+                                        "有公开落地页 才带子项）")
+            # 跨项目字段串门：APP / WEB 的必填表互不相同，填了别家的 cf，apply 时 400 停在这张卡
+            project = c.get("project")
+            own = STORY_REQUIRED_CF.get(project, [])
+            for cf in fields:
+                if cf in own or (project == "WEB" and cf == "customfield_11506"):
+                    continue  # cf_11506 on WEB 已在上面报 ERROR，不再重复 WARN
+                other = next((p for p, cfs in STORY_REQUIRED_CF.items()
+                              if p != project and cf in cfs), None)
+                if other:
+                    warnings.append(f"{tag}: {cf} 是 {other} 项目的字段，{project} 项目可能没有"
+                                    "（实测 WEB 填 cf_11506 → 400），建议删掉")
             if not fields.get("description"):
                 warnings.append(f"{tag}: description 为空——房规是贴 PRD lark 链接")
+        if c.get("issuetype") == EPIC_TYPE:
+            need = EPIC_REQUIRED_CF.get(c.get("project"))
+            if need is None:
+                errors.append(f"{tag}: v1 只在 APP / WEB 项目建 Epic")
+            else:
+                missing = [cf for cf in need if cf != EPIC_NAME_FIELD and cf not in fields]
+                if missing:
+                    errors.append(f"{tag}: Epic 缺必填字段 {missing}"
+                                  "——预期交付日期 = 产品给的上线日期，不许编")
+            due = fields.get(EPIC_DUE_FIELD)
+            if due is not None and not re.match(r"^\d{4}-\d{2}-\d{2}$", str(due)):
+                errors.append(f"{tag}: 预期交付日期({EPIC_DUE_FIELD}) 要写 YYYY-MM-DD")
+            if not fields.get(EPIC_NAME_FIELD):
+                warnings.append(f"{tag}: 史诗名称({EPIC_NAME_FIELD}) 未填，apply 时 = summary")
+            for cf in (BENEFICIARY_FIELD, EPIC_FIELD, "fixVersions"):
+                if cf in fields:
+                    errors.append(f"{tag}: Epic 不填 {cf}")
+        if c.get("epic_ref"):
+            if fields.get(EPIC_FIELD):
+                errors.append(f"{tag}: epic_ref 与 {EPIC_FIELD} 只能二选一")
+            ei = next((j for j, x in enumerate(plan["cards"])
+                       if x.get("ref") == c["epic_ref"] and x.get("issuetype") == EPIC_TYPE), None)
+            if ei is None:
+                errors.append(f"{tag}: epic_ref「{c['epic_ref']}」不在 cards 里或不是 Epic 卡")
+            elif ei >= i:
+                errors.append(f"{tag}: epic_ref「{c['epic_ref']}」指向的 Epic 卡必须排在本卡前面")
         if c.get("issuetype") in SUBTASK_TYPES:
             parent = c.get("parent_ref") or fields.get("parent", {}).get("key")
             if not parent:
@@ -738,6 +945,9 @@ def validate_plan(plan, online=True):
         for cf, why in BOT_FIELDS.items():
             if cf in fields:
                 errors.append(f"{tag}: 字段 {cf} 是{why}，plan 里不允许出现")
+    new_epics = [c for c in plan["cards"] if c.get("issuetype") == EPIC_TYPE]
+    if len(new_epics) > 1:
+        errors.append(f"一批只建一张 Epic（收到 {len(new_epics)} 张）")
     has_story = any(c.get("issuetype") == "故事" for c in plan["cards"])
     if has_story:
         meta = plan.get("meta") or {}
@@ -747,6 +957,15 @@ def validate_plan(plan, online=True):
                           "先问用户「这个需求做成后收益归谁」，拿到明确答复再填确认人。")
         if not meta.get("beneficiary_rationale"):
             errors.append("plan.meta.beneficiary_rationale 未填——写明用户给出的判定依据（原话浓缩），供复核。")
+        # 推断项只 WARN 不 ERROR：它们是**可选项**（分级里非阻塞），缺依据要补、但不该拦住建卡。
+        notes = meta.get("inference_notes") or {}
+        stories = [c for c in plan["cards"] if c.get("issuetype") == "故事"]
+        for alias, fid, label, _rule in INFERRED_FIELDS:
+            if any(fid in (c.get("fields") or {}) for c in stories) and not notes.get(alias):
+                warnings.append(f"{label}({fid}) 填了值但没写依据——它是**推断项、不是提问项**："
+                                f"在 plan.meta.inference_notes.{alias} 补一句依据"
+                                f"（形如「埋点=是，依据：新增 AI 机会卡片页面 + 2 个新入口」），"
+                                "产品才判断得了对不对。判据见上方「推断项」区块。")
     for i, l in enumerate(plan.get("links", [])):
         tag = f"links[{i}]"
         if l.get("type") not in KNOWN_LINK_TYPES:
@@ -759,11 +978,12 @@ def validate_plan(plan, online=True):
                 errors.append(f"{tag}: {side}_ref「{ref}」不在 cards 里")
             if key and not re.match(r"^[A-Z][A-Z0-9]+-\d+$", key):
                 errors.append(f"{tag}: {side}「{key}」不像 Jira key")
-    live = {"epics": {}, "links": {}}
+    live = {"epics": {}, "links": {}, "parents": {}}
     if online:
         check_beneficiary_live(plan, errors)
         live["epics"] = check_epics_live(plan, errors, warnings)
         live["links"] = check_link_targets_live(plan, warnings)
+        live["parents"] = check_parent_cards_live(plan, warnings)
         check_versions_live(plan, errors, warnings)
     return errors, warnings, live
 
@@ -784,6 +1004,48 @@ def brief_fields(c):
     if f.get("customfield_10102"):
         out.append(f"epic={f['customfield_10102']}")
     return ", ".join(out)
+
+
+# ---- 推断项（v1.6.6）：这四项**不作为单独提问**，按判据推断 + 计划表里附一句依据让产品改 ----
+# 由来：产品实测原话——"**新页面应该要自己判断，埋点只要有新的页面和 UI 改动，默认应该是要的**"。
+# 🔴 分工（别和主 kit `references/09-tracking-gen.md` 打架）：那边的"埋点写前先问要不要"是
+#    **写 PRD 时**的产品决策（这个需求要不要做埋点）；这里是**建卡时**把已定的结论填进卡——
+#    有 PRD 就**读 PRD 的结论**（埋点表非空=是、明写"本需求无需埋点"=否），没 PRD 才按
+#    页面/UI 改动推断。一个是决定要不要做，一个是把已定的结论填进字段，两件事、不冲突。
+INFERRED_FIELDS = [
+    ("ui", "customfield_11530", "是否需要UI",
+     "PRD 有 UED 设计稿链接 / 元素表含新增元素 / 需求描述含 新增页面·弹窗·卡片·入口·组件·视觉改动"
+     " → 是；仅纯逻辑·纯文案修正·纯后端·纯配置 → 否"),
+    ("new_page", "customfield_15401", "是否涉及新页面",
+     "需求含全新页面 / 独立新入口页 → 是；只在已有页面上改 → 否"),
+    ("tracking", "customfield_16301", "是否需要埋点",
+     "需要UI=是 **或** 新增用户可见的页面/入口/交互 → 是（要曝光·点击埋点）；"
+     "PRD 的 Data Requirements 埋点表非空 → 是（直接读结论）；PRD 明写「本需求无需埋点」→ 否；"
+     "仅纯后端·纯配置·纯文案 → 否"),
+    ("dependency", "customfield_11506", "依赖交付情况",
+     "PRD 关联方表/依赖行有跨端·跨系统条目 → 依赖未交付；否则 无需依赖"),
+]
+
+
+def print_inference_notes(plan):
+    """推断项区块：四项**推断出来的**字段值 + 各一句依据，摆进计划表让产品扫一眼。
+
+    🔴 它们**不是提问项**（分级里属可选项、不阻塞）：推断有依据即默认，产品要改直接说。
+    依据写在 `plan.meta.inference_notes.<alias>`；缺了只 WARN，不拦建卡。
+    """
+    stories = [c for c in plan["cards"] if c.get("issuetype") == "故事"]
+    if not stories:
+        return
+    notes = (plan.get("meta") or {}).get("inference_notes") or {}
+    print("\n### 推断项（按判据推断 + 附依据，**不单独问**；产品扫一眼，要改直接说）")
+    for alias, fid, label, rule in INFERRED_FIELDS:
+        vals = sorted({(c.get("fields", {}).get(fid) or {}).get("value", "<未填>")
+                       for c in stories})
+        why = notes.get(alias)
+        line = f"- **{label}={' / '.join(vals)}**"
+        print(line + (f"，依据：{why}" if why else
+                      f"，依据：**缺失**——按判据补一句到 `meta.inference_notes.{alias}`"
+                      f"（判据：{rule}）"))
 
 
 def print_beneficiary_check(plan):
@@ -809,14 +1071,28 @@ def print_beneficiary_check(plan):
 
 
 def print_epic_check(plan, epics):
-    """Epic 每批必问：这里只把线上读回的卡名摆出来给产品对眼，kit 从不替他选。"""
-    groups = {}
+    """Epic 每批必问：这里只把线上读回的卡名摆出来给产品对眼，kit 从不替他选。
+
+    v1.8：plan 里若有 issuetype=Epic 的卡，先摆「新建 Epic…」那一行，
+    再把 `epic_ref` 挂它的卡列成「→ 新建 Epic「名称」」——产品点头才 apply。
+    """
+    new_epics = [c for c in plan["cards"] if c.get("issuetype") == EPIC_TYPE]
+    groups, ref_groups = {}, {}
     for c in plan["cards"]:
         k = (c.get("fields") or {}).get(EPIC_FIELD)
         if isinstance(k, str) and k.strip():
             groups.setdefault(k.strip(), []).append(c.get("ref"))
+        elif c.get("epic_ref"):
+            ref_groups.setdefault(c["epic_ref"], []).append(c.get("ref"))
     print("\n### Epic 确认（每批必须由产品明确点头——候选可以摆，但不许静默填、不许沿用上次不问）")
-    if not groups:
+    for e in new_epics:
+        due = (e.get("fields") or {}).get(EPIC_DUE_FIELD) or "—"
+        print(f"- 新建 Epic「{e.get('summary')}」（{e.get('project')}，预期交付 {due}）"
+              "——本批 apply 时创建，其余卡挂它")
+    if not groups and not new_epics and subtask_only_parents(plan):
+        print("- 纯子任务批次：Epic 是故事卡的字段，本批不问（父卡见计划表「挂载」列）。")
+        return
+    if not groups and not new_epics:
         print("- **未挂 Epic** ← 全部卡。只有产品明确说这批不挂 Epic 才可以这样。")
         print("- 还没问过？先跑 `epic-candidates --from <主卡/历史需求卡号> "
               '--keyword "<需求关键词>" --project APP|WEB` 捞带名称的候选，再让产品选。')
@@ -827,6 +1103,10 @@ def print_epic_check(plan, epics):
         meta = f" · {info['type']}/{info['status']}" if info else " · （未能读回卡名）"
         print(f"- **{name_key((info or {}).get('summary'), k)}**{meta} "
               f"← {', '.join(r for r in refs if r)}")
+    for r, refs in ref_groups.items():
+        e = next((x for x in new_epics if x.get("ref") == r), None)
+        name = (e or {}).get("summary") or r
+        print(f"- **→ 新建 Epic「{name}」** ← {', '.join(x for x in refs if x)}")
     print("- 请产品确认：**这批卡就挂这个 Epic 吗？**（换 Epic 就改 plan 后重新 validate；"
           '只说得出名字就跑 `epic-search --name "<名称片段>"` 解析卡号）')
 
@@ -838,12 +1118,16 @@ def print_table(plan, live=None):
         print(f"需求：{m.get('requirement', '?')}    PRD：{m.get('prd', '-')}")
     print("\n| # | ref | 项目 | 类型 | summary | 挂载 | 关键字段 |")
     print("|---|-----|------|------|---------|------|----------|")
+    parents = (live or {}).get("parents") or {}
     for i, c in enumerate(plan["cards"], 1):
         parent = c.get("parent_ref") or c.get("fields", {}).get("parent", {}).get("key") or "-"
+        if parent in parents:
+            parent = name_key(parents[parent], parent)  # 🔴 展示纪律：已有父卡一律「名称」(卡号)
         print(f"| {i} | {c.get('ref')} | {c.get('project')} | {c.get('issuetype')} "
               f"| {c.get('summary')} | {parent} | {brief_fields(c)} |")
     print_beneficiary_check(plan)
     print_epic_check(plan, (live or {}).get("epics"))
+    print_inference_notes(plan)
     if plan.get("links"):
         verbs = {"Blocks": "blocks", "Cloners": "clones", "Relates": "relates to", "Duplicate": "duplicates"}
         names = (live or {}).get("links") or {}
@@ -873,10 +1157,71 @@ def build_payload(card):
     fields["project"] = {"key": card["project"]}
     fields["summary"] = card["summary"]
     fields["issuetype"] = {"name": card["issuetype"]}
+    # Epic 必填史诗名称：没给就 = summary（createmeta 2026-09-16 实测 APP/WEB 都必填）
+    if card["issuetype"] == EPIC_TYPE and not fields.get(EPIC_NAME_FIELD):
+        fields[EPIC_NAME_FIELD] = card["summary"]
     return {"fields": fields}
 
 
-def apply_plan(plan_path):
+def register_script_path():
+    """定位主 kit 的 `scripts/register.py`（采集命令的唯一实现）；找不到返回 None。
+
+    依次试：① skills 根目录同级布局（`…/skills/jira-card-kit/scripts/` → `…/skills/prd-authoring-kit/scripts/`）；
+    ② 仓库布局（`companions/jira-card-kit/scripts/` → 仓库根 `scripts/`）；③ `~/.prd-authoring-kit/`；
+    ④ `~/.claude/skills/`；⑤ `~/.agents/skills/`。
+    """
+    scripts_dir = os.path.dirname(os.path.realpath(__file__))   # …/<kit>/scripts
+    kit_dir = os.path.dirname(scripts_dir)                      # …/<kit>
+    siblings = os.path.dirname(kit_dir)                         # skills 根 / 仓库 companions
+    repo_root = os.path.dirname(siblings)                       # 仓库根（companions 布局）
+    for path in (os.path.join(siblings, "prd-authoring-kit", "scripts", "register.py"),
+                 os.path.join(repo_root, "scripts", "register.py"),
+                 os.path.expanduser("~/.prd-authoring-kit/scripts/register.py"),
+                 os.path.expanduser("~/.claude/skills/prd-authoring-kit/scripts/register.py"),
+                 os.path.expanduser("~/.agents/skills/prd-authoring-kit/scripts/register.py")):
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def record_usage(plan, platform, no_telemetry=False):
+    """建卡成功后的使用采集（v1.8.1）：调主 kit `register.py telemetry --mode 建卡`，
+    **原样转打它那一行状态**（采集契约的单一真源在主 kit 的 references/11-usage-telemetry.md，
+    本文件不复制命令文本）。🔴 整段防弹：任何异常只打一行「未写入」，绝不影响 apply 的退出码。"""
+    try:
+        if no_telemetry:
+            print("使用记录：按 --no-telemetry 未写入")
+            return
+        meta = plan.get("meta") or {}
+        requirement = meta.get("requirement") or ""
+        platform = platform or meta.get("platform") or ""
+        if not platform:
+            print("使用记录：未写入（缺 --platform）——这行只写 时间/使用人/需求名/平台/模式 "
+                  "到公司内部使用表，不含卡号与内容；补记：python3 <主 kit>/scripts/register.py "
+                  'telemetry --requirement "<需求名>" --platform <平台> --mode 建卡')
+            return
+        if not requirement:
+            print("使用记录：未写入（缺 plan.meta.requirement）——按 11 手动记一行")
+            return
+        register = register_script_path()
+        if not register:
+            print("使用记录：未写入（主 kit 未安装）——按 11 手动记一行")
+            return
+        proc = subprocess.run([sys.executable, register, "telemetry",
+                               "--requirement", requirement,
+                               "--platform", platform,
+                               "--mode", "建卡"],
+                              capture_output=True, text=True, timeout=180)
+        line = ""
+        for raw in (proc.stdout or "").splitlines():
+            if raw.strip().startswith("使用记录："):
+                line = raw.strip()
+        print(line or "使用记录：未写入（异常）")
+    except Exception:
+        print("使用记录：未写入（异常）")
+
+
+def apply_plan(plan_path, platform="", no_telemetry=False):
     plan = load_plan(plan_path)
     errors, warnings, _live = validate_plan(plan)
     for w in warnings:
@@ -895,6 +1240,7 @@ def apply_plan(plan_path):
 
     base, _ = load_credentials()
     failed = None
+    created_now = 0
     for card in plan["cards"]:
         ref = card["ref"]
         if ref in result["created"]:
@@ -906,9 +1252,16 @@ def apply_plan(plan_path):
                 print(f"SKIP {ref}: 父卡 {card['parent_ref']} 未创建成功")
                 continue
             payload["fields"]["parent"] = {"key": pkey}
+        if card.get("epic_ref"):
+            ekey = result["created"].get(card["epic_ref"], {}).get("key")
+            if not ekey:
+                print(f"SKIP {ref}: Epic {card['epic_ref']} 未创建成功")
+                continue
+            payload["fields"][EPIC_FIELD] = ekey
         try:
             resp = api("POST", "/rest/api/2/issue", payload)
             result["created"][ref] = {"key": resp["key"], "summary": card["summary"]}
+            created_now += 1
             print(f"CREATED {resp['key']}  {card['summary']}")
         except AuthError:
             raise  # 认证挂了不是「这张卡建不了」：停下走统一出口换 token（下面 finally 照常存盘续传）
@@ -949,6 +1302,14 @@ def apply_plan(plan_path):
                 json.dump(result, open(rpath, "w"), ensure_ascii=False, indent=1)
 
     print_result(plan_path)
+    if failed is None:
+        print("→ 卡已建好。下一步顺序："
+              "① 使用记录已由下面那行自动采集（模式=建卡）——「已写入」就别再记一遍，"
+              "「未写入」才按 11-usage-telemetry 手动补一行"
+              "② 登记需求收集表（主 kit 12 §十）"
+              "③ 再汇报。")
+        if created_now:
+            record_usage(plan, platform, no_telemetry)
     if failed:
         die(f"卡「{failed[0]}」创建失败，后续卡未创建。已建的卡见上表（不会自动删除）。"
             f"修正 plan 后重跑 apply 会自动续传。")
@@ -1119,7 +1480,7 @@ def cmd_user_search(query):
         print(f"{u['name']:20s} {u['displayName']:20s} {u.get('emailAddress','')}")
 
 
-def cmd_beneficiary_options(project, sample_key=None):
+def cmd_beneficiary_options(project, sample_key=None, match=None):
     """打印受益方(cf_16706)的**线上**选项原文，供产品本人从中亲选。
 
     kit 不内置枚举：此 skill 全组产品共用、各人受益方不同，任何内置默认值都会诱导错填。
@@ -1130,6 +1491,27 @@ def cmd_beneficiary_options(project, sample_key=None):
         raise  # 认证失败走统一出口（去 setup-token 换密钥），别降级成「拉不到选项」
     except RuntimeError as e:
         die(beneficiary_fetch_failure(f"[项目 {project}]", e))
+    if match:
+        # 产品答的是**简称**（「Jackie-直客」）：切 token 做全包含匹配，只把命中的几条摆出来。
+        # 🔴 命中多条不是让 AI 二选一——按端/按语感自选正是受益方错填的老路子。
+        toks = match_tokens(match)
+        if not toks:
+            die(f"--match「{match}」切不出任何 token（全是标点？）——换个写法重跑。")
+        hits = [o for o in opts if all(t in o.lower() for t in toks)]
+        print(f"## 受益方(cf_16706) 简称匹配 · 项目 {project} · 简称「{match}」"
+              f"（token：{' + '.join(toks)}）")
+        print(f"\n命中 {len(hits)} 条")
+        for i, o in enumerate(hits, 1):
+            flag = "   ⚠️ 含连续/首尾空格，务必整条复制" if normalize(o) != o else ""
+            print(f"{i:3d}. {o}{flag}")
+        if not hits:
+            print(f"\n一条都没命中（线上共 {len(opts)} 条）——去掉 --match 看全表，"
+                  "或换个 token 再试；**不许自己挑个近似的**。")
+        elif len(hits) > 1:
+            print("\n多命中——列给产品点，不得自选")
+        print("\n🔴 选中项**逐字**复制进 plan（含其中的空格），"
+              "确认人写进 plan.meta.beneficiary_confirmed_by、依据写进 beneficiary_rationale。")
+        return
     print(f"## 受益方(cf_16706) 线上选项 · 项目 {project} · 共 {len(opts)} 条（实时拉取）")
     for i, o in enumerate(opts, 1):
         flag = "   ⚠️ 含连续/首尾空格，务必整条复制" if normalize(o) != o else ""
@@ -1143,9 +1525,17 @@ def cmd_beneficiary_options(project, sample_key=None):
 
 # --------------------------------------------- Epic 候选检索（只读，供产品用名字选）
 # 🔴 定位：本节的两条命令**只产出候选**，不产出决定。Epic 是每批必问的硬闸——
-#    候选可以来自主卡 / 历史关联需求 / 上次用过的值，但**必须由产品明确确认才能填进 plan**；
+#    候选可以来自主卡 / 历史关联需求，但**必须由产品明确确认才能填进 plan**；
 #    「禁推断」禁的是**静默填**，不是禁止把线索摆出来给他选（2026-09-02 口径统一）。
+# 🔴 相关性优先（v1.6.6，产品实测反馈）：上一版把「上次用过的 Epic」和「主卡挂的 Epic」
+#    一股脑平铺成选项，产品原话——"**epic 就应该参考相关的历史需求的，而不是把历史使用的
+#    epic 一股脑扔上来**"。所以本版三条硬规矩：
+#    ① 候选**只来自与本需求有关联的卡**——历史关联需求（①级）> 主卡（②级）；
+#    ② `last_epic` **不再是候选**，只在零候选时提一句"上次用的是 X，但查不到关联，不建议沿用"；
+#    ③ 主卡也可能是**上次顺手带进来的错卡号**：卡名与需求关键词零重合 → 提示确认卡号，
+#       并把「只由它带出来的」Epic 降末位标注（sanity，见 main_card_relevant）。
 # 🔴 展示纪律：凡向产品展示 Jira 卡，一律「名称」(卡号)，禁止裸卡号——裸卡号对产品没有信息量。
+#    **依据必须进选项文本本身**（`「名称」(卡号)——依据`），不另起一列：产品是靠依据判断相关性的。
 EPIC_TYPE_NAMES = ("史诗", "Epic")
 # 已收口的状态：优先看 statusCategory.key == "done"（与界面语言无关），名字表只作兜底。
 CLOSED_STATUS_NAMES = {"已关闭", "关闭", "已完成", "完成", "已解决", "已上线", "废弃",
@@ -1153,12 +1543,22 @@ CLOSED_STATUS_NAMES = {"已关闭", "关闭", "已完成", "完成", "已解决"
 PROJECT_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]*$")
 ISSUE_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")
 EPIC_PICK_FOOTER = (
-    "\n🔴 **这是候选、不是决定**：把上面的「Epic 名称(卡号)」摆给产品选"
-    "（有结构化提问工具就列成选项：top 3 候选 + 「换一个（说名字或卡号都行，我来找）」+ 「本批不挂」），"
+    "\n🔴 **这是候选、不是决定**：把上面每条**整行原样**当作选项文本摆给产品"
+    "（AskUserQuestion 这类结构化工具的选项文案 = `「名称」(卡号)——依据`，"
+    "外加「换一个（说名字或卡号都行，我来找）」+「本批不挂」），"
     "拿到明确答复才能写进 plan.fields.customfield_10102。\n"
+    "🔴 **依据不许拆走**：依据就在选项文本里，别只留名称、也别把它挪去另一列——"
+    "产品判断「这个 Epic 是不是本需求的」靠的就是这半句。\n"
+    "🔴 **只推荐相关的**：这里每个候选都由**本需求的关联卡**带出来；"
+    "`last_epic`「上次用的」**不是候选**——历史上顺手挂过不等于这批该挂。\n"
     "🔴 **禁止静默填**：不许因为「主卡挂了它 / 上次就是它」就自己填上去；"
     "产品只说得出名字 → 跑 `epic-search --name \"<名称片段>\"` 解析卡号，**多命中就列出来让他选，不许猜**；"
     "产品说「本批不挂」→ 留空，这是多数派答复，别追问。")
+EPIC_PICK_FOOTER_SINGLE = (
+    "\n🔴 **推荐形态 ≠ 自动填**：Epic 每批必确认的硬闸一条没松——没有产品那句「就它」，"
+    "谁也不许写进 plan.fields.customfield_10102。这里省掉的只是「让他在一堆不相关候选里挑」。\n"
+    "🔴 他说「换一个」→ 跑 `epic-search --name \"<名称片段>\"` 解析卡号"
+    "（**多命中就列出来让他选，不许猜**）；说「不挂」→ 留空，这是多数派答复，别追问。")
 
 
 def short_err(e):
@@ -1242,12 +1642,52 @@ def fetch_epic_info(keys):
     return info
 
 
-def collect_epic_seeds(from_keys, keywords, project, notes):
-    """收种子卡：--from 逐张 GET；--keyword 走 JQL 取同族卡最近 10 张。返回 seeds 列表。"""
+def relevance_grams(text):
+    """把文本切成粗粒度「相关性单元」：ASCII 字母数字按词（≥2 位），中文等按 2-gram。
+
+    只用于**粗判两段文本沾不沾边**（主卡卡名 vs 需求关键词）。刻意做得宽松——
+    宁可判"相关"也别误伤，所以只有**交集完全为空**时才算不相关。
+    """
+    s = (text or "").lower()
+    grams = set(re.findall(r"[a-z0-9]{2,}", s))
+    rest = re.sub(r"[a-z0-9]+", " ", s)          # 挖掉 ASCII 词，剩下中文等
+    rest = re.sub(r"[\s\W_]+", " ", rest)        # 标点（含全角「」（））归一成分隔符
+    for seg in rest.split():
+        if len(seg) == 1:
+            grams.add(seg)
+        else:
+            grams.update(seg[i:i + 2] for i in range(len(seg) - 1))
+    return grams
+
+
+def main_card_relevant(summary, keywords):
+    """主卡 sanity：主卡卡名与需求关键词**零重合** → False（"看起来不是本需求的"）。
+
+    没给 `--keyword` 就没有判据 → 返回 None：**既不降级、也不背书**，只提示可以给个关键词。
+    这条 sanity 的由来：`--from` 里的主卡常是上一轮顺手复制来的**别的需求的卡号**，
+    它挂的 Epic 就这么被顶到候选首位——产品实测撞到的正是这个（美股现货需求集排在前面）。
+    """
+    kw_grams = set()
+    for kw in keywords:
+        kw_grams |= relevance_grams(kw)
+    if not kw_grams:
+        return None
+    return bool(relevance_grams(summary) & kw_grams)
+
+
+def collect_epic_seeds(main_key, hist_keys, keywords, project, notes):
+    """收种子卡：主卡与历史关联需求卡逐张 GET；--keyword 走 JQL 取同族卡最近 10 张。
+
+    origin 三种，决定候选分级：`main`（主卡，②级）、`hist`（--from 里的历史关联需求卡）、
+    `kw`（关键词捞到的同族卡）——后两种同属①级「历史关联需求」。
+    """
     seeds = []
-    for k in from_keys:
+    for k, origin in [(main_key, "main")] + [(h, "hist") for h in hist_keys]:
+        if not k:
+            continue
+        label = "--main/主卡" if origin == "main" else "--from"
         if not ISSUE_KEY_RE.match(k):
-            notes.append(f"--from「{k}」不像 Jira 卡号（形如 XXX-12345），已跳过")
+            notes.append(f"{label}「{k}」不像 Jira 卡号（形如 XXX-12345），已跳过")
             continue
         try:
             f = api("GET", f"/rest/api/2/issue/{k}",
@@ -1255,10 +1695,10 @@ def collect_epic_seeds(from_keys, keywords, project, notes):
         except (AuthError, NetworkError):
             raise
         except (HttpError, RuntimeError) as e:
-            notes.append(f"--from {k} 读不到（{short_err(e)}）——卡号写错或没权限，已跳过")
+            notes.append(f"{label} {k} 读不到（{short_err(e)}）——卡号写错或没权限，已跳过")
             continue
         seeds.append({"key": k, "summary": f.get("summary", ""),
-                      "epic": epic_link_of(f), "origin": "from"})
+                      "epic": epic_link_of(f), "origin": origin})
     for kw in keywords:
         jql = (f"project = {project} AND summary ~ {jql_quote(kw)} "
                "ORDER BY created DESC")
@@ -1280,88 +1720,168 @@ def collect_epic_seeds(from_keys, keywords, project, notes):
     return seeds
 
 
-def epic_candidate_rank(groups, info, k):
+def epic_tier(g):
+    """候选级别：0 = ①级（历史关联需求带出来的，最相关）；1 = ②级（只有主卡带出来的）。"""
+    return 0 if (g["hist"] or g["kw"]) else 1
+
+
+def epic_weight(g):
+    """本级里的关联卡数——①级数历史关联需求的张数，②级数主卡的张数。"""
+    return len(g["hist"]) + len(g["kw"]) if epic_tier(g) == 0 else len(g["main"])
+
+
+def epic_candidate_rank(groups, info, suspect, k):
     """候选排序键（模块级纯函数，便于单测）：
 
-    ① 只由 `last_epic` 带出来的（groups 里没有关联卡）**一律排最后**——"上次顺手"不是"这批该挂"；
+    ① **可疑主卡**（卡名与需求关键词零重合）单独带出来的 Epic 一律降到最末；
     ② **已收口的 Epic 再往后压**（哪怕关联卡更多），它们不该再接新卡；
-    ③ 其余按关联卡数降序；④ 同数时**主卡(--from)带出来的**优先（主卡是这个需求自己的卡，
-       信号比同族历史卡强）；⑤ 再同就按卡号稳定排序。
+    ③ **按级排序**：历史关联需求（①级）在前、只有主卡的（②级）在后——
+       产品口径"epic 应该参考相关的历史需求"；
+    ④ 同级按关联卡数降序；⑤ 再同就按卡号稳定排序。
     """
-    g = groups.get(k)
-    weight = len(g["from"]) + len(g["kw"]) if g else 0
-    return (0 if g else 1, 1 if info[k]["closed"] else 0, -weight,
-            0 if (g and g["from"]) else 1, k)
+    g = groups[k]
+    return (1 if k in suspect else 0, 1 if info[k]["closed"] else 0,
+            epic_tier(g), -epic_weight(g), k)
 
 
-def epic_candidate_why(groups, last, k):
-    """候选的「依据」列：说清这个 Epic 是**从哪张卡捞出来的**，产品才判断得了。
+def epic_candidate_why(groups, k):
+    """候选的「依据」——**它进选项文本本身**（`「名称」(卡号)——依据`），不另起一列。
 
+    产品判断"这个 Epic 是不是本需求的"靠的就是这半句，所以必须说清**从哪张卡捞出来的**。
     🔴 展示纪律：这里出现的每张卡都走 name_key()，一律「名称」(卡号)。
     """
-    g = groups.get(k) or {"from": [], "kw": []}
+    g = groups[k]
     bits = []
-    for s in g["from"][:2]:
-        bits.append("主卡" + name_key(s["summary"], s["key"]) + "挂它")
-    if len(g["from"]) > 2:
-        bits.append(f"另有 {len(g['from']) - 2} 张给定卡挂它")
-    if g["kw"]:
-        head = g["kw"][0]
-        tail = f" 等 {len(g['kw'])} 张" if len(g["kw"]) > 1 else ""
+    rel = g["hist"] + g["kw"]
+    if rel:
+        head = rel[0]
+        tail = f" 等 {len(rel)} 张" if len(rel) > 1 else ""
         bits.append("历史需求" + name_key(head["summary"], head["key"]) + tail + "挂它")
-    if k == last:
-        bits.append("上次用的（last_epic）")
+    if g["main"]:
+        bits.append("主卡" + name_key(g["main"][0]["summary"], g["main"][0]["key"]) + "挂它")
     return "；".join(bits) or "—"
 
 
-def cmd_epic_candidates(from_keys, keywords, project):
-    """从主卡 / 历史关联需求 / 同族卡里**捞出 Epic 候选**，带名称、依据、状态摆给产品选。
+def epic_strong_single(order, groups, info, suspect):
+    """单强候选判定：榜首由 **≥2 张历史关联需求**带出来、未收口、非可疑主卡带出来，
+    且**没有同级竞争者**（其余①级候选都不存在）→ 改用「建议挂 X / 换一个 / 不挂」推荐形态。
 
-    只读、不写任何东西。首选候选来自**关联需求实际挂的 Epic**；配置里的 `last_epic`
-    只作**末位**候选（标「上次用的」）——它是"上次顺手"，不是"这批该挂"。
+    多候选才平铺列表——产品实测反馈的正是"把一堆不相关的 epic 一股脑扔上来"。
+    """
+    if not order:
+        return False
+    top = order[0]
+    if top in suspect or info[top]["closed"] or epic_tier(groups[top]) != 0:
+        return False
+    if epic_weight(groups[top]) < 2:
+        return False
+    for k in order[1:]:
+        if k not in suspect and not info[k]["closed"] and epic_tier(groups[k]) == 0:
+            return False          # 同级还有别的候选 → 平铺让产品自己挑
+    return True
+
+
+def last_epic_note():
+    """零候选时**才**提的一句：`last_epic` 从 v1.6.6 起不是候选，只作"上次用的、但查不到关联"的告知。"""
+    last = str(load_config().get("last_epic") or "").strip()
+    if not last or not ISSUE_KEY_RE.match(last):
+        return ""                 # config.example 里的占位符 <上次用过的…> 不算
+    info = fetch_epic_info([last])
+    return ("- 上次用的是 " + name_key(info[last]["summary"], last)
+            + "，**但与本需求查不到关联，不建议直接沿用**——按上面那句问产品，别把它当默认值。")
+
+
+def cmd_epic_candidates(main_key, hist_keys, keywords, project, main_implicit=False):
+    """从**历史关联需求**和**主卡**里捞 Epic 候选，带名称、依据、状态摆给产品选。
+
+    只读、不写任何东西。**只推荐相关的**（v1.6.6）：候选分两级——①历史关联需求挂的、
+    ②主卡挂的；`last_epic` 不再是候选（只在零候选时提一句）。主卡本身还要过一道 sanity。
     """
     notes = []
-    seeds = collect_epic_seeds(from_keys, keywords, project, notes)
+    if main_key and main_implicit:
+        notes.append(f"把 --from 的第一张 {main_key} 当**主卡**、其余当历史关联需求"
+                     "（要显式指定就用 `--main <卡号>`）")
+    seeds = collect_epic_seeds(main_key, hist_keys, keywords, project, notes)
     groups = {}
     for s in seeds:
         if s["epic"]:
-            groups.setdefault(s["epic"], {"from": [], "kw": []})[s["origin"]].append(s)
+            groups.setdefault(s["epic"],
+                              {"main": [], "hist": [], "kw": []})[s["origin"]].append(s)
 
-    last = str(load_config().get("last_epic") or "").strip()
-    if last and not ISSUE_KEY_RE.match(last):
-        last = ""  # config.example 里的占位符 <上次用过的…> 不当候选
-    order = list(groups)
-    if last and last not in order:
-        order.append(last)
+    # 主卡 sanity：卡名与需求关键词零重合 → 提示确认卡号，并把「只由它带出来的」Epic 降末位
+    main_seed = next((s for s in seeds if s["origin"] == "main"), None)
+    ok = main_card_relevant(main_seed["summary"], keywords) if main_seed else None
+    suspect = set()
+    if ok is False:
+        suspect = {k for k, g in groups.items() if epic_tier(g) == 1}
+        notes.append("🔴 **主卡 sanity**：主卡" + name_key(main_seed["summary"], main_seed["key"])
+                     + "看起来不是本需求的（卡名与关键词「" + "」「".join(keywords)
+                     + "」零重合）——**确认卡号？**"
+                     + ("它挂的 Epic 已降到末位并标注，别照抄。" if suspect
+                        else "它挂的 Epic 另有历史关联需求背书，未降级。"))
+    elif ok is None and main_seed:
+        notes.append("没给 `--keyword`，主卡合理性无从校验（**不降级、也不背书**）——"
+                     "补一个需求关键词就能顺手校一下主卡是不是本需求的。")
 
     for n in notes:
         print(f"· {n}")
     hung = sum(1 for s in seeds if s["epic"])
-    print(f"\n扫描种子卡 {len(seeds)} 张（--from {len(from_keys)} 张 / 关键词 {len(keywords)} 个），"
-          f"其中 {hung} 张挂了 Epic。")
+    print(f"\n扫描种子卡 {len(seeds)} 张（主卡 {1 if main_seed else 0} 张 / "
+          f"历史关联需求 {sum(1 for s in seeds if s['origin'] != 'main')} 张 / "
+          f"关键词 {len(keywords)} 个），其中 {hung} 张挂了 Epic。")
 
-    if not order:
-        print("\n## Epic 候选：**未找到关联 Epic**")
-        print("- 一张种子卡都没读到（卡号/关键词都没命中），本机 `last_epic` 也没有可用值。"
-              if not seeds else
-              "- 上面这些种子卡一张都没挂 Epic，本机 `last_epic` 也没有可用值。")
+    if not groups:
+        print("\n## Epic 候选：**未找到相关 Epic**")
+        print("- 一张种子卡都没读到（卡号/关键词都没命中）。" if not seeds else
+              "- 上面这些种子卡一张都没挂 Epic。")
         print("- 🔴 **不编**：直接问产品「这批卡挂哪个 Epic？（说名字或卡号都行，我来找卡号；"
               "不挂也可以）」——抽样里多数真卡本来就不挂 Epic，「不挂」是完全正常的答复。")
         print("- 产品给了名字 → 跑 `epic-search --name \"<名称片段>\"` 把名字解析成卡号。")
+        print("- 要新建 Epic：在 plan 里加一张 issuetype=Epic 的卡排最前，"
+              "故事用 epic_ref 指它（见 01-card-model「Epic」）；WEB 项目 Epic 必须有预期交付日期。")
+        tail = last_epic_note()
+        if tail:
+            print(tail)
         return
 
-    info = fetch_epic_info(order)
-    order.sort(key=lambda k: epic_candidate_rank(groups, info, k))
-    print(f"\n## Epic 候选（{len(order)} 个 · 按关联卡数排序 · 只读检索）")
-    print("\n| # | Epic 名称 | 卡号 | 依据 | 状态 |")
-    print("|---|-----------|------|------|------|")
-    for i, k in enumerate(order, 1):
+    info = fetch_epic_info(list(groups))
+    order = sorted(groups, key=lambda k: epic_candidate_rank(groups, info, suspect, k))
+    rows = []
+    for k in order:
         it = info[k]
-        st = it["status"] + ("  🔴 已收口，不建议" if it["closed"] else "")
+        marks = []
+        if it["closed"]:
+            marks.append("🔴 已收口，不建议")
+        if k in suspect:
+            marks.append("⚠️ 只由那张可疑主卡带出来，已降末位")
         if it["type"] not in EPIC_TYPE_NAMES and it["type"] != "?":
-            st += f"  ⚠️ 类型是「{it['type']}」不是史诗"
-        print(f"| {i} | {it['summary'] or '（读不回卡名）'} | {k} "
-              f"| {epic_candidate_why(groups, last, k)} | {st} |")
+            marks.append(f"⚠️ 类型是「{it['type']}」不是史诗")
+        rows.append((f"{name_key(it['summary'], k)}——{epic_candidate_why(groups, k)}",
+                     it["status"], marks))
+
+    if epic_strong_single(order, groups, info, suspect):
+        text, status, _ = rows[0]
+        print("\n## 单强候选 · 推荐形态（关联卡 ≥2 张且无同级竞争 → 不平铺）")
+        print(f"\n**建议挂 {text}**（状态：{status}）")
+        print("\n问句照这三个选项来，别再摆一堆候选：\n")
+        print(f"- **就它** —— {text}")
+        print("- **换一个** —— 说名字或卡号都行，我来找")
+        print("- **不挂** —— 本批不挂 Epic（多数真卡本来就不挂）")
+        if len(rows) > 1:
+            # 折叠而不是丢弃：上面那句 sanity 说了"已降末位并标注"，标注就得看得见。
+            print(f"\n（其余 {len(rows) - 1} 个候选相关性更弱、**已折叠**，"
+                  "产品说「换一个」时再摆出来：）")
+            for text2, status2, marks2 in rows[1:]:
+                print(f"  · {text2} · 状态：{status2}"
+                      + ("　" + "　".join(marks2) if marks2 else ""))
+        print(EPIC_PICK_FOOTER_SINGLE)
+        return
+
+    print(f"\n## Epic 候选（{len(order)} 个 · 相关性优先 · 只读检索）")
+    print("\n**下面每条整行就是选项文本**（`「名称」(卡号)——依据`，原样摆给产品）：\n")
+    for i, (text, status, marks) in enumerate(rows, 1):
+        print(f"{i}. {text}")
+        print(f"   · 状态：{status}" + ("　" + "　".join(marks) if marks else ""))
     print(EPIC_PICK_FOOTER)
 
 
@@ -1456,6 +1976,147 @@ def cmd_set_beneficiary(value, keys, apply_it):
             print(f"  {k}: FAILED {e}", file=sys.stderr)
 
 
+# ------------------------------- 只读查卡 / 看子任务（v1.8.3）
+# 🔴 定位：这三条命令是为了堵死「工具没有查卡能力 → 模型去开浏览器 / 直发 REST」这个口子。
+#    实测（2026-09-24 Codex 会话）：工具缺查卡 / 看子任务能力时，模型向用户**申请禁令例外**、
+#    获批后开了 6 次 Jira 网页全部超时，还顺手 `python3 -c 'import jira_cards; jc.api(...)'`
+#    绕开子命令直发 REST——两条禁令一次撞两根。能力补进来，禁令才守得住。
+#    find / show / createmeta **纯只读**；本 kit 唯一的改卡能力仍然只有 set-beneficiary。
+#    🔴 **UI设计任务的经办人不归 kit 管**：那是项管的工作，自动生成时为空是正常态——
+#    kit 不改派、不催问，所以这里**刻意没有** assign 之类的改派命令。
+
+UI_DESIGN_TYPE = "UI设计任务"
+SHOW_FIELDS = ("summary,status,issuetype,assignee,reporter,subtasks,issuelinks,"
+               "customfield_10102,customfield_11530,customfield_16301,fixVersions," + EPIC_DUE_FIELD)
+
+
+def assignee_name(fields):
+    a = (fields or {}).get("assignee") or {}
+    return a.get("displayName") or a.get("name") or ""
+
+
+def cmd_find(keyword, project=None, mine=False, limit=10, all_types=False):
+    """**只读**按关键词查卡：这个需求的卡到底建没建过。查不到不等于没建。
+
+    默认只列主卡（故事 / Epic / 任务）——子任务（国际化 / UI设计 / 埋点四件套）会把结果淹掉；--all-types 才全列。"""
+    jql = f"summary ~ {jql_quote(keyword)}"
+    if not all_types:
+        jql += ' AND issuetype in ("故事", "Epic", "任务")'
+    if project:
+        jql += f" AND project = {project}"
+    if mine:
+        jql += " AND (reporter = currentUser() OR assignee = currentUser())"
+    jql += " ORDER BY created DESC"
+    try:
+        issues, total = search_issues(
+            jql, ["summary", "status", "issuetype", "assignee", "subtasks"], limit)
+    except (AuthError, NetworkError):
+        raise
+    except HttpError as e:
+        die(f"查卡没跑通（{short_err(e)}）——关键词里的特殊符号去掉、片段换短一点再试，"
+            "或请产品直接给卡号。")
+    scope = f"项目 {project} " if project else "全项目 "
+    mine_s = "（只看我报的 / 我做的）" if mine else ""
+    print(f"## 查卡 · {scope}· summary 含「{keyword}」{mine_s}· 命中 {total} 条"
+          + (f"，列前 {len(issues)} 条" if total > len(issues) else ""))
+    if not issues:
+        print("\n未找到——**查不到不等于没建**（关键词换个说法再试；或让产品给卡号）")
+        return
+    print("\n| 卡号 | 类型 | 状态 | summary | 经办人 | 子任务数 |")
+    print("|------|------|------|---------|--------|----------|")
+    for it in issues:
+        f = it.get("fields") or {}
+        print(f"| {it.get('key', '?')} | {(f.get('issuetype') or {}).get('name', '?')} "
+              f"| {(f.get('status') or {}).get('name', '?')} | {f.get('summary', '')} "
+              f"| {assignee_name(f) or '<空>'} | {len(f.get('subtasks') or [])} |")
+    if total > len(issues):
+        print(f"\n（命中 {total} 条、只列了 {len(issues)} 条：--limit 调大，"
+              "或把关键词说具体一点）")
+    print("\n🔴 **查不到 ≠ 没建**：结论里说清查了哪里（Jira 关键词 / 需求收集表的 Jira 列），"
+          "让产品确认后再建卡；别凭聊天记录断言，更别为了「确认」去开网页。")
+
+
+def cmd_show(key):
+    """**只读**看一张卡：主卡一行 + 子任务树；UI设计任务没经办人单独标出来。"""
+    f = api("GET", f"/rest/api/2/issue/{key}", params={"fields": SHOW_FIELDS})["fields"]
+    print(f"## {name_key(f.get('summary'), key)}")
+    print(f"  类型={(f.get('issuetype') or {}).get('name', '?')}  "
+          f"状态={(f.get('status') or {}).get('name', '?')}  "
+          f"经办人={assignee_name(f) or '<空>'}  "
+          f"报告人={(f.get('reporter') or {}).get('displayName') or '<空>'}")
+    print(f"  史诗链接={epic_link_of(f) or '<未挂>'}  "
+          f"是否需要UI={(f.get('customfield_11530') or {}).get('value', '<空>')}  "
+          f"是否需要埋点={(f.get('customfield_16301') or {}).get('value', '<空>')}")
+    # 排期信号（只读；主 kit 13 §七 台账巡检用）：APP 看修复版本，其余项目看预期交付日期
+    print(f"  修复版本={'/'.join(x.get('name', '') for x in (f.get('fixVersions') or [])) or '<空>'}  "
+          f"预期交付日期={f.get(EPIC_DUE_FIELD) or '<空>'}")
+    bits = []
+    for l in f.get("issuelinks") or []:
+        t = l.get("type") or {}
+        if l.get("outwardIssue"):
+            bits.append(f"{t.get('outward', '?')} {l['outwardIssue'].get('key')}")
+        elif l.get("inwardIssue"):
+            bits.append(f"{t.get('inward', '?')} {l['inwardIssue'].get('key')}")
+    if bits:
+        print("  链接：" + "；".join(bits))
+    subs = f.get("subtasks") or []
+    print(f"\n### 子任务 {len(subs)} 个")
+    if not subs:
+        print("（一个都没有。WEB/H5 主卡建完**约 15 秒**项目自动化才生成子任务，"
+              "刚建完就查可能还没长出来，等一会儿重查。）")
+        return
+    print("\n| 卡号 | 类型 | summary | 经办人 | 状态 |")
+    print("|------|------|---------|--------|------|")
+    unassigned = []
+    for s in subs:
+        sk = s.get("key")
+        sf = api("GET", f"/rest/api/2/issue/{sk}",
+                 params={"fields": "issuetype,summary,assignee,status"})["fields"]
+        st = (sf.get("issuetype") or {}).get("name", "?")
+        who = assignee_name(sf)
+        print(f"| {sk} | {st} | {sf.get('summary', '')} | {who or '<空>'} "
+              f"| {(sf.get('status') or {}).get('name', '?')} |")
+        if st == UI_DESIGN_TYPE and not who:
+            unassigned.append(sk)
+    for sk in unassigned:
+        print(f"\nUI设计任务 {sk} 经办人空（项管分配，正常）")
+    if unassigned:
+        print("→ **这不是缺口**：WEB/H5 的【UI设计任务】由自动化生成、经办人由项管分配，"
+              "kit 不改派、不催问。用户问「给设计师的子任务建了没」→ 看到它存在即答"
+              "「已生成 <KEY>，经办人由项管分配」，别去网页改。")
+
+
+def option_text(a):
+    """createmeta 的一个允许值 → 一行文本；**级联字段把子项跟在父项后面**。"""
+    v = a.get("value") or a.get("name") or a.get("key") or a.get("id") or ""
+    kids = a.get("children") or []
+    if kids:
+        v += "（子项：" + " / ".join(option_text(k) for k in kids) + "）"
+    if a.get("disabled"):
+        v += "[已停用]"
+    return v
+
+
+def cmd_createmeta(project, issuetype):
+    """**只读**打印建单字段与允许值——apply 撞 400 查这里，别再 `python3 -c` 直发 REST。"""
+    types = paged_values(f"/rest/api/2/issue/createmeta/{project}/issuetypes")
+    tid = next((t.get("id") for t in types if t.get("name") == issuetype), None)
+    if not tid:
+        die(f"项目 {project} 下没有建单类型「{issuetype}」"
+            f"（线上有：{[t.get('name') for t in types]}）")
+    metas = paged_values(f"/rest/api/2/issue/createmeta/{project}/issuetypes/{tid}")
+    print(f"## 建单字段 · 项目 {project} · 类型 {issuetype} · 共 {len(metas)} 个（实时拉取）")
+    print("\n| fieldId | 名称 | required | 允许值（级联字段把子项跟在父项后面） |")
+    print("|---------|------|----------|--------------------------------------|")
+    for m in metas:
+        av = m.get("allowedValues") or []
+        vals = " / ".join(option_text(a) for a in av) if av else ""
+        print(f"| {m.get('fieldId', '')} | {m.get('name', '')} "
+              f"| {'是' if m.get('required') else '否'} | {vals} |")
+    print("\n🔴 **required=否 ≠ 可以不填**：Jira 工作流校验器会在建卡时另外拦一道"
+          "（实测 WEB 故事的「是否为原生需求」cf_12002 就是 required=False 却会 400）。")
+
+
 def cmd_discard(keys, reason, apply_it):
     """把卡转为「废弃」并留评论说明去向。团队惯例：不删卡，废弃留痕可回溯。"""
     print(f"## 废弃 {len(keys)} 张卡{'（执行）' if apply_it else '（预览，加 --apply 才写入）'}")
@@ -1521,6 +2182,8 @@ def dispatch(args):
         if len(args) < 3:
             die("用法: config-set <键> <值>（键支持 a.b 嵌套，如 tracking_assignees.review）")
         cmd_config_set(args[1], args[2])
+    elif cmd == "pat-page":
+        print(pat_page_url(resolve_url()))
     elif cmd == "whoami":
         cmd_whoami()
     elif cmd == "user-search":
@@ -1528,7 +2191,7 @@ def dispatch(args):
             die("用法: user-search <关键词>")
         cmd_user_search(args[1])
     elif cmd == "beneficiary-options":
-        rest = args[1:]
+        matches, rest = pop_flag_values(args[1:], "--match")
         sample = None
         if "--issue" in rest:
             i = rest.index("--issue")
@@ -1536,25 +2199,37 @@ def dispatch(args):
                 die("--issue 后面要跟一张同项目同类型的卡号（createmeta 拉不到时的兜底）")
             sample = rest[i + 1]
             rest = rest[:i] + rest[i + 2:]
-        cmd_beneficiary_options(rest[0] if rest else "APP", sample)
+        cmd_beneficiary_options(rest[0] if rest else "APP", sample,
+                                matches[-1] if matches else None)
     elif cmd == "epic-candidates":
         froms, rest = pop_flag_values(args[1:], "--from")
+        mains, rest = pop_flag_values(rest, "--main")
         kws, rest = pop_flag_values(rest, "--keyword")
         projs, rest = pop_flag_values(rest, "--project")
+        usage = ('用法: epic-candidates [--main KEY] [--from KEY1,KEY2] '
+                 '[--keyword "词"…] [--project APP|WEB]')
         if rest:
-            die(f"epic-candidates 不认识的参数：{' '.join(rest)}。"
-                '用法: epic-candidates [--from KEY1,KEY2] [--keyword "词"…] [--project APP|WEB]')
+            die(f"epic-candidates 不认识的参数：{' '.join(rest)}。" + usage)
         keys = [k.strip().upper() for v in froms for k in v.split(",") if k.strip()]
-        if not keys and not kws:
-            die('用法: epic-candidates [--from KEY1,KEY2] [--keyword "词"…] [--project APP|WEB]\n'
-                "两路可同时给：--from 是主需求卡/背景简报里的历史需求卡号（逗号分隔，可重复给）；"
-                "--keyword 是需求关键词/模块名（可重复给，配 --project 取同族卡）。")
+        # 主卡 = --main 显式给的；没给就沿用文档里的书写顺序：--from 的**第一张**是主卡。
+        main_implicit = not mains
+        main_key = mains[-1].strip().upper() if mains else (keys[0] if keys else None)
+        hist_keys, seen = [], {main_key}
+        for k in keys:
+            if k not in seen:
+                hist_keys.append(k)
+                seen.add(k)
+        if not main_key and not kws:
+            die(usage + "\n两路可同时给：`--main`/`--from` 是主需求卡与背景简报里的历史需求卡号"
+                        "（`--from` 逗号分隔、可重复给；不给 `--main` 时第一张当主卡）；"
+                        "`--keyword` 是需求关键词/模块名（可重复给，配 `--project` 取同族卡）。\n"
+                        "🔴 给个 `--keyword` 顺带能校主卡对不对（主卡 sanity），别省。")
         project = (projs[-1] if projs else "APP").upper()
         if kws and not PROJECT_KEY_RE.match(project):
             die(f"--project「{project}」不是项目 key（大写字母数字，如 APP / WEB）")
         if kws and not projs:
             print("· 没给 --project，关键词按默认项目 APP 检索（WEB/H5 需求记得加 --project WEB）")
-        cmd_epic_candidates(keys, kws, project)
+        cmd_epic_candidates(main_key, hist_keys, kws, project, main_implicit)
     elif cmd == "epic-search":
         names, rest = pop_flag_values(args[1:], "--name")
         projs, rest = pop_flag_values(rest, "--project")
@@ -1583,9 +2258,16 @@ def dispatch(args):
             sys.exit(1)
         print("\n校验通过 ✓（尚未创建，确认后执行 apply）")
     elif cmd == "apply":
-        if len(args) < 2:
-            die("用法: apply <plan.json>")
-        apply_plan(args[1])
+        plats, rest = pop_flag_values(args[1:], "--platform")
+        no_tele = "--no-telemetry" in rest
+        rest = [a for a in rest if a != "--no-telemetry"]
+        if not rest:
+            die("用法: apply <plan.json> [--platform claude|codex|kiro|gemini|antigravity]"
+                " [--no-telemetry]"
+                "（--platform 供建卡成功后的使用采集用，不给也能建卡、只是那一行记不上；"
+                "也可写在 plan.meta.platform。那一行只写 时间/使用人/需求名/平台/模式 到公司"
+                "内部使用表，不含卡号与内容；确实要关就 --no-telemetry 明说，别靠删 --platform 关）")
+        apply_plan(rest[0], plats[-1] if plats else "", no_tele)
     elif cmd == "show-result":
         if len(args) < 2:
             die("用法: show-result <plan.json>")
@@ -1610,9 +2292,51 @@ def dispatch(args):
         if len(rest) < 2:
             die("用法: set-beneficiary <受益方值> <issue-key...> [--apply]")
         cmd_set_beneficiary(rest[0], rest[1:], "--apply" in args)
+    elif cmd == "find":
+        kws, rest = pop_flag_values(args[1:], "--keyword")
+        projs, rest = pop_flag_values(rest, "--project")
+        lims, rest = pop_flag_values(rest, "--limit")
+        mine = "--mine" in rest
+        all_types = "--all-types" in rest
+        rest = [a for a in rest if a not in ("--mine", "--all-types")]
+        usage = "用法: find --keyword <词> [--project APP|WEB] [--mine] [--all-types] [--limit N]（默认只列 故事/Epic/任务）"
+        if rest:
+            die(f"find 不认识的参数：{' '.join(rest)}。" + usage)
+        if not kws:
+            die(usage + "\n（只读查卡：这个需求的卡建没建过。"
+                        "🔴 **查不到 ≠ 没建**——换个说法再试，或让产品给卡号。）")
+        project = projs[-1].upper() if projs else None
+        if project and not PROJECT_KEY_RE.match(project):
+            die(f"--project「{project}」不是项目 key（大写字母数字，如 APP / WEB）")
+        try:
+            limit = int(lims[-1]) if lims else 10
+        except ValueError:
+            die("--limit 后面要跟一个整数")
+        cmd_find(kws[-1], project, mine, max(1, min(limit, 50)), all_types=all_types)
+    elif cmd == "show":
+        rest = args[1:]
+        if not rest:
+            die("用法: show <KEY>（只读：主卡一行 + 子任务树；"
+                "【UI设计任务】经办人为空会单独标出来）")
+        if not ISSUE_KEY_RE.match(rest[0].upper()):
+            die(f"「{rest[0]}」不像 Jira 卡号（形如 WEB-20139）")
+        cmd_show(rest[0].upper())
+    elif cmd == "createmeta":
+        projs, rest = pop_flag_values(args[1:], "--project")
+        its, rest = pop_flag_values(rest, "--issuetype")
+        usage = "用法: createmeta --project APP|WEB --issuetype <类型名，如 故事 / Epic>"
+        if rest:
+            die(f"createmeta 不认识的参数：{' '.join(rest)}。" + usage)
+        if not projs:
+            die(usage + "\n（只读查建单字段的允许值：apply 报某字段 400 时查这里）")
+        project = projs[-1].upper()
+        if not PROJECT_KEY_RE.match(project):
+            die(f"--project「{project}」不是项目 key（大写字母数字，如 APP / WEB）")
+        cmd_createmeta(project, its[-1] if its else "故事")
     else:
-        die(f"未知命令 {cmd}。可用: setup-token / whoami / config-show / config-set / "
+        die(f"未知命令 {cmd}。可用: setup-token / whoami / pat-page / config-show / config-set / "
             f"user-search / beneficiary-options / epic-candidates / epic-search / "
+            f"find / show / createmeta / "
             f"validate / apply / show-result / set-beneficiary / discard")
 
 
